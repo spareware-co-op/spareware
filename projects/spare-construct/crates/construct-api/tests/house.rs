@@ -251,18 +251,19 @@ impl Stack {
 }
 
 /// How many elements of each kind the script makes, by hand from the script's steps.
-const KINDS: [(&str, usize); 11] = [
-    ("level", 2),      // L-g, L-1
-    ("grid", 4),       // A, B, 1, 2
-    ("wall", 5),       // four outer walls and one inner wall
-    ("floor", 1),      // the ground slab
-    ("opening", 1),    // the hole in it
-    ("door", 1),       // one family placed
-    ("window", 2),     // two families placed
-    ("roof", 1),       // the hip roof
-    ("room", 1),       // Living
-    ("type", 7),       // 2 wall types, 3 default floor types, 2 default roof types
-    ("parameters", 1), // the document's one parameter table
+const KINDS: [(&str, usize); 12] = [
+    ("level", 2),         // L-g, L-1
+    ("grid", 4),          // A, B, 1, 2
+    ("wall", 5),          // four outer walls and one inner wall
+    ("floor", 1),         // the ground slab
+    ("opening", 1),       // the hole in it
+    ("door", 1),          // one family placed
+    ("window", 2),        // two families placed
+    ("family.recipe", 2), // the recipes of the door and the window, kept in the document when placed
+    ("roof", 1),          // the hip roof
+    ("room", 1),          // Living
+    ("type", 7),          // 2 wall types, 3 default floor types, 2 default roof types
+    ("parameters", 1),    // the document's one parameter table
 ];
 
 /// The layers of the outer wall type, thickest outward, in mm: 110 brick + 40 cavity + 0 wrap +

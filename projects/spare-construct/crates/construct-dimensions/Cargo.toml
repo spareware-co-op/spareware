@@ -1,0 +1,51 @@
+[package]
+name = "construct-dimensions"
+version = "0.0.0"
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# A dimension is an element record, unchanged; its references are the record's own references.
+construct-model = { path = "../construct-model" }
+# A dimension is of the dimensions category.
+construct-categories = { path = "../construct-categories" }
+# Every length is construct-params' Length, stored as its values are; the shown text is its
+# Definition::format with the person's Units; its Ratio (num-rational) is the exact fraction.
+construct-params = { path = "../construct-params" }
+# Points in plan, and the kernel's grid limit, as the grids' own types.
+construct-grids = { path = "../construct-grids" }
+# A warning is construct-warnings' own `Warning`, with its `Severity` (CON-A2-F7-P1).
+construct-warnings = { path = "../construct-warnings" }
+kit-core = { path = "../../../kit/crates/kit-core" }
+# Exact whole numbers of any size, so that a dimension's value is worked out without rounding
+# until its last step (the values of a slanted dimension are square roots of fractions). MIT OR
+# Apache-2.0; version 0.4.8, as the rest of the workspace already locks.
+num-bigint = "0.4.8"
+
+[dev-dependencies]
+serde_json = "1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+# Spare Construct's lint posture: the geometry kernel's [lints] tables (geom-num's Cargo.toml), so
+# that nothing here crashes (AGENTS.md, rule 8). The crate is written to clippy's pedantic idioms;
+# CI denies every warning. projects/spare-construct/clippy.toml lets tests use what is denied here.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+disallowed_methods = "deny"
+disallowed_types = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+float_cmp = "deny"

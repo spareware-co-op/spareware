@@ -82,17 +82,18 @@ pub fn category_of(recipe: &Recipe) -> Result<CategoryId, CategoryError> {
 }
 
 /// Whether a record is an element with a shape: type records, parameter tables, levels, views,
-/// sheets and viewports
-/// are not.
+/// sheets and viewports, and a document's families are not.
 #[must_use]
 pub fn has_shape(element: &Element) -> bool {
     element.kind != TYPE_KIND
         && element.kind != TABLE_KIND
         && element.kind != construct_levels::LEVEL_KIND
         && element.kind != construct_views::VIEW_KIND
+        && !crate::families::is_record(element)
         && element.kind != construct_schedules::SCHEDULE_KIND
         && element.kind != construct_sheets::SHEET_KIND
         && element.kind != construct_sheets::VIEWPORT_KIND
+        && element.kind != construct_dimensions::DIMENSION_KIND
 }
 
 /// A category ID in its one spelling (construct-types' FORMAT.md).
@@ -539,13 +540,19 @@ pub struct ParameterView {
     pub reason: Option<String>,
 }
 
-/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`] and its level
-/// ties (construct-levels), which are the element record's own and not the type format's.
+/// An instance's `props` as construct-types reads them: without [`CATEGORY_KEY`], its level ties
+/// (construct-levels) and its hosting's offsets ([`crate::hosting`], an embedded curtain wall's),
+/// which are the element record's own and not the type format's.
 #[must_use]
 pub fn instance_props(props: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    let hosting = [crate::hosting::ALONG_KEY, crate::hosting::UP_KEY];
     props
         .iter()
-        .filter(|(key, _)| key.as_str() != CATEGORY_KEY && !construct_levels::is_tie_key(key))
+        .filter(|(key, _)| {
+            key.as_str() != CATEGORY_KEY
+                && !construct_levels::is_tie_key(key)
+                && !hosting.contains(&key.as_str())
+        })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
 }
@@ -818,8 +825,9 @@ pub async fn read_document<R: Reader>(
 /// The recipe `element` is built from, as the document is `at` that state: its own, with every
 /// argument that names a parameter filled ([`filled`]), every argument that reads its wall type's
 /// layers ([`crate::walls::filled`]), a floor's layers and loops from its floor type
-/// ([`crate::slabs::filled`]), and a roof's layers and shape from its roof type
-/// ([`crate::roofs::filled`]). A recipe that reads none of them needs no read. The regenerator
+/// ([`crate::slabs::filled`]), a roof's layers and shape from its roof type
+/// ([`crate::roofs::filled`]), and a curtain wall's grid and parts from its curtain wall type
+/// ([`crate::curtains::filled`]). A recipe that reads none of them needs no read. The regenerator
 /// builds with it [`At::Regenerated`]; a command checks with it [`At::Now`].
 ///
 /// # Errors
@@ -833,6 +841,14 @@ pub async fn recipe_at<R: Reader>(
     element: &Element,
     at: At,
 ) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    if let Some(family) = crate::families::in_document(&element.recipe) {
+        return Ok(
+            match read_family_at(reader, project, document, &family, at).await? {
+                Ok(stored) => crate::families::filled(&element.recipe, &stored),
+                Err(why) => Err(failure("FamilyMissing", why)),
+            },
+        );
+    }
     if !reads_records(&element.recipe) {
         return Ok(Ok(element.recipe.clone()));
     }
@@ -855,7 +871,32 @@ pub async fn recipe_at<R: Reader>(
     })
     .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref()))
     .and_then(|recipe| crate::slabs::filled(&recipe, ty.as_ref()))
-    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref())))
+    .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref()))
+    .and_then(|recipe| crate::curtains::filled(&recipe, ty.as_ref())))
+}
+
+/// The family `id` of a document as it stands `at` that state: its record read strictly
+/// ([`crate::families::read_record`]). The inner error is why not, in words: no such family, or a
+/// record that does not read.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn read_family_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    id: &Id,
+    at: At,
+) -> Result<Result<construct_families::StoredFamily, String>, StoreError> {
+    let kind = crate::families::RECORD_KIND;
+    Ok(
+        match read_at(reader, project, document, kind, id, at).await? {
+            Some(record) if crate::families::is_record(&record) => {
+                crate::families::read_record(&record)
+            }
+            _ => Err(format!("family {id} is not in this document")),
+        },
+    )
 }
 
 /// Whether a recipe reads the document's parameter table and the element's type: it names a
@@ -869,4 +910,5 @@ pub fn reads_records(recipe: &Recipe) -> bool {
         || crate::walls::reads_type(recipe)
         || crate::slabs::reads_type(recipe)
         || crate::roofs::reads_type(recipe)
+        || crate::curtains::reads_type(recipe)
 }

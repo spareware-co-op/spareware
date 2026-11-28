@@ -3,7 +3,11 @@
 //! (`family.retype`), moved along its wall or to another (`family.move`), flipped (`family.flip`),
 //! given values of its own (`family.set`) and deleted (`family.delete`), each with undo and redo,
 //! each refusal in words, the generic commands turned away naming the right one, and the library
-//! as the page lists it.
+//! as the page lists it. Then the families a document holds (job 7.6, piece A73): loaded from the
+//! library and as text (`family.load`), loaded when first placed, built from the document with no
+//! library, reloaded with every copy kept (`family.reload`), swapped (`family.swap`), generated
+//! (`family.generate`) and removed (`family.remove`), each refusal in words and each undone and
+//! redone.
 //!
 //! The builder is the stand-in on its own edition, except that a wall built with what is hosted
 //! on it lists each hosted element's key and its place in the wall in the body's bytes. The
@@ -673,4 +677,655 @@ fn the_library_lists_its_families_for_the_page() {
     assert_eq!(door.kind, "door");
     assert_eq!(door.values[0].key, "swing");
     assert_eq!(door.values[0].choices.len(), 2);
+}
+
+// Families a document holds (job 7.6, piece A73): loaded, reloaded keeping their copies, swapped,
+// generated, removed, each refusal in words, each command undone and redone.
+
+/// The library's fixed window as recipe text, changed by `change`.
+fn window_text(change: impl FnOnce(&mut construct_families::Recipe)) -> String {
+    let (_, recipe) = construct_regen::families::Library::baked()
+        .family(WINDOW)
+        .unwrap();
+    let mut recipe = (*recipe).clone();
+    change(&mut recipe);
+    recipe.to_json()
+}
+
+/// The office window: the fixed window under another id and name, so a family no library holds.
+fn office_window() -> String {
+    window_text(|recipe| {
+        recipe.id = i("office.window");
+        "Office window".clone_into(&mut recipe.name);
+    })
+}
+
+/// A width as stored text: `mm` millimetres of 6400 grid steps each.
+fn stored_mm(mm: i64) -> String {
+    format!("length:q0:{}", mm * 6400)
+}
+
+/// The value of column `column` of type row `ty` set to `stored`.
+fn set_row(recipe: &mut construct_families::Recipe, ty: &str, column: &str, stored: &str) {
+    let table = recipe.type_table.as_mut().unwrap();
+    let at = table
+        .columns
+        .iter()
+        .position(|c| c.as_str() == column)
+        .unwrap();
+    let row = table
+        .rows
+        .iter_mut()
+        .find(|r| r.key.as_str() == ty)
+        .unwrap();
+    stored.clone_into(&mut row.values[at]);
+}
+
+/// The keys of the types a family's record holds.
+fn keys_of(record: &Element) -> Vec<String> {
+    construct_regen::families::read_record(record)
+        .unwrap()
+        .type_keys()
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+/// A family is loaded from the library by its id and as recipe text: its record holds the recipe
+/// in its one written form, its content id and its source, and has no shape; loading it again is
+/// refused; each load is undone and redone.
+#[tokio::test]
+async fn a_family_is_loaded_from_the_library_and_as_text_with_undo_and_redo() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    stack
+        .edit("family.load", json!({ "family": WINDOW }))
+        .await
+        .unwrap();
+    let (hash, record) = stack.record(WINDOW).await.unwrap();
+    assert_eq!(record.kind, "family.recipe");
+    assert_eq!(record.name, "Fixed window");
+    assert_eq!(
+        record.props["@family.source"],
+        "library:library.doors-windows.fixed-window"
+    );
+    let family = construct_regen::families::read_record(&record).unwrap();
+    assert_eq!(record.props["@family.content"], family.content.as_str());
+    assert_eq!(record.props["@family.recipe"], family.text());
+    let again = stack
+        .edit("family.load", json!({ "family": WINDOW }))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        again,
+        "Fixed window (library.doors-windows.fixed-window) is already in this document: bring in \
+         another version with family.reload."
+    );
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert!(stack.record(WINDOW).await.is_none());
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert_eq!(stack.record(WINDOW).await.unwrap().0, hash);
+    stack
+        .edit("family.load", json!({ "recipe": office_window() }))
+        .await
+        .unwrap();
+    let (_, office) = stack.record("office.window").await.unwrap();
+    assert_eq!(office.props["@family.source"], "text");
+    // a family's record has no shape, so the regenerator builds nothing for it
+    stack.regen.catch_up(&i("p")).await.unwrap();
+    let place = Place::Built {
+        project: i("p"),
+        document: i(DOCUMENT),
+        element: i("office.window"),
+    };
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let built: Option<BuiltElement> = read_row(&mut snapshot, &place.key()).await.unwrap();
+    assert!(built.is_none());
+}
+
+/// Placing a library family the document does not hold loads it in the same entry: the copy
+/// names the family in the document, and one undo takes both away.
+#[tokio::test]
+async fn placing_loads_a_library_family_on_first_use() {
+    let stack = window_on_wall().await;
+    let (_, window) = stack.record("F-1").await.unwrap();
+    assert_eq!(window.recipe.args["family_id"], WINDOW);
+    let (_, record) = stack.record(WINDOW).await.unwrap();
+    assert_eq!(
+        window.recipe.args["family"],
+        record.props["@family.content"].as_str()
+    );
+    // the builder is handed the document's recipe; the record keeps only its name and version
+    assert!(!window.recipe.args.contains_key("recipe"));
+    assert_eq!(stack.cuts("W-1").await.len(), 1);
+    stack
+        .edit(
+            "family.place",
+            place("F-2", WINDOW, "w600x600", "W-1", "exterior", "3 m"),
+        )
+        .await
+        .unwrap();
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert!(stack.record(WINDOW).await.is_some());
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert!(stack.record("F-1").await.is_none());
+    assert!(stack.record(WINDOW).await.is_none());
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert!(stack.record(WINDOW).await.is_some());
+    assert!(stack.record("F-1").await.is_some());
+}
+
+/// A family the document holds and no library does is placed, cut in its wall and built from the
+/// document's record alone; a rebuild from the log gives the same bytes.
+#[tokio::test]
+async fn a_documents_own_family_builds_without_the_library() {
+    use construct_regen::families::FamilySource;
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    a_layered_wall(&stack, "W-1").await;
+    stack
+        .edit("family.load", json!({ "recipe": office_window() }))
+        .await
+        .unwrap();
+    let (_, record) = stack.record("office.window").await.unwrap();
+    let content = construct_families::ContentId::parse(&record.props["@family.content"]).unwrap();
+    assert!(
+        construct_regen::families::Library::baked()
+            .recipe(&content)
+            .is_none()
+    );
+    stack
+        .edit(
+            "family.place",
+            place(
+                "F-1",
+                "office.window",
+                "w1200x1200",
+                "W-1",
+                "exterior",
+                "1200 mm",
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        stack.cuts("W-1").await,
+        [("F-1".to_owned(), [2200, 2000, 0], 2)]
+    );
+    let built = stack.built("F-1").await;
+    assert!(
+        matches!(built.result, BuiltResult::Shape { .. }),
+        "{:?}",
+        built.result
+    );
+    let before = stack.derived().await;
+    stack.regen.rebuild(&i("p")).await.unwrap();
+    assert_eq!(stack.derived().await, before);
+}
+
+/// A reload brings in a newer version: every copy keeps its place, host and type and names the
+/// new version, its wall is cut again; the reload is undone and redone as one step.
+#[tokio::test]
+async fn a_reload_keeps_every_copy_with_undo_and_redo() {
+    let stack = window_on_wall().await;
+    stack
+        .edit(
+            "family.place",
+            place("F-2", WINDOW, "w600x600", "W-1", "interior", "3 m"),
+        )
+        .await
+        .unwrap();
+    let (f1, one) = stack.record("F-1").await.unwrap();
+    let (f2, two) = stack.record("F-2").await.unwrap();
+    let newer = || window_text(|recipe| "Fixed window, second issue".clone_into(&mut recipe.name));
+    stack
+        .edit(
+            "family.reload",
+            json!({ "family": WINDOW, "recipe": newer() }),
+        )
+        .await
+        .unwrap();
+    let (_, record) = stack.record(WINDOW).await.unwrap();
+    assert_eq!(record.name, "Fixed window, second issue");
+    assert_eq!(record.props["@family.source"], "text");
+    for (id, old) in [("F-1", &one), ("F-2", &two)] {
+        let (_, now) = stack.record(id).await.unwrap();
+        assert_eq!(
+            now.recipe.args["family"],
+            record.props["@family.content"].as_str()
+        );
+        assert_eq!(now.recipe.args["type"], old.recipe.args["type"]);
+        assert_eq!(now.references, old.references);
+        assert_eq!(now.props, old.props);
+        assert_eq!(now.placement, old.placement);
+    }
+    assert_eq!(stack.cuts("W-1").await.len(), 2);
+    let same = stack
+        .edit(
+            "family.reload",
+            json!({ "family": WINDOW, "recipe": newer() }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        same,
+        "Fixed window, second issue is already this version in this document."
+    );
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.record("F-1").await.unwrap().0, f1);
+    assert_eq!(stack.record("F-2").await.unwrap().0, f2);
+    assert_eq!(stack.record(WINDOW).await.unwrap().1.name, "Fixed window");
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert_eq!(
+        stack.record(WINDOW).await.unwrap().1.name,
+        "Fixed window, second issue"
+    );
+    // a family given as text is reloaded only from text
+    let back = stack
+        .edit("family.reload", json!({ "family": WINDOW }))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        back,
+        "Fixed window, second issue did not come from the library: send its new recipe."
+    );
+}
+
+/// A reload that would break a copy is refused by name and changes nothing: a type the new
+/// version no longer has, a type that would no longer fit its wall; so is a recipe of another
+/// family, and a family the document does not hold.
+#[tokio::test]
+async fn a_reload_that_would_break_a_copy_is_refused_by_name() {
+    let stack = window_on_wall().await;
+    let (f1, _) = stack.record("F-1").await.unwrap();
+    let (family, _) = stack.record(WINDOW).await.unwrap();
+    let no_type = window_text(|recipe| {
+        let table = recipe.type_table.as_mut().unwrap();
+        table.rows.retain(|r| r.key.as_str() != "w1200x1200");
+    });
+    let wide = window_text(|recipe| set_row(recipe, "w1200x1200", "width", &stored_mm(4000)));
+    let mut said = Vec::new();
+    for args in [
+        json!({ "family": WINDOW, "recipe": no_type }),
+        json!({ "family": WINDOW, "recipe": wide }),
+        json!({ "family": WINDOW, "recipe": office_window() }),
+        json!({ "family": "shop.window" }),
+    ] {
+        said.push(stack.edit("family.reload", args).await.unwrap_err());
+    }
+    assert_eq!(
+        said[0],
+        "Fixed window no longer has type w1200x1200, which F-1 is: keep that type in the new \
+         version, or change F-1 to another type first."
+    );
+    assert_eq!(
+        said[1],
+        "F-1 would no longer cut its wall cleanly at the new version: family F-1: it crosses the \
+         wall's end"
+    );
+    assert_eq!(
+        said[2],
+        "That recipe is family office.window, not library.doors-windows.fixed-window."
+    );
+    assert!(
+        said[3].starts_with("There is no family shop.window in this document; it has Fixed window"),
+        "{}",
+        said[3]
+    );
+    assert_eq!(stack.record("F-1").await.unwrap().0, f1);
+    assert_eq!(stack.record(WINDOW).await.unwrap().0, family);
+}
+
+/// A recipe the document does not take is refused before anything is written: one over the
+/// length a document takes, one that does not read, one the checker refuses, a family the library
+/// lacks, and nothing named at all.
+#[tokio::test]
+async fn a_recipe_over_the_limits_is_refused() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    let long = format!("{}{}", office_window(), " ".repeat(300_000));
+    let bad_category = window_text(|recipe| {
+        recipe.id = i("odd.window");
+        recipe.category = construct_categories::CategoryId(999_999);
+    });
+    let mut said = Vec::new();
+    for args in [
+        json!({ "recipe": long }),
+        json!({ "recipe": "{}" }),
+        json!({ "recipe": bad_category }),
+        json!({ "family": "library.doors-windows.round-window" }),
+        json!({}),
+    ] {
+        said.push(stack.edit("family.load", args).await.unwrap_err());
+    }
+    assert!(
+        said[0].starts_with("That recipe can't be loaded: the recipe is ")
+            && said[0].ends_with(" bytes, over the 262144 a document takes."),
+        "{}",
+        said[0]
+    );
+    assert!(
+        said[1].starts_with("That recipe can't be loaded: the recipe does not read"),
+        "{}",
+        said[1]
+    );
+    assert!(
+        said[2].starts_with("Fixed window (odd.window): the recipe does not check: "),
+        "{}",
+        said[2]
+    );
+    assert!(
+        said[3].starts_with(
+            "There is no family library.doors-windows.round-window in the library; it has "
+        ),
+        "{}",
+        said[3]
+    );
+    assert_eq!(
+        said[4],
+        "Which family? Name one of the library by its id, or send its recipe."
+    );
+    assert!(stack.record("odd.window").await.is_none());
+}
+
+/// Copies are swapped, one by its id or every copy of one type, to another type or family of the
+/// same kind, keeping their place and host; a door family for a window is refused, and so are a
+/// type the family lacks and a family no one holds; a swap is undone and redone.
+#[tokio::test]
+async fn copies_are_swapped_to_another_type_or_family() {
+    let stack = window_on_wall().await;
+    stack
+        .edit(
+            "family.place",
+            place("F-2", WINDOW, "w1200x1200", "W-1", "interior", "3 m"),
+        )
+        .await
+        .unwrap();
+    stack
+        .edit("family.load", json!({ "recipe": office_window() }))
+        .await
+        .unwrap();
+    let (before, one) = stack.record("F-1").await.unwrap();
+    stack
+        .edit(
+            "family.swap",
+            json!({ "element": "F-1", "to_family": "office.window", "to_type": "w600x600" }),
+        )
+        .await
+        .unwrap();
+    let (_, swapped) = stack.record("F-1").await.unwrap();
+    assert_eq!(swapped.recipe.args["family_id"], "office.window");
+    assert_eq!(swapped.recipe.args["type"], "w600x600");
+    assert_eq!(swapped.references, one.references);
+    assert_eq!(swapped.props["@host.along"], one.props["@host.along"]);
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.record("F-1").await.unwrap().0, before);
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    // every copy of a type: only F-2 is still a w1200x1200 of the fixed window
+    stack
+        .edit(
+            "family.swap",
+            json!({ "family": WINDOW, "type": "w1200x1200", "to_family": WINDOW,
+                    "to_type": "w1800x1200" }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        stack.record("F-2").await.unwrap().1.recipe.args["type"],
+        "w1800x1200"
+    );
+    assert_eq!(
+        stack.record("F-1").await.unwrap().1.recipe.args["type"],
+        "w600x600"
+    );
+    let mut said = Vec::new();
+    for args in [
+        json!({ "element": "F-1", "to_family": DOOR, "to_type": "d900x2100" }),
+        json!({ "element": "F-1", "to_family": "office.window", "to_type": "w1x1" }),
+        json!({ "element": "F-1", "to_family": "office.window", "to_type": "w600x600" }),
+        json!({ "family": WINDOW, "type": "w600x600", "to_family": WINDOW,
+                "to_type": "w900x900" }),
+        json!({ "element": "W-1", "to_family": WINDOW, "to_type": "w600x600" }),
+        json!({ "element": "F-1", "to_family": "shop.window", "to_type": "w600x600" }),
+    ] {
+        said.push(stack.edit("family.swap", args).await.unwrap_err());
+    }
+    assert_eq!(
+        said[0],
+        "F-1 is a window: it is swapped only for another window family, and Single swing door is \
+         a door one."
+    );
+    assert!(
+        said[1].starts_with("Office window has no type w1x1; its types are"),
+        "{}",
+        said[1]
+    );
+    assert_eq!(said[2], "F-1 is already Office window of type w600x600.");
+    assert_eq!(
+        said[3],
+        "No copy of library.doors-windows.fixed-window is of type w600x600."
+    );
+    assert!(said[4].ends_with("is not a placed family."), "{}", said[4]);
+    assert!(
+        said[5].starts_with("There is no family shop.window in the library"),
+        "{}",
+        said[5]
+    );
+    // the door family a refused swap named is not left loaded
+    assert!(stack.record(DOOR).await.is_none());
+}
+
+/// A spec made into a type by the generator is stored as a family of the document, and a second
+/// spec adds a type to it, every copy kept; a mark it already has, a spec the generator refuses,
+/// a family it did not make and a template it lacks are refused in words; each is undone and
+/// redone.
+#[tokio::test]
+async fn generated_types_are_stored_as_a_family_and_added_to_it() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    a_layered_wall(&stack, "W-1").await;
+    let spec = |mark: &str, width: &str| json!({ "template": "fixed-window", "mark": mark, "width": width, "height": "1200 mm" });
+    stack
+        .edit(
+            "family.generate",
+            json!({ "family": "gen.windows", "name": "Generated windows",
+                    "spec": spec("W01", "1200 mm") }),
+        )
+        .await
+        .unwrap();
+    let (first, record) = stack.record("gen.windows").await.unwrap();
+    assert_eq!(record.props["@family.source"], "generated:fixed-window");
+    assert_eq!(keys_of(&record), ["w01"]);
+    stack
+        .edit(
+            "family.place",
+            place("F-1", "gen.windows", "w01", "W-1", "exterior", "1200 mm"),
+        )
+        .await
+        .unwrap();
+    stack
+        .edit(
+            "family.generate",
+            json!({ "family": "gen.windows", "spec": spec("W02", "900 mm") }),
+        )
+        .await
+        .unwrap();
+    let (_, record) = stack.record("gen.windows").await.unwrap();
+    assert_eq!(keys_of(&record), ["w01", "w02"]);
+    let (_, copy) = stack.record("F-1").await.unwrap();
+    assert_eq!(
+        copy.recipe.args["family"],
+        record.props["@family.content"].as_str()
+    );
+    assert_eq!(copy.recipe.args["type"], "w01");
+    stack
+        .edit("family.load", json!({ "family": WINDOW }))
+        .await
+        .unwrap();
+    let mut said = Vec::new();
+    for args in [
+        json!({ "family": "gen.windows", "spec": spec("W01", "600 mm") }),
+        json!({ "family": "gen.windows", "spec": spec("W03", "100 mm") }),
+        json!({ "family": "gen.other", "spec": spec("W01", "600 mm") }),
+        json!({ "family": WINDOW, "spec": spec("W09", "600 mm") }),
+        json!({ "family": "gen.windows", "spec": { "template": "arched-window", "mark": "A",
+                "width": "1 m", "height": "1 m" } }),
+    ] {
+        said.push(stack.edit("family.generate", args).await.unwrap_err());
+    }
+    assert_eq!(said[0], "Generated windows already has a type w01.");
+    assert!(
+        said[1].starts_with("The generator refused it: "),
+        "{}",
+        said[1]
+    );
+    assert_eq!(
+        said[2],
+        "A new generated family needs a name; gen.other is not in this document."
+    );
+    assert!(
+        said[3].starts_with(
+            "Fixed window was not made by the generator from that template (the library"
+        ),
+        "{}",
+        said[3]
+    );
+    assert!(
+        said[4].starts_with("There is no template arched-window"),
+        "{}",
+        said[4]
+    );
+    stack.edit("edit.undo", json!({})).await.unwrap(); // the load
+    stack.edit("edit.undo", json!({})).await.unwrap(); // the second type
+    let (_, record) = stack.record("gen.windows").await.unwrap();
+    assert_eq!(keys_of(&record), ["w01"]);
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert_eq!(
+        keys_of(&stack.record("gen.windows").await.unwrap().1),
+        ["w01", "w02"]
+    );
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    stack.edit("edit.undo", json!({})).await.unwrap(); // the copy
+    stack.edit("edit.undo", json!({})).await.unwrap(); // the family
+    assert!(stack.record("gen.windows").await.is_none());
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert_eq!(stack.record("gen.windows").await.unwrap().0, first);
+}
+
+/// A family still placed is not removed, naming its copies; once none is, it is, and the remove
+/// is undone and redone.
+#[tokio::test]
+async fn a_family_still_placed_is_not_removed() {
+    let stack = window_on_wall().await;
+    let placed = stack
+        .edit("family.remove", json!({ "family": WINDOW }))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        placed,
+        "Fixed window is still placed (1 copies: F-1): delete them or swap them to another \
+         family first."
+    );
+    stack
+        .edit("family.delete", json!({ "element": "F-1" }))
+        .await
+        .unwrap();
+    let (hash, _) = stack.record(WINDOW).await.unwrap();
+    stack
+        .edit("family.remove", json!({ "family": WINDOW }))
+        .await
+        .unwrap();
+    assert!(stack.record(WINDOW).await.is_none());
+    let gone = stack
+        .edit("family.remove", json!({ "family": WINDOW }))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        gone,
+        "There is no family library.doors-windows.fixed-window in this document; it has none."
+    );
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.record(WINDOW).await.unwrap().0, hash);
+    stack.edit("edit.redo", json!({})).await.unwrap();
+    assert!(stack.record(WINDOW).await.is_none());
+}
+
+/// The generic commands are no back door to a family's record, and an undo may not leave a copy
+/// without its family.
+#[tokio::test]
+async fn the_generic_commands_are_no_back_door_to_a_family() {
+    let stack = Stack::new(Arc::new(Cutter)).await;
+    a_layered_wall(&stack, "W-1").await;
+    stack
+        .edit("family.load", json!({ "family": WINDOW }))
+        .await
+        .unwrap();
+    let (_, record) = stack.record(WINDOW).await.unwrap();
+    let made = stack
+        .edit(
+            "element.create",
+            json!({ "element": "fam.copy", "kind": "family.recipe",
+                    "placement": { "x": 0, "y": 0, "z": 0 }, "recipe": record.recipe }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        made,
+        "A family is brought into a document with family.load, which checks its recipe."
+    );
+    for (cmd, args) in [
+        ("element.delete", json!({ "element": WINDOW })),
+        (
+            "element.set",
+            json!({ "element": WINDOW, "name": "Window" }),
+        ),
+        (
+            "element.move",
+            json!({ "element": WINDOW, "placement": { "x": 1, "y": 0, "z": 0 } }),
+        ),
+    ] {
+        assert_eq!(
+            stack.edit(cmd, args).await.unwrap_err(),
+            "Fixed window is a family of this document: bring in another version with \
+             family.reload, or take it out with family.remove.",
+            "{cmd}"
+        );
+    }
+    // another person places a copy; the load is then not undone
+    stack
+        .edit_as(
+            "ben",
+            "family.place",
+            place("F-1", WINDOW, "w600x600", "W-1", "exterior", "1 m"),
+        )
+        .await
+        .unwrap();
+    let undo = stack.edit("edit.undo", json!({})).await.unwrap_err();
+    assert_eq!(
+        undo,
+        "That can't be undone: F-1 would be left without its family, \
+         library.doors-windows.fixed-window."
+    );
+    assert!(stack.record(WINDOW).await.is_some());
+}
+
+/// The families route's list: the document's own families first, with where each came from and
+/// how many are placed, then the library's it does not hold.
+#[tokio::test]
+async fn the_document_lists_its_families_then_the_librarys() {
+    let stack = window_on_wall().await;
+    stack
+        .edit("family.load", json!({ "recipe": office_window() }))
+        .await
+        .unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let all = construct_api::cloud::loading::read_families(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap()
+        .unwrap();
+    let ids: Vec<&str> = all.iter().map(|f| f.id.as_str()).collect();
+    assert_eq!(ids[..2], [WINDOW, "office.window"]);
+    assert_eq!(all.len(), 4);
+    assert!(all[0].in_document && all[1].in_document && !all[2].in_document);
+    assert_eq!(all[0].placed, 1);
+    assert_eq!(all[1].placed, 0);
+    assert_eq!(all[1].source, "text");
+    assert_eq!(all[0].source, "library:library.doors-windows.fixed-window");
+    assert!(all[2..].iter().all(|f| f.source.is_empty()));
 }

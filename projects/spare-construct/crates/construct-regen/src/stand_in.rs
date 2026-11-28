@@ -28,6 +28,13 @@
 //! room. Interim, as every stand-in shape: its holes and its true outline in 3D are the kernel's
 //! to build (the interim register's row).
 //!
+//! A stair (`stair`) is one box too: the box around every piece ([`crate::stair_plan`]), rounded
+//! outward to whole millimetres, named `box.<role>` for its pieces' faces. Its displays draw each
+//! piece as a part in the stair's material: a landing as its prism, a run as its side profile cut
+//! upright at every corner into quadrilaterals, each a prism across the run, every point the
+//! nearest millimetre, so a page shows the steps on either edition. Interim, as every stand-in
+//! shape: its pieces as solids are the kernel's to build (the interim register's row).
+//!
 //! A layered wall (`wall.layered`) is one box of its whole thickness: the prism on its outer
 //! outline ([`crate::wall_plan`]), each corner the nearest whole millimetre, named as a box is;
 //! its layers are the kernel's to build as solids. Its displays draw each layer as a part, so a
@@ -40,23 +47,41 @@
 //! the frame on either edition. Its recipe comes from the library baked in at build time, the
 //! source the browser has too (interim until job 7.6). Its body is the box around them all.
 //!
+//! A curtain wall (`wall.curtain`, job 14.1, [`crate::curtain_plan`]) is one box round everything
+//! it holds: its plan's outline, each corner the nearest whole millimetre, from its base to its
+//! top, named as a box is. Its displays draw each glazed or solid panel and each mullion as a part
+//! of its own, the prism on its quadrilateral between its two heights, each point the nearest
+//! millimetre, so a view shows the grid, the glass and the mullions on either edition; each door
+//! panel is its family's boxes (`construct_families::extents`) at its size, turned and moved to
+//! where it stands, each side rounded outward to a whole millimetre. Interim, as every stand-in
+//! shape: its solids are the kernel's to build (the interim register's row).
+//!
 //! An opening or a shaft (construct-openings' three operations) is drawn by [`crate::voids`], as on
 //! the kernel's edition, with no solid and no face.
+//!
+//! In a wall at an angle (piece A83) what is hosted comes seated (construct-regen's `hosting`,
+//! [`crate::seating::SEAT_ARG`]): a box door is the prism on its plan rectangle laid along its own
+//! x, and a placed family's every solid the prism on its box's plan rectangle in the family's own
+//! frame, each corner put through the seat and then the nearest whole millimetre, so each is drawn
+//! turned with its wall, as the kernel's builder builds it.
 //!
 //! Interim: it cuts no openings. A wall built with the doors hosted in it
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
+use crate::curtain_plan::{self, CurtainPlan, DOOR_HEIGHT, DOOR_WIDTH};
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
 use crate::roof_plan::{self, PlanSolid, RoofPlan};
 use crate::room_plan::{self, RoomPlan};
+use crate::seating;
+use crate::stair_plan::{self, PieceSolid, StairPlan};
 use crate::wall_plan::{self, Layered};
-use construct_families::{Limits, extents};
+use construct_families::{Limits, Seat, extents};
 use construct_model::geometry::{
     Bounds, Built, Display, Edition, FaceName, Geometry, GeometryError, Hosted, Mesh, Part, Recipe,
 };
-use construct_params::Length;
+use construct_params::{Length, Value as ParamValue};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -590,6 +615,227 @@ fn roof_names(plan: &RoofPlan) -> Vec<FaceName> {
         .collect()
 }
 
+/// The corners of a run's side profile in its own plane: `(a, z)` along the plan axis it runs on
+/// (`x` when every corner has one `y`, else `y`), in grid steps.
+fn profile_in_plane(section: &[[i64; 3]]) -> Result<Vec<[i64; 2]>, GeometryError> {
+    let first = section.first().copied().unwrap_or_default();
+    let along_x = section.iter().all(|p| p[1] == first[1]);
+    let along_y = section.iter().all(|p| p[0] == first[0]);
+    if !(along_x || along_y) {
+        return Err(GeometryError {
+            code: "MissingArgument".to_owned(),
+            message: "a stair's run is profiled in an upright plane along x or y".to_owned(),
+        });
+    }
+    Ok(section
+        .iter()
+        .map(|p| [if along_x { p[0] } else { p[1] }, p[2]])
+        .collect())
+}
+
+/// The height at `a` of the edge from `p` to `q` (`p[0] != q[0]`), in grid steps, to the nearest
+/// step: a display's point, never stored.
+fn height_at(p: [i64; 2], q: [i64; 2], a: i64) -> i64 {
+    let (da, dz) = (
+        i128::from(q[0]).saturating_sub(i128::from(p[0])),
+        i128::from(q[1]).saturating_sub(i128::from(p[1])),
+    );
+    let along = i128::from(a).saturating_sub(i128::from(p[0]));
+    // p.z + dz * along / da, rounded to the nearest step a half up.
+    let num = dz
+        .saturating_mul(along)
+        .saturating_mul(2)
+        .saturating_add(da);
+    let step = num.checked_div_euclid(da.saturating_mul(2)).unwrap_or(0);
+    i64::try_from(i128::from(p[1]).saturating_add(step)).unwrap_or(p[1])
+}
+
+/// A run's side profile cut upright at every corner into strips, each a quadrilateral (its top
+/// and bottom straight across it), as `[(a0, bottom), (a1, bottom), (a1, top), (a0, top)]`.
+fn strips(profile: &[[i64; 2]]) -> Result<Vec<[[i64; 2]; 4]>, GeometryError> {
+    let mut stops: Vec<i64> = profile.iter().map(|p| p[0]).collect();
+    stops.sort_unstable();
+    stops.dedup();
+    let edges: Vec<([i64; 2], [i64; 2])> = profile
+        .iter()
+        .zip(profile.iter().cycle().skip(1))
+        .map(|(p, q)| if p[0] <= q[0] { (*p, *q) } else { (*q, *p) })
+        .filter(|(p, q)| p[0] < q[0])
+        .collect();
+    let mut out = Vec::new();
+    for pair in stops.windows(2) {
+        let (Some(&a0), Some(&a1)) = (pair.first(), pair.get(1)) else {
+            continue;
+        };
+        let across: Vec<([i64; 2], [i64; 2])> = edges
+            .iter()
+            .filter(|(p, q)| p[0] <= a0 && q[0] >= a1)
+            .copied()
+            .collect();
+        let [(p0, q0), (p1, q1)] = across.as_slice() else {
+            return Err(GeometryError {
+                code: "MissingArgument".to_owned(),
+                message: "a stair's run is one strip from its foot to its end".to_owned(),
+            });
+        };
+        let (mut bottom, mut top) = (
+            [height_at(*p0, *q0, a0), height_at(*p0, *q0, a1)],
+            [height_at(*p1, *q1, a0), height_at(*p1, *q1, a1)],
+        );
+        if bottom[0].saturating_add(bottom[1]) > top[0].saturating_add(top[1]) {
+            std::mem::swap(&mut bottom, &mut top);
+        }
+        out.push([[a0, bottom[0]], [a1, bottom[1]], [a1, top[1]], [a0, top[0]]]);
+    }
+    Ok(out)
+}
+
+/// A run's loft drawn as its side profile `right` cut upright at every corner into quadrilaterals
+/// ([`strips`]), each a prism across to `left`, every point put through `near`. The count of its
+/// triangles.
+fn run_strips(
+    mesh: &mut Mesh,
+    right: &[[i64; 3]],
+    left: &[[i64; 3]],
+    near: &mut impl FnMut([i64; 3]) -> [i64; 3],
+) -> Result<usize, GeometryError> {
+    let (Some(r0), Some(l0)) = (right.first(), left.first()) else {
+        return Ok(0);
+    };
+    let across = [l0[0].saturating_sub(r0[0]), l0[1].saturating_sub(r0[1]), 0];
+    let shift = [
+        floor_plan::nearest_mm(across[0]).0,
+        floor_plan::nearest_mm(across[1]).0,
+    ];
+    let along_x = right.iter().all(|p| p[1] == r0[1]);
+    let fixed = if along_x { r0[1] } else { r0[0] };
+    let mut triangles = 0_usize;
+    for strip in strips(&profile_in_plane(right)?)? {
+        let place = |[a, z]: [i64; 2]| {
+            if along_x {
+                [a, fixed, z]
+            } else {
+                [fixed, a, z]
+            }
+        };
+        let mut ring: Vec<[i64; 3]> = strip.iter().map(|c| near(place(*c))).collect();
+        // Faces outward: the ring turns anticlockwise seen from the side across.
+        if dot(newell(&ring), across) < 0 {
+            ring.reverse();
+        }
+        let other: Vec<[i64; 3]> = ring
+            .iter()
+            .map(|p| {
+                [
+                    p[0].saturating_add(shift[0]),
+                    p[1].saturating_add(shift[1]),
+                    p[2],
+                ]
+            })
+            .collect();
+        triangles = triangles.saturating_add(prism(mesh, &ring, &other)?);
+    }
+    Ok(triangles)
+}
+
+/// A stair as one box ([`crate::stair_plan`]): the box around every piece, rounded outward to
+/// whole millimetres, named `box.<role>` for every role its pieces have. Its displays draw each
+/// piece as a part in the stair's material: a landing as the prism it is, a run as its side
+/// profile cut upright at every corner into quadrilaterals, each a prism across its width, every
+/// point the nearest millimetre, so a page shows the steps on either edition; its body is the one
+/// box. Its displays stray by 1 mm where a point was rounded.
+fn stair(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = StairPlan::of(recipe)?;
+    let (lo, hi) = plan.extent();
+    let min = lo.map(floor_plan::floor_mm);
+    let max = hi.map(floor_plan::ceil_mm);
+    let mut rounded = false;
+    let mut near = |p: [i64; 3]| {
+        p.map(|c| {
+            let (mm, exact) = floor_plan::nearest_mm(c);
+            rounded |= !exact;
+            mm
+        })
+    };
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let mut first_outline = Vec::new();
+    for piece in &plan.pieces {
+        let outline: Vec<[i64; 2]> = piece
+            .plan
+            .iter()
+            .map(|&[x, y]| {
+                let [x, y, _] = near([x, y, 0]);
+                [x, y]
+            })
+            .collect();
+        if first_outline.is_empty() {
+            first_outline.clone_from(&outline);
+        }
+        let start = part_count(mesh.indices.len().checked_div(3).unwrap_or(0))?;
+        let triangles = match &piece.solid {
+            PieceSolid::Extrude { profile, by } => {
+                let low: Vec<[i64; 3]> = profile.iter().map(|p| near(*p)).collect();
+                let high: Vec<[i64; 3]> = profile
+                    .iter()
+                    .map(|p| {
+                        near([
+                            p[0].saturating_add(by[0]),
+                            p[1].saturating_add(by[1]),
+                            p[2].saturating_add(by[2]),
+                        ])
+                    })
+                    .collect();
+                prism(&mut mesh, &low, &high)?
+            }
+            PieceSolid::Loft {
+                sections: [right, left],
+            } => run_strips(&mut mesh, right, left, &mut near)?,
+        };
+        parts.push(Part {
+            material: plan.material.clone(),
+            function: "structure".to_owned(),
+            triangles: [start, part_count(triangles)?],
+            outline,
+        });
+    }
+    let body = FloorBody {
+        kind: "stair",
+        min,
+        max,
+    };
+    let deviation = i64::from(rounded);
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: first_outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: stair_names(&plan),
+        displays,
+    })
+}
+
+/// A stair's face names: `box.<role>` for each of its pieces' roles, in order.
+fn stair_names(plan: &StairPlan) -> Vec<FaceName> {
+    plan.roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
+}
+
 /// A floor's face names: `box.top`, `box.bottom` and `box.side.<edge ID>` for each edge of each
 /// loop, in loop order.
 fn floor_names(plan: &FloorPlan) -> Vec<FaceName> {
@@ -627,8 +873,116 @@ struct FamilyBody<'a> {
     #[serde(rename = "type")]
     ty: &'a str,
     turn: u8,
+    /// Where it stands in a wall at an angle: its seat's way, base and origin, in steps.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seat: Option<[[i64; 2]; 3]>,
     min: [i64; 3],
     max: [i64; 3],
+}
+
+/// A rectangle of a frame of its own put through a seat: its four plan corners, anticlockwise
+/// from above, each the nearest whole millimetre; whether any was rounded; and the lowest and
+/// highest grid steps its corners reach.
+struct Footprint {
+    outline: Vec<[i64; 2]>,
+    rounded: bool,
+    low: [i64; 2],
+    high: [i64; 2],
+}
+
+impl Footprint {
+    /// The rectangle from `lo` to `hi` (grid steps) put through `seat`.
+    fn of(seat: &Seat, lo: [i64; 2], hi: [i64; 2]) -> Result<Footprint, GeometryError> {
+        let too_far = || GeometryError {
+            code: "TooBig".to_owned(),
+            message: "a seated corner is beyond the kernel's grid".to_owned(),
+        };
+        let mut rounded = false;
+        let (mut low, mut high) = ([i64::MAX; 2], [i64::MIN; 2]);
+        let mut outline = Vec::with_capacity(4);
+        for [x, y] in [
+            [lo[0], lo[1]],
+            [hi[0], lo[1]],
+            [hi[0], hi[1]],
+            [lo[0], hi[1]],
+        ] {
+            let point = seat.plan([x, y]).ok_or_else(too_far)?;
+            for ((l, h), c) in low.iter_mut().zip(high.iter_mut()).zip(point) {
+                (*l, *h) = ((*l).min(c), (*h).max(c));
+            }
+            outline.push(point.map(|c| {
+                let (mm, exact) = wall_plan::nearest_mm(c);
+                rounded |= !exact;
+                mm
+            }));
+        }
+        Ok(Footprint {
+            outline,
+            rounded,
+            low,
+            high,
+        })
+    }
+
+    /// The box its corners reach, rounded outward to whole millimetres, from `z0` to `z1`.
+    fn reach(&self, z0: i64, z1: i64) -> ([i64; 3], [i64; 3]) {
+        (
+            [
+                floor_plan::floor_mm(self.low[0]),
+                floor_plan::floor_mm(self.low[1]),
+                z0,
+            ],
+            [
+                floor_plan::ceil_mm(self.high[0]),
+                floor_plan::ceil_mm(self.high[1]),
+                z1,
+            ],
+        )
+    }
+}
+
+/// Puts the prism on `outline` (four corners) from `z0` to `z1` into `mesh`, and gives its first
+/// triangle and how many it has.
+fn push_prism(
+    mesh: &mut Mesh,
+    outline: &[[i64; 2]],
+    z0: i64,
+    z1: i64,
+) -> Result<[u32; 2], GeometryError> {
+    let (first, base) = (
+        part_count(mesh.indices.len() / 3)?,
+        part_count(mesh.positions.len() / 3)?,
+    );
+    for z in [z0, z1] {
+        for &[x, y] in outline {
+            mesh.positions.extend([x, y, z]);
+        }
+    }
+    for index in TRIANGLES {
+        mesh.indices
+            .push(base.checked_add(index).ok_or_else(too_many)?);
+    }
+    Ok([first, part_count(TRIANGLES.len() / 3)?])
+}
+
+/// The box `reach` (if any) widened to hold the box from `lo` to `hi`.
+fn widened(
+    reach: Option<([i64; 3], [i64; 3])>,
+    lo: [i64; 3],
+    hi: [i64; 3],
+) -> ([i64; 3], [i64; 3]) {
+    match reach {
+        None => (lo, hi),
+        Some((mut min, mut max)) => {
+            for (m, l) in min.iter_mut().zip(lo) {
+                *m = (*m).min(l);
+            }
+            for (m, h) in max.iter_mut().zip(hi) {
+                *m = (*m).max(h);
+            }
+            (min, max)
+        }
+    }
 }
 
 /// The smallest whole number of millimetres at or above the diagonal of a box of `size`.
@@ -676,37 +1030,34 @@ fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
             hi[2].saturating_sub(lo[2]),
         ];
         deviation = deviation.max(diagonal(size));
-        reach = Some(match reach {
-            None => (lo, hi),
-            Some((mut min, mut max)) => {
-                for (m, l) in min.iter_mut().zip(lo) {
-                    *m = (*m).min(l);
-                }
-                for (m, h) in max.iter_mut().zip(hi) {
-                    *m = (*m).max(h);
-                }
-                (min, max)
+        let (outline, lo, hi) = match &instance.seat {
+            Some(seat) => {
+                // Its box in the family's own frame, seated: the prism on its plan rectangle.
+                let plan = |l: [Length; 3]| [l[0].steps(), l[1].steps()];
+                let seated = Footprint::of(seat, plan(solid.low), plan(solid.high))?;
+                let strays = diagonal(size).saturating_add(i64::from(seated.rounded));
+                deviation = deviation.max(strays);
+                let (low, high) = seated.reach(lo[2], hi[2]);
+                (seated.outline, low, high)
             }
-        });
-        let (first, base) = (
-            part_count(mesh.indices.len() / 3)?,
-            part_count(mesh.positions.len() / 3)?,
-        );
-        mesh.positions.extend(box_corners(lo, hi).concat());
-        for index in TRIANGLES {
-            mesh.indices
-                .push(base.checked_add(index).ok_or_else(too_many)?);
-        }
+            None => (
+                vec![
+                    [lo[0], lo[1]],
+                    [hi[0], lo[1]],
+                    [hi[0], hi[1]],
+                    [lo[0], hi[1]],
+                ],
+                lo,
+                hi,
+            ),
+        };
+        reach = Some(widened(reach, lo, hi));
+        let triangles = push_prism(&mut mesh, &outline, lo[2], hi[2])?;
         parts.push(Part {
             material: solid.material.as_str().to_owned(),
             function: solid.step.as_str().to_owned(),
-            triangles: [first, part_count(TRIANGLES.len() / 3)?],
-            outline: vec![
-                [lo[0], lo[1]],
-                [hi[0], lo[1]],
-                [hi[0], hi[1]],
-                [lo[0], hi[1]],
-            ],
+            triangles,
+            outline,
         });
     }
     let (min, max) = reach.ok_or_else(|| GeometryError {
@@ -718,6 +1069,10 @@ fn family(recipe: &Recipe) -> Result<Built, GeometryError> {
         family: instance.family.as_str(),
         ty: instance.ty.as_str(),
         turn: instance.turn.quarters(),
+        seat: instance
+            .seat
+            .as_ref()
+            .map(|seat| [seat.way(), seat.base(), seat.at()]),
         min,
         max,
     };
@@ -855,8 +1210,13 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     if room_plan::is_room(recipe) {
         return Ok(room_names(&RoomPlan::of(recipe)?));
     }
+    if stair_plan::is_stair(recipe) {
+        return Ok(stair_names(&StairPlan::of(recipe)?));
+    }
     if wall_plan::is_layered(recipe) {
         Layered::of(recipe)?;
+    } else if curtain_plan::is_curtain(recipe) {
+        CurtainPlan::of(recipe)?;
     } else {
         size_of(recipe)?;
     }
@@ -970,6 +1330,232 @@ fn layered(recipe: &Recipe) -> Result<Built, GeometryError> {
     })
 }
 
+/// A curtain wall's body, as the stand-in stores it: its outline and height in whole millimetres,
+/// and how many solids and door panels its displays draw.
+#[derive(Serialize)]
+struct CurtainBody {
+    kind: &'static str,
+    outline: Vec<[i64; 2]>,
+    height: i64,
+    solids: usize,
+    doors: usize,
+}
+
+/// A box in whole millimetres: its lowest and highest corners.
+type Span = ([i64; 3], [i64; 3]);
+
+/// A door panel's family as its boxes, each moved to where the door stands and rounded outward
+/// to whole millimetres, appended to `mesh` as parts named `door.<step>`; the box round them.
+fn curtain_door(
+    door: &curtain_plan::PlanDoor,
+    mesh: &mut Mesh,
+    parts: &mut Vec<Part>,
+) -> Result<Option<Span>, GeometryError> {
+    let library = families::baked();
+    let instance = Instance {
+        family: door.door.family().clone(),
+        ty: door.door.ty().clone(),
+        turn: door.turn,
+        seat: None,
+        values: BTreeMap::new(),
+        in_document: None,
+        own: None,
+    };
+    let named = |e: GeometryError| GeometryError {
+        code: e.code,
+        message: format!("door panel {}: {}", door.key, e.message),
+    };
+    let mut resolved = families::resolve(&*library, &instance).map_err(named)?;
+    for (key, length) in [(DOOR_WIDTH, door.width), (DOOR_HEIGHT, door.height)] {
+        let key = construct_families::Key::parse(key).ok_or_else(|| GeometryError {
+            code: "BadInstance".to_owned(),
+            message: "a parameter's key".to_owned(),
+        })?;
+        resolved
+            .values
+            .set(key, ParamValue::Length(length).stored());
+    }
+    let boxes = extents(
+        &resolved.recipe,
+        &resolved.values,
+        Limits::DEFAULT,
+        door.turn,
+    )
+    .map_err(|e| named(families::evaluation_refused(&resolved.recipe, &e)))?;
+    let mut reach = None;
+    for solid in &boxes {
+        let mut lo = [0_i64; 3];
+        let mut hi = [0_i64; 3];
+        for (axis, (l, h)) in lo.iter_mut().zip(hi.iter_mut()).enumerate() {
+            let at = door.origin.get(axis).copied().unwrap_or(0);
+            let low = solid.low.get(axis).map_or(0, |v| v.steps());
+            let high = solid.high.get(axis).map_or(0, |v| v.steps());
+            *l = floor_plan::floor_mm(low.checked_add(at).ok_or_else(too_many)?);
+            *h = floor_plan::ceil_mm(high.checked_add(at).ok_or_else(too_many)?);
+        }
+        reach = Some(widened(reach, lo, hi));
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        mesh.positions.extend(box_corners(lo, hi).concat());
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        parts.push(Part {
+            material: solid.material.as_str().to_owned(),
+            function: format!("door.{}", solid.step.as_str()),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: vec![
+                [lo[0], lo[1]],
+                [hi[0], lo[1]],
+                [hi[0], hi[1]],
+                [lo[0], hi[1]],
+            ],
+        });
+    }
+    Ok(reach)
+}
+
+/// A curtain wall as one box round everything it holds, as the module header says: its displays
+/// draw each panel with a slab and each mullion as the prism it is, and each door panel as its
+/// family's boxes.
+fn curtain(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = CurtainPlan::of(recipe)?;
+    let mut rounded = false;
+    let mut near = |steps: i64| {
+        let (mm, exact) = wall_plan::nearest_mm(steps);
+        rounded |= !exact;
+        mm
+    };
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    let mut parts = Vec::new();
+    let mut reach: Option<Span> = None;
+    for solid in &plan.solids {
+        let shape: Vec<[i64; 2]> = solid
+            .corners
+            .iter()
+            .map(|&[x, y]| [near(x), near(y)])
+            .collect();
+        let [z0, z1] = [near(solid.z[0]), near(solid.z[1])];
+        let (first, base) = (
+            part_count(mesh.indices.len() / 3)?,
+            part_count(mesh.positions.len() / 3)?,
+        );
+        for z in [z0, z1] {
+            for &[x, y] in &shape {
+                mesh.positions.extend([x, y, z]);
+            }
+        }
+        for index in TRIANGLES {
+            mesh.indices
+                .push(base.checked_add(index).ok_or_else(too_many)?);
+        }
+        for &[x, y] in &solid.corners {
+            let lo = [x, y, solid.z[0]].map(floor_plan::floor_mm);
+            let hi = [x, y, solid.z[1]].map(floor_plan::ceil_mm);
+            reach = Some(widened(reach, lo, hi));
+        }
+        parts.push(Part {
+            material: solid.material.clone(),
+            function: solid.function.to_owned(),
+            triangles: [first, part_count(TRIANGLES.len() / 3)?],
+            outline: shape,
+        });
+    }
+    for door in &plan.doors {
+        if let Some((lo, hi)) = curtain_door(door, &mut mesh, &mut parts)? {
+            reach = Some(widened(reach, lo, hi));
+        }
+    }
+    let (min, max) = reach.ok_or_else(|| GeometryError {
+        code: "EmptyShape".to_owned(),
+        message: "a curtain wall with every panel empty and no mullion has nothing to build"
+            .to_owned(),
+    })?;
+    let outline: Vec<[i64; 2]> = plan
+        .outline
+        .iter()
+        .map(|&[x, y]| [near(x), near(y)])
+        .collect();
+    let body = CurtainBody {
+        kind: "curtain",
+        outline: outline.clone(),
+        height: near(plan.height),
+        solids: plan.solids.len(),
+        doors: plan.doors.len(),
+    };
+    let deviation = i64::from(rounded);
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: parts.clone(),
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: box_names(),
+        displays,
+    })
+}
+
+/// A box hosted in a wall at an angle, handed with its seat (piece A83): the prism on its plan
+/// rectangle laid along its own x (its length or width along, its thickness or depth across),
+/// each corner put through its seat and then the nearest whole millimetre, from its base to its
+/// top; named as a box is, its bounds rounded outward, a display that rounded anything straying
+/// by 1 mm. Its body is that prism.
+fn seated_box(recipe: &Recipe, seat: &Seat) -> Result<Built, GeometryError> {
+    let [a, b, height] = size_of(recipe)?;
+    let (long, across) = if runs_along_y(&recipe.args) {
+        (b, a)
+    } else {
+        (a, b)
+    };
+    let steps = |mm: i64| {
+        Length::checked_from_mm(mm)
+            .map(Length::steps)
+            .ok_or_else(|| GeometryError {
+                code: "TooBig".to_owned(),
+                message: "a box beyond the kernel's grid".to_owned(),
+            })
+    };
+    let seated = Footprint::of(seat, [0, 0], [steps(long)?, steps(across)?])?;
+    let mut mesh = Mesh {
+        positions: Vec::new(),
+        indices: Vec::new(),
+    };
+    push_prism(&mut mesh, &seated.outline, 0, height)?;
+    let body = WallBody {
+        kind: "box",
+        outline: seated.outline.clone(),
+        height,
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation: i64::from(seated.rounded),
+            mesh: mesh.clone(),
+            outline: seated.outline.clone(),
+            parts: Vec::new(),
+        })
+        .collect();
+    let (min, max) = seated.reach(0, height);
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: box_names(),
+        displays,
+    })
+}
+
 impl Geometry for Boxes {
     fn edition(&self) -> Edition {
         Edition {
@@ -999,8 +1585,17 @@ impl Geometry for Boxes {
         if room_plan::is_room(recipe) {
             return room(recipe);
         }
+        if stair_plan::is_stair(recipe) {
+            return stair(recipe);
+        }
         if wall_plan::is_layered(recipe) {
             return layered(recipe);
+        }
+        if curtain_plan::is_curtain(recipe) {
+            return curtain(recipe);
+        }
+        if let (stored, Some(seat)) = seating::unseated(recipe)? {
+            return seated_box(&stored, &seat);
         }
         let size = size_of(recipe)?;
         let [w, d, _] = size;

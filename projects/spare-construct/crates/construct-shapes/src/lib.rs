@@ -52,6 +52,18 @@ pub fn build(recipe: &str) -> String {
     }
 }
 
+/// Where an element hosted on a wall at an angle sits and the recipe its builder is handed, as
+/// construct-regen's `seating::seat_json` works it out for the server's regenerator: `wall` is the
+/// wall's filled recipe, `recipe` the element's, `key` its ID, `role` the side it is on
+/// (`exterior` or `interior`), `along` and `up` its offsets as stored text. The answer is
+/// `{"seat": {"placement": {x, y, z}, "recipe": ...}}` in the wall's frame, or
+/// `{"failed": {code, message}}`.
+#[wasm_bindgen]
+#[must_use]
+pub fn seat(wall: &str, recipe: &str, key: &str, role: &str, along: &str, up: &str) -> String {
+    construct_regen::seating::seat_json(wall, recipe, key, role, along, up)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

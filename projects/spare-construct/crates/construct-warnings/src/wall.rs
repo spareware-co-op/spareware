@@ -199,3 +199,32 @@ pub fn overlap_along_length(a: &Wall, b: &Wall) -> bool {
         && !shut_out(a, b)
         && !shut_out(b, a)
 }
+
+/// Whether some point lies on both outlines, the edges included: two convex outlines are apart
+/// exactly when an edge of one has the whole of the other strictly on its outer side (the
+/// separating axis test, on whole numbers), so they meet when no edge does.
+fn meet(a: &Wall, b: &Wall) -> bool {
+    let apart = |a: &Wall, b: &Wall| {
+        edges(&a.outline).any(|(p, q)| {
+            let side = minus(q, p);
+            b.outline.iter().all(|r| cross(side, minus(*r, p)) < 0)
+        })
+    };
+    !apart(a, b) && !apart(b, a)
+}
+
+/// Whether `other` joins `host` and stands across the stretch from `low` to `high` along `axis`
+/// (0 for x, 1 for y) of the host's line: they are on one level, are not the same wall, their
+/// reference lines are not parallel (so one meets the other at a joint, a corner, a T or a cross),
+/// their outlines meet (an edge shared, or an overlap), and the joined wall's outline spans a
+/// positive length of the stretch. Whole numbers only: a joined wall that only touches the
+/// stretch's end does not count, and one that lies in it by one grid step does.
+#[must_use]
+pub fn crosses_stretch(host: &Wall, other: &Wall, axis: usize, low: i64, high: i64) -> bool {
+    host.level == other.level
+        && host.id != other.id
+        && cross(wide(host.direction), wide(other.direction)) != 0
+        && meet(host, other)
+        && other.low.get(axis).is_some_and(|v| *v < high)
+        && other.high.get(axis).is_some_and(|v| low < *v)
+}

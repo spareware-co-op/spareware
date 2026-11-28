@@ -26,4 +26,4 @@ A table that breaks one is refused, never repaired: ids are exactly 1000000, 100
 
 ## Element kinds
 
-A kind name (the `op` of a recipe: `wall.straight`, `wall.layered`, `door.single`, `block`, `floor`, `roof`; an operation whose recipe `owner` is not `construct` is named with its owner in front: `workshop.part`, `workshop.assembly`) is mapped to its category by `category_of_kind`. An unknown kind is an error value.
+A kind name (the `op` of a recipe: `wall.straight`, `wall.layered`, `wall.curtain`, `door.single`, `block`, `floor`, `roof`; an operation whose recipe `owner` is not `construct` is named with its owner in front: `workshop.part`, `workshop.assembly`) is mapped to its category by `category_of_kind`. An unknown kind is an error value.

@@ -29,7 +29,19 @@ The outline of an oblique wall is rounded once to the kernel's grid (wall_plan's
 
 ## What counts as not enclosed (`room.not_enclosed`)
 
-What construct-rooms already finds ([CON-A4-F7-P1](CON-A4-F7-P1-rooms.md)): the room's point has no closed loop of the walls of its level round it. A redundant room (a second room in one loop), a room the search refuses (a point in a wall, a curved wall) and an enclosed room are not warnings of this list: the first two have their own words on the room's view and may become kinds (`room.redundant`) as one entry each; the feature text names none, so this piece adds none.
+What construct-rooms already finds ([CON-A4-F7-P1](CON-A4-F7-P1-rooms.md)): the room's point has no closed loop of the walls of its level round it. A room the search refuses (a point in a wall, a curved wall) and an enclosed room are not warnings of this list; the refusal has its own words on the room's view. A redundant room is, as `room.redundant` (below).
+
+## What counts as a redundant room (`room.redundant`)
+
+Added 28 Nov 2026 (issue 1330). Two rooms placed in one enclosed space are a modelling mistake an architect expects to be told about: the room search already reads the second as redundant (it has no area), but the list said nothing. The warning's elements are the redundant room and then the room that keeps the space (the one whose ID comes first), so both are named; it is `warning` severity like a room that is not enclosed. Its sentence names the keeper as the model lists it (number and name), by its ID where the model does not list it.
+
+## What counts as an opening across a joined wall (`insert.crosses_joined_wall`)
+
+Added 28 Nov 2026 (issue 1332). A door, window or plain opening is cut through its host wall's whole thickness, over the stretch of the host's line it takes. A second wall that meets the host (a partition on a T, or a wall at a corner) and stands across that stretch is a wall the opening would have to cut. Nothing refused this and nothing warned. It is a warning, not a refusal, because the model still builds (the host is cut and the joined wall is not), and a person may be mid-edit.
+
+Decided, exact and on whole numbers (no tolerance): for an insert with the stretch from `low` to `high` along its host's axis, every other wall on the host's level is a conflict when all of these hold: its reference line is not exactly parallel to the host's (so it joins, not overlaps: overlap is `wall.overlap`); its outline in plan meets the host's outline, an edge shared included (the separating axis test, an edge's strict outer side); and its outline stands across a positive length of the stretch (a wall that only touches the stretch's end does not count; one that lies in it by one grid step does). Walls on other levels are never joined. The insert's stretch is the opening the wall's builder places, asked without the engine by the same rules that refuse a door past a wall's end (construct-regen's `inserts`, `kernel::openings`), so what is warned about is what would be built. Heights are not compared: walls stand from their level to the next, so a joined wall on the host's level stands across the opening's height.
+
+The elements, in this order: the insert, its host wall, the joined wall. An insert whose host is not a wall of the model (it does not build) is not judged.
 
 ## The page (piece A77, the page half)
 
