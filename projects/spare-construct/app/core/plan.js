@@ -114,21 +114,37 @@ function claimedByOther(id) {
   return claim && claim.person !== C.me.person.id ? claim : null;
 }
 
-let drawQueued = false;
+// The drawing surface draws at most once a frame, however many edits, entries and timers ask in
+// it: drawPlan() asks for the plan, queueDraw() for the plan, the status bar and the 3D view.
+let drawQueued = false; // what the next frame draws: false, 'plan' or 'all'
 function queueDraw() {
-  if (drawQueued) return;
-  drawQueued = true;
+  askToDraw('all');
+}
+
+function drawPlan() {
+  askToDraw('plan');
+}
+
+/** Asks the next frame to draw `what`; the frame draws once, the most that was asked of it. */
+function askToDraw(what) {
+  const first = !drawQueued;
+  if (what === 'all' || first) drawQueued = what;
+  if (!first) return;
   requestAnimationFrame(() => {
+    const all = drawQueued === 'all';
     drawQueued = false;
     spent('draw', () => {
-      drawPlan();
-      statusBar();
-      if (C.three) C.three.update();
+      drawPlanNow();
+      if (all) {
+        statusBar();
+        if (C.three) C.three.update();
+      }
     });
   });
 }
 
-function drawPlan() {
+/** Draws the plan now: only the frame askToDraw asked for calls it. */
+function drawPlanNow() {
   const canvas = $('#pv-canvas');
   if (!canvas || S.screen !== 'plan') return;
   if (!C.model && !C.readOnly) {
@@ -242,7 +258,7 @@ function watchThePlan() {
       else placeWith(at, event);
       return;
     }
-    const hit = event.target.closest('[data-id]');
+    const hit = pressed(event).closest('[data-id]');
     if (!hit) {
       if (S.sel) select(null);
       return;
@@ -313,6 +329,9 @@ function watchThePlan() {
   window.addEventListener('pointerup', finish);
   window.addEventListener('pointercancel', finish);
 }
+
+/** What a press picks: the element under its own point, as the drawing is when it is pressed. */
+const pressed = (event) => document.elementFromPoint(event.clientX, event.clientY) || event.target;
 
 /** How the plan stacks what it draws (register.drawOrders, the first answer): floors under walls,
  *  walls under the rest, so a door in a wall stays on top. */

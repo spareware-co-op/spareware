@@ -102,6 +102,10 @@ A panel is drawn again from the page's record of the model whenever anything cha
 
 A tool keeps no hold of its own. The crop and range dialog's (`C.cropHold`) moved onto it at the cut; the schedules dialog's moves onto it when it lands.
 
+### One draw a frame, picks from the press point
+
+The drawing surface draws the plan at most once a frame, however many edits, entries and timers ask in it: `drawPlan()` asks for the plan and `queueDraw()` for the plan, the status bar and the 3D view, and the next frame draws once, the most that was asked. One undo can bring dozens of entries, and each used to draw the plan again, so a click could land on a drawing already replaced. A tool only asks; none draws by itself. A press in the plan picks what is under its own point (`pressed(event)`), as the drawing is when it is pressed.
+
 ### Where the core still names a tool
 
 The cut moved every tool out and gave the core hooks where it asked tools most (the ribbon, the hint, the side panel, the plan's drawing, picking and dragging, a model opening and closing, the log, the dialogs). The rest the split binds late: where a core file still calls a tool's function, it calls `late.<name>`, filled when the tool's file has loaded (`core/late.js`), so the core never imports a tool and every such place is listed. After the cut there are 32 (the split's report lists them): the seating of families and curtain walls in a wall's shape (`shapes.js`), Workshop's elements, the browser's Views, Schedules and Warnings parts, the levels' names, the 3D view's colours and the status bar's warning count. Each is a hook still to make; the next jobs turn them into kinds as above, one at a time, the same way.
@@ -124,7 +128,7 @@ The cut moves code; it does not change what any line does:
 - The core calls a tool's hooks directly, in the order it called the functions they wrap, so an exception still goes where it went. (Transport's `Registry.call` catches a plug-in's exception; whether Construct does is decided later, separately.)
 - Every top-level statement that does something when the page loads (a listener added, an `ACT` entry wrapped) runs in the same order as before, and the split checks it (below).
 - One thing moves in time, by the nature of a module: the page's code runs once the document has been read, as every module does, rather than at the point the script stood, which was already the end of the document. The demo's own start has run before it either way. One part of the page leaned on the old moment: Workshop's frame, which the demo's start opens on a reload of Workshop's view, finds its way into the model (`spare.workshop`) once, as it loads, and could now load first and find none. The frame host loads such a frame again when it starts (`reloadEarlyFrame`), so it finds it as before.
-- One change in behaviour was asked for, after the cut (main, 28 Nov): held values (above), which every panel now has where only the crop and range dialog had its own.
+- Two changes in behaviour were asked for, after the cut (main, 28 Nov): held values, which every panel now has where only the crop and range dialog had its own, and one draw a frame with picks from the press point (both above).
 - The two-browser test ran unedited.
 
 ### The split, repeatable on any newer main
