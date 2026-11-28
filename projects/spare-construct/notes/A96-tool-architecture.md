@@ -87,7 +87,7 @@ register.layers({ id: 'floor-sketch', order: 50, over: () => floorSketch() });
 
 A hook that has nothing to say returns `undefined`; for a question one tool answers, the core takes the first answer that is not `undefined`. Every registration names its `order`, unique in its kind: the place the core asked it in before the cut (the if-chain's position, by tens), so the order the files load in never decides anything. A new tool picks the number that puts it where it belongs.
 
-A tool's own buttons and fields keep the demo's tables (`ACT.<name>` for a click, `CHG.<name>` for a change, `DTOOLS`, `TOOLNAME`, `WORDS`, `STEP_WORDS`): they are already registries by name, and the ribbon, the palettes and the log already read them.
+A tool's own buttons and fields keep the demo's tables (`ACT.<name>` for a click, `CHG.<name>` for a change, `DTOOLS`, `TOOLNAME`, `WORDS`, `STEP_WORDS`): they are already registries by name, and the ribbon, the palettes and the log already read them. A tool's keys are its own listeners, in its own file (the floor tool's Enter and Escape, the opening tools' corners), added when it loads, in the list's order, as they were added before; the core keeps only Delete. A tool's `commands` and `test` fields are in the contract and checked when given; the cut leaves them empty: the job on command shapes (below) fills `commands` and checks the page's edits against them, and each tool's `test` is filled once the two-browser test names its sections.
 
 **Adding a tool** is a file under `tools/<discipline>/`, its line in `tools/index.js`, and its section of the two-browser test. The core is not edited.
 

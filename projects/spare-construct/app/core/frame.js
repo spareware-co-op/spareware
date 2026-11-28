@@ -19,8 +19,9 @@ function takeOverTheFrame() {
   VB.l2 = VB.l1;
   FLOORV.splice(0, FLOORV.length, 'l1', 'l2');
   HOMEV.architecture = 'l1';
-  // Architecture is connected to the project; Workshop builds its parts with the geometry kernel in the browser
-  for (const discipline of DISCS) discipline[4] = ['architecture', 'workshop'].includes(discipline[0]) ? 1 : 0;
+  // The disciplines that registered are connected (register.disciplines): Architecture to the
+  // project, Workshop building its parts with the geometry kernel in the browser.
+  for (const discipline of DISCS) discipline[4] = entries('disciplines').some((entry) => entry.id === discipline[0]) ? 1 : 0;
   renderDisc();
   for (const side of $$('#props-host .side')) side.remove();
   S.view = 'l1';
