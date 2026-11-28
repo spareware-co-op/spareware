@@ -3762,3 +3762,107 @@ pub fn the_starter_content_builds_and_hangs_without_cutting<E: Engine + Send + '
             .unwrap();
     }
 }
+
+/// Cladding (wraps), a cavity, the frame (the core) and a lining (wraps), of whole millimetres:
+/// 20, 50, 140 and 10 mm, 220 mm in all.
+pub const CLAD: [(&str, &str, i64); 4] = [
+    ("finish", "brick-clay", 128_000),
+    ("thermal", "air-gap", 320_000),
+    ("structure", "timber-douglas-fir", 896_000),
+    ("finish", "plasterboard-gypsum", 64_000),
+];
+
+/// A [`CLAD`] wall 4000 mm along x from the origin, 2700 mm high, wrapping on the exterior at its
+/// free ends and at its inserts as its filled recipe says (`wrap`, as construct-regen's `walls`
+/// fills it), with its joins filled the regenerator's way (its wrapped ends).
+pub fn wrapped_wall(inserts: &str) -> Recipe {
+    let mut wall = layered_wall([0, 0], [4000, 0], 2700, &CLAD);
+    wall.args.insert(
+        "wrap".to_owned(),
+        json!({ "core": [2, 3], "ends": "exterior", "inserts": inserts,
+                "layers": [true, false, false, true] }),
+    );
+    construct_regen::joins::among(&[("W", &wall)]).remove(0)
+}
+
+/// A wall wrapped on the exterior at its free ends and at its inserts, with a door and a window:
+/// the cladding turns round both ends and into both openings (two jambs and a head at the door,
+/// and a sill at the window too), the cavity and the frame are cut back by the cladding's 20 mm,
+/// the lining is cut flush; the body lists each layer's own cutters; and nothing is lost or
+/// doubled: the parts' volumes add up to the wall less the two openings, exactly. Wrapped on both
+/// sides, the lining turns too and the frame is cut back from each side to its middle. Wrapping
+/// nothing at inserts builds the openings as before.
+pub fn a_wall_wraps_at_its_free_ends_and_its_inserts<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    let k = kernel(make());
+    let door = door_of(900, 2100, "x");
+    let window = door_of(1000, 1000, "x");
+    let whole = 6 * (4000 * 220 * 2700 - 900 * 220 * 2100 - 1000 * 220 * 1000);
+    for (inserts, cladding, lining) in [("exterior", 3 + 7, 1), ("both", 3 + 7, 1 + 7)] {
+        let wall = wrapped_wall(inserts);
+        let cut = hosting(
+            &k,
+            &wall,
+            &[
+                hosted("D-1", &door, at(&k, [1000, -150, 0])),
+                hosted("W-1", &window, at(&k, [2500, -150, 900])),
+            ],
+        );
+        let fine = &cut.displays[0];
+        let materials: Vec<&str> = fine.parts.iter().map(|p| p.material.as_str()).collect();
+        let count = |m: &str| materials.iter().filter(|&&x| x == m).count();
+        // The cladding: its strip, a turn at each end, and at each opening its jambs and head,
+        // and the window's sill.
+        assert_eq!(count("brick-clay"), cladding, "{inserts}: {materials:?}");
+        assert_eq!(
+            count("plasterboard-gypsum"),
+            lining,
+            "{inserts}: {materials:?}"
+        );
+        let six: i128 = (0..fine.parts.len())
+            .map(|at| signed_six_volume(&part_mesh(fine, at)))
+            .sum();
+        assert_eq!(
+            six, whole,
+            "{inserts}: the parts fill the wall less its openings"
+        );
+        let body: Value = serde_json::from_slice(&cut.body).unwrap();
+        assert!(!body["grown"].as_array().unwrap().is_empty(), "{inserts}");
+        assert_eq!(body["subtract"].as_array().unwrap().len(), 2);
+    }
+    // The cavity is cut back by the cladding at the door's jamb: its opening is 940 mm wide.
+    let wall = wrapped_wall("exterior");
+    let cut = hosting(&k, &wall, &[hosted("D-1", &door, at(&k, [1000, -150, 0]))]);
+    let body: Value = serde_json::from_slice(&cut.body).unwrap();
+    let cavity: Vec<&Value> = body["grown"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|g| g["layer"] == 1)
+        .collect();
+    assert_eq!(cavity.len(), 1);
+    let xs: BTreeSet<i64> = cavity[0]["extrude"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p[0].as_i64().unwrap())
+        .collect();
+    let per = i64::try_from(k.units().steps_per_mm()).unwrap();
+    assert_eq!(
+        xs.into_iter().collect::<Vec<_>>(),
+        [980 * per, 1920 * per],
+        "the cavity's opening grown 20 mm at each jamb"
+    );
+    // Wrapping nothing at inserts: the openings cut flush, no own cutters, no turns in them.
+    let flush = wrapped_wall("none");
+    let plain = hosting(&k, &flush, &[hosted("D-1", &door, at(&k, [1000, -150, 0]))]);
+    let body: Value = serde_json::from_slice(&plain.body).unwrap();
+    assert!(body.get("grown").is_none());
+    let clad = plain.displays[0]
+        .parts
+        .iter()
+        .filter(|p| p.material == "brick-clay")
+        .count();
+    assert_eq!(clad, 3, "the strip and the two end turns only");
+}

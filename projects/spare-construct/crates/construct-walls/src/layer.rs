@@ -84,7 +84,8 @@ impl Function {
 ///
 /// Wrapping: a wrapping layer turns the corner at a free end or an opening side and runs across
 /// the end of the core to the core's far face; a layer that does not wrap stops flush with the
-/// end. The answer is the same at ends and at openings for now (separate answers are job 6.1's).
+/// end. Where it turns is the type's [`crate::Wrapping`] (or a wall's own over it): its free ends
+/// and its inserts each wrap one side, the other, or (at inserts) both ([`crate::turned`]).
 /// Only a shell layer may wrap; [`crate::Assembly`] refuses a core layer that wraps.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Layer {
@@ -94,7 +95,7 @@ pub struct Layer {
     pub thickness: Length,
     /// What it is made of: a material in the project's materials (construct-materials).
     pub material: MaterialId,
-    /// Whether it wraps at free ends and at the sides of openings.
+    /// Whether it wraps where its wall wraps its side, at free ends and at the sides of openings.
     pub wraps: bool,
 }
 

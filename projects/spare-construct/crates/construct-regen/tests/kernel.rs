@@ -1176,6 +1176,11 @@ impl Engine for Pieces {
 }
 
 #[test]
+fn a_wall_wraps_at_its_free_ends_and_its_inserts() {
+    kernel_suite::a_wall_wraps_at_its_free_ends_and_its_inserts(|| Pieces);
+}
+
+#[test]
 fn a_family_cuts_every_layer_and_stands_in_its_opening() {
     kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(|| Pieces);
 }

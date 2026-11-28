@@ -223,6 +223,11 @@ fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape() {
 }
 
 #[test]
+fn a_wall_wraps_at_its_free_ends_and_its_inserts() {
+    kernel_suite::a_wall_wraps_at_its_free_ends_and_its_inserts(engine);
+}
+
+#[test]
 fn joined_walls_meet_without_overlap_on_the_engine() {
     kernel_suite::joined_walls_meet_without_overlap_on_the_engine(engine);
 }

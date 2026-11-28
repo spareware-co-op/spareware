@@ -730,3 +730,124 @@ async fn rooms_either_side_of_a_t_meet_the_faces_as_the_layers_join() {
         );
     }
 }
+
+/// Four rooms round two partitions that cross (job 6.1), worked by hand: the 6000 by 4000 mm box
+/// of 250 mm brick veneer walls, 3000 mm high, a 115 mm stud partition on x = 3000 and another on
+/// y = 2000, each from wall to wall. Where they cross, the partition of the lower ID runs through
+/// and the other is cut in two; each keeps its whole outline, so every room meets the partitions'
+/// faces at one point: the south-west room runs from (125, 125) to (2942.5, 1942.5), 2817.5 by
+/// 1817.5 mm, 5,120,806.25 mm2 (5,120,806.25 is 2817.5 x 1817.5), and so on round the crossing.
+#[tokio::test]
+async fn rooms_meet_two_partitions_that_cross() {
+    let stack = Stack::new().await;
+    stack.put_type(VENEER).await;
+    stack.put_type(STUD).await;
+    for (id, start, end) in [
+        ("W-S", [0, 0], [6000, 0]),
+        ("W-E", [6000, 0], [6000, 4000]),
+        ("W-N", [6000, 4000], [0, 4000]),
+        ("W-W", [0, 4000], [0, 0]),
+    ] {
+        stack.put(&typed_wall(VENEER, id, start, end, 3000)).await;
+    }
+    let across = typed_wall(STUD, "W-P1", [3000, 0], [3000, 4000], 3000);
+    let along = typed_wall(STUD, "W-P2", [0, 2000], [6000, 2000], 3000);
+    stack.put(&across).await;
+    stack.put(&along).await;
+    // The crossing is joined: the partition along y runs through, the other is cut in two.
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    for (wall, other) in [(&across, "W-P2"), (&along, "W-P1")] {
+        let recipe = joins::recipe_at(&mut snapshot, &i(PROJECT), &i(DOCUMENT), wall, At::Now)
+            .await
+            .unwrap()
+            .unwrap();
+        let with = &recipe.args["joins"]["with"];
+        assert!(
+            with.as_array().unwrap().iter().any(|w| w == other),
+            "{}: {with}",
+            wall.id
+        );
+    }
+    let (w, e) = (2942 * MM + MM / 2, 3057 * MM + MM / 2);
+    let (s, n) = (1942 * MM + MM / 2, 2057 * MM + MM / 2);
+    let up = Limit::Level(on("L-1"));
+    for (id, at, x0, x1, y0, y1) in [
+        ("R-1", [1500, 1000], 125 * MM, w, 125 * MM, s),
+        ("R-2", [4500, 1000], e, 5875 * MM, 125 * MM, s),
+        ("R-3", [4500, 3000], e, 5875 * MM, n, 3875 * MM),
+        ("R-4", [1500, 3000], 125 * MM, w, n, 3875 * MM),
+    ] {
+        let record = room(id, id, at, &up);
+        stack.put(&record).await;
+        let Room::Enclosed { measures, found } = stack.room(&record).await else {
+            panic!("{id}: not enclosed")
+        };
+        let corners: Vec<[i64; 2]> = found.outer.iter().map(|c| c.at).collect();
+        assert_eq!(corners, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], "{id}");
+        let area = i128::from(x1 - x0) * i128::from(y1 - y0);
+        assert_eq!(
+            measures.area.square_steps(),
+            area,
+            "{id}: the rectangle's area, exactly"
+        );
+    }
+}
+
+/// A room in a box whose corners are butted, and one whose corners are squared off, as a person
+/// chose them (job 6.1): inside, a butt or a square-off at a right angle meets the room's faces
+/// where a mitre does, so the room is the same 5750 by 3750 mm rectangle, 21,562,500 mm2; the
+/// walls' outlines differ only outside it.
+#[tokio::test]
+async fn a_room_in_a_box_of_butted_or_squared_corners_meets_the_same_faces() {
+    for kind in ["butt", "square-off"] {
+        let stack = Stack::new().await;
+        stack.put_type(VENEER).await;
+        // Each corner's choice is kept by the wall of the lower ID: south and east by the east,
+        // east and north by the east, north and west by the north, west and south by the south;
+        // the south and the north run through.
+        let walls = [
+            ("W-S", [0, 0], [6000, 0], vec![("W-W", "W-S")]),
+            (
+                "W-E",
+                [6000, 0],
+                [6000, 4000],
+                vec![("W-N", "W-N"), ("W-S", "W-S")],
+            ),
+            ("W-N", [6000, 4000], [0, 4000], vec![("W-W", "W-N")]),
+            ("W-W", [0, 4000], [0, 0], vec![]),
+        ];
+        for (id, start, end, choices) in walls {
+            let mut wall = typed_wall(VENEER, id, start, end, 3000);
+            if !choices.is_empty() {
+                let with: serde_json::Map<String, Json> = choices
+                    .into_iter()
+                    .map(|(other, first)| {
+                        (other.to_owned(), json!({ "first": first, "kind": kind }))
+                    })
+                    .collect();
+                wall.recipe
+                    .args
+                    .insert("joining".to_owned(), json!({ "with": with }));
+            }
+            stack.put(&wall).await;
+        }
+        let south = stack
+            .joined(&typed_wall(VENEER, "W-S", [0, 0], [6000, 0], 3000))
+            .await
+            .unwrap();
+        // The south wall runs through to the east and west walls' outer faces.
+        assert!(south.contains(&[6125 * MM, -125 * MM]), "{kind}: {south:?}");
+        let record = room("R-1", "101", [3000, 2000], &Limit::Level(on("L-1")));
+        stack.put(&record).await;
+        let outcome = stack.room(&record).await;
+        assert_eq!(
+            loop_mm(&outcome),
+            [[125, 125], [5875, 125], [5875, 3875], [125, 3875]],
+            "{kind}"
+        );
+        let Room::Enclosed { measures, .. } = outcome else {
+            panic!("not enclosed")
+        };
+        assert_eq!(measures.area, mm2(21_562_500), "{kind}");
+    }
+}

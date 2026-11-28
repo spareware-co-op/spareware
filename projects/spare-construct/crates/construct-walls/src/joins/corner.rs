@@ -12,7 +12,32 @@
 //!
 //! The path is found strongest first ([`path`]): the strongest layer of each wall in play (the
 //! outermost of equals) settle their meeting, and what lies outside and inside it is solved the
-//! same way, so no layer ever crosses the joint of a stronger pair.
+//! same way, so no layer ever crosses the joint of a stronger pair. Where the two are of the same
+//! priority, the joint's kind settles it ([`Tie`]): a mitre meets on their crossing's diagonal, a
+//! butt runs its first wall's layer through (job 6.1).
+
+/// How two layers of the same priority meet at a corner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Tie {
+    /// On the mitre of their crossing.
+    Mitre,
+    /// A's runs through, as if it were the stronger.
+    A,
+    /// B's runs through.
+    B,
+}
+
+#[cfg(test)]
+impl Tie {
+    /// The same tie seen from the other wall.
+    pub(super) fn swapped(self) -> Tie {
+        match self {
+            Tie::Mitre => Tie::Mitre,
+            Tie::A => Tie::B,
+            Tie::B => Tie::A,
+        }
+    }
+}
 
 /// One step of the path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,6 +67,7 @@ fn strongest(ranks: &[u8], lo: usize, hi: usize) -> Option<(usize, u8)> {
 fn solve(
     ra: &[u8],
     rb: &[u8],
+    tie: Tie,
     (i0, j0): (usize, usize),
     (i1, j1): (usize, usize),
     out: &mut Vec<(usize, usize, Step)>,
@@ -58,33 +84,38 @@ fn solve(
         return Some(());
     };
     let next = |v: usize| v.checked_add(1);
-    match rank_a.cmp(&rank_b) {
+    let order = match (rank_a.cmp(&rank_b), tie) {
+        (std::cmp::Ordering::Equal, Tie::A) => std::cmp::Ordering::Less,
+        (std::cmp::Ordering::Equal, Tie::B) => std::cmp::Ordering::Greater,
+        (order, _) => order,
+    };
+    match order {
         std::cmp::Ordering::Equal => {
-            solve(ra, rb, (i0, j0), (a, b), out)?;
+            solve(ra, rb, tie, (i0, j0), (a, b), out)?;
             out.push((a, b, Step::Mitre));
-            solve(ra, rb, (next(a)?, next(b)?), (i1, j1), out)
+            solve(ra, rb, tie, (next(a)?, next(b)?), (i1, j1), out)
         }
         std::cmp::Ordering::Less => {
             for i in i0..=a {
                 out.push((i, j0, Step::Down));
             }
-            solve(ra, rb, (next(a)?, j0), (i1, j1), out)
+            solve(ra, rb, tie, (next(a)?, j0), (i1, j1), out)
         }
         std::cmp::Ordering::Greater => {
             for j in j0..=b {
                 out.push((i0, j, Step::Left));
             }
-            solve(ra, rb, (i0, next(b)?), (i1, j1), out)
+            solve(ra, rb, tie, (i0, next(b)?), (i1, j1), out)
         }
     }
 }
 
 /// The path through the square of two walls whose layers, from the outside of the corner, have
-/// the ranks `ra` (wall A) and `rb` (wall B), a lower rank stronger: each step with the crossing
-/// `(i, j)` it starts from, from `(0, 0)` to `(ra.len(), rb.len())`.
-pub(super) fn path(ra: &[u8], rb: &[u8]) -> Option<Vec<(usize, usize, Step)>> {
+/// the ranks `ra` (wall A) and `rb` (wall B), a lower rank stronger, ties met as `tie` says: each
+/// step with the crossing `(i, j)` it starts from, from `(0, 0)` to `(ra.len(), rb.len())`.
+pub(super) fn path(ra: &[u8], rb: &[u8], tie: Tie) -> Option<Vec<(usize, usize, Step)>> {
     let mut out = Vec::with_capacity(ra.len().checked_add(rb.len())?);
-    solve(ra, rb, (0, 0), (ra.len(), rb.len()), &mut out)?;
+    solve(ra, rb, tie, (0, 0), (ra.len(), rb.len()), &mut out)?;
     Some(out)
 }
 
@@ -113,7 +144,45 @@ mod tests {
     use super::*;
 
     fn run(ra: &[u8], rb: &[u8]) -> Vec<(usize, usize, Step)> {
-        path(ra, rb).unwrap()
+        path(ra, rb, Tie::Mitre).unwrap()
+    }
+
+    /// A butt runs the first wall's layers of each tie through: the same type both ways, A first,
+    /// runs A's finish and core to B's outer face and stops A's lining on B's core, which B's
+    /// core passes; B first, the mirror.
+    #[test]
+    fn a_butt_runs_the_first_wall_s_ties_through() {
+        let same: &[u8] = &[4, 1, 4];
+        let a_first = path(same, same, Tie::A).unwrap();
+        assert_eq!(
+            ends_of_a(&a_first, 3).unwrap(),
+            vec![(0, 0), (0, 0), (2, 2)]
+        );
+        let b_first = path(same, same, Tie::B).unwrap();
+        assert_eq!(
+            ends_of_a(&b_first, 3).unwrap(),
+            vec![(2, 2), (2, 2), (3, 3)]
+        );
+        // A stronger layer still runs through, whichever wall is first.
+        let b_first = path(&[4, 1, 4], &[4, 3, 4], Tie::B).unwrap();
+        assert_eq!(ends_of_a(&b_first, 3).unwrap()[1], (0, 0));
+        // Swapping the walls and the tie mirrors the path.
+        for tie in [Tie::Mitre, Tie::A, Tie::B] {
+            let one = path(&[4, 1, 3], &[4, 1, 4], tie).unwrap();
+            let other: Vec<_> = path(&[4, 1, 4], &[4, 1, 3], tie.swapped())
+                .unwrap()
+                .into_iter()
+                .map(|(i, j, s)| {
+                    let s = match s {
+                        Step::Down => Step::Left,
+                        Step::Left => Step::Down,
+                        Step::Mitre => Step::Mitre,
+                    };
+                    (j, i, s)
+                })
+                .collect();
+            assert_eq!(one, other, "{tie:?}");
+        }
     }
 
     /// The same layers both ways mitre each pair.
