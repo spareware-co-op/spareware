@@ -15,7 +15,7 @@ mod fixtures;
 
 use construct_grids::{Grid, PlaneShape, Point as GridPoint, ReferencePlane, Shape};
 use construct_modify::exact::LIMIT;
-use construct_modify::kinds::{follower, moved};
+use construct_modify::kinds::{align_axis, follower, moved};
 use construct_modify::{ModifyError, Motion, Turn};
 use construct_params::{Angle, Value};
 use fixtures::*;
@@ -326,6 +326,21 @@ fn a_record_of_no_shape_is_not_moved() {
         refused.to_string(),
         "T-1 is a type, which the modify tools do not move: change it with its own commands."
     );
+}
+
+/// A wall turned by an angle that is not a quarter turn can still land on an axis (30 degrees, then
+/// 60 more): what it hosts names the axis it then runs along, and one whose wall is still at an
+/// angle is left as it is.
+#[test]
+fn what_a_wall_hosts_names_the_axis_it_lands_on() {
+    let d = door("D-1", "W-1", 500);
+    let along_y = align_axis(&d, Some([0, 1])).unwrap().unwrap();
+    assert_eq!(along_y.recipe.args["axis"], "y");
+    assert_eq!(align_axis(&along_y, Some([0, -1])).unwrap(), None);
+    let back = align_axis(&along_y, Some([1, 0])).unwrap().unwrap();
+    assert!(!back.recipe.args.contains_key("axis"));
+    assert_eq!(align_axis(&d, Some([1, 0])).unwrap(), None);
+    assert_eq!(align_axis(&d, None).unwrap(), None);
 }
 
 /// What a wall's turn changes in what it hosts: a box door and a wall opening name their wall's

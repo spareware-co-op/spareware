@@ -140,7 +140,14 @@ fn under(
         Role::Own | Role::Follows(Hosting::InPlan { .. }) | Role::Alone(Hosting::InPlan { .. }) => {
             kinds::moved(piece, motion, sense).map(Some)
         }
-        Role::Follows(_) => kinds::follower(piece, motion, sense),
+        Role::Follows(hosting) => {
+            let first = kinds::follower(piece, motion, sense)?;
+            // Wherever the host lands, what it hosts names the axis it then runs along.
+            let host = kinds::moved(record(document, hosting.host())?, motion, sense)?;
+            let direction = kinds::host_direction(&host)?;
+            let basis = first.as_ref().unwrap_or(piece);
+            Ok(kinds::align_axis(basis, direction)?.or(first))
+        }
         Role::Alone(hosting) => {
             let host = record(document, hosting.host())?;
             let Hosting::OnFace { along, .. } = hosting else {

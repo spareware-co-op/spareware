@@ -593,6 +593,55 @@ pub fn follower(
     Ok(changed.then_some(out))
 }
 
+/// A box door or a wall opening whose host, once it has moved, runs along x or y names that axis,
+/// whatever the motion was: a wall turned by 30 degrees and then by 60 more runs along y again, and
+/// what it hosts must say so (a quarter turn is handled by [`follower`]; this is every other way to
+/// land on an axis). A host at an angle leaves the record as it is: what is seated at an angle
+/// runs along its wall whatever axis it names. `host_after` is [`host_direction`] of the moved host.
+/// `None` when nothing changes.
+///
+/// # Errors
+/// A wall opening whose recipe does not read, in words.
+pub fn align_axis(
+    record: &Element,
+    host_after: Option<Steps>,
+) -> Result<Option<Element>, ModifyError> {
+    let Some(direction) = host_after else {
+        return Ok(None);
+    };
+    let along_y = direction[1] != 0;
+    let recipe = &record.recipe;
+    if construct_openings::is_wall_opening(recipe) {
+        let key = record.id.as_str();
+        let opening =
+            construct_openings::WallOpening::of(key, recipe).map_err(|e| refused(record)(&e))?;
+        if opening.along_y == along_y {
+            return Ok(None);
+        }
+        let named = construct_openings::named(key, recipe);
+        let turned =
+            construct_openings::WallOpening::new(&named, opening.width, opening.height, along_y)
+                .map_err(|e| refused(record)(&e))?;
+        let mut out = record.clone();
+        out.recipe = turned.recipe();
+        return Ok(Some(out));
+    }
+    if recipe.owner == OWN && recipe.op == "door.single" {
+        let named_y = recipe.args.get(AXIS).and_then(Json::as_str) == Some("y");
+        if named_y == along_y {
+            return Ok(None);
+        }
+        let mut out = record.clone();
+        if along_y {
+            out.recipe.args.insert(AXIS.to_owned(), Json::from("y"));
+        } else {
+            out.recipe.args.remove(AXIS);
+        }
+        return Ok(Some(out));
+    }
+    Ok(None)
+}
+
 /// The direction a host runs from its start, as a unit step along the plan's x or y axis: a
 /// layered wall's from its line, an older box wall's from its axis. `None` for a layered wall at an
 /// angle.

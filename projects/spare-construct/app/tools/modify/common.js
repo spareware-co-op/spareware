@@ -178,11 +178,26 @@ CHG.stackmodify = (control) => {
   // What the choice changes in the panel (a mode of the array, the way an axis is given) is drawn.
   if (control.tagName === 'SELECT') refreshSide();
 };
+/** What is typed in the panel, read now: a press in the plan comes before the field's own change event. */
+function syncFields() {
+  for (const control of document.querySelectorAll('#pv-side [data-modify-field]')) {
+    V[control.dataset.modifyField] = control.type === 'checkbox' ? control.checked : control.value;
+  }
+}
+document.addEventListener(
+  'pointerdown',
+  () => {
+    if (isTool()) syncFields();
+  },
+  true,
+);
 ACT.stackmodifyapply = () => APPLY[S.tool]?.();
 document.addEventListener('keydown', (event) => {
   const field = event.target?.closest?.('input[data-modify-field]');
   if (event.key !== 'Enter' || !field || field.type === 'checkbox') return;
   V[field.dataset.modifyField] = field.value;
+  // The panel is not drawn again while a field has the focus, so the server's answer would not show.
+  field.blur();
   APPLY[S.tool]?.();
 });
 

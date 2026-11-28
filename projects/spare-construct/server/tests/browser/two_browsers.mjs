@@ -4295,6 +4295,15 @@ async function mdUntil(read, ok, label) {
     if (ok(found)) return found;
     await ben.waitForTimeout(100);
   }
+  const walls = await ben.evaluate(() => {
+    const steps = (text) => Number(String(text).split(':').pop()) / 6400;
+    return [...window.spare.elements.values()]
+      .filter((p) => p.el.recipe.op === 'wall.layered' && p.fill?.recipe?.args?.start && p.el.placement.x + steps(p.fill.recipe.args.start[0]) > 11000)
+      .map((p) => `${p.el.id}: ${[...p.fill.recipe.args.start, ...p.fill.recipe.args.end].map((v) => steps(v) + p.el.placement.x * 0).join(', ')}`);
+  });
+  console.log(`      walls at the right of the plan: ${walls.join(' | ')}`);
+  const said = await anna.evaluate(() => ({ tool: S.tool, toast: document.getElementById('toast-m')?.textContent, problem: document.querySelector('#pv-side [data-problem]')?.textContent, pend: S.pend, side: document.querySelector('#pv-side')?.textContent.slice(0, 300) }));
+  console.log(`      Anna's page: ${JSON.stringify(said)}`);
   throw new Error(`FAILED: ${label}`);
 }
 await cwHome(anna);
@@ -4381,7 +4390,7 @@ const mdBodiesMatch = async (ids, label) => {
   pass(`${ids.length} bodies are the server's in both browsers ${label}`);
 };
 // Picks an element by a point along a wall (or the middle of anything else), and waits for it to be chosen.
-const mdPick = async (page, id, along = 0.7) => {
+const mdPick = async (page, id, along = 0.85) => {
   await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
   let at;
   if (along === null) {
@@ -4417,7 +4426,7 @@ const mdThere = (id) => window.spare.elements.has(id);
 await mdLineIs(mdWall, [12600, 2000, 14400, 2000], 'the wall');
 await anna.click('#ribbon [data-act="dtool"][data-a="architecture:door"]');
 await anna.waitForFunction(() => S.tool === 'door');
-await mdClick(anna, 13050, 2000);
+await mdClick(anna, 13400, 2000);
 let mdDoor;
 try {
   mdDoor = await mdDoorOn(ben, mdWall);
@@ -4510,7 +4519,13 @@ await mdPick(anna, mdCopyDoor, null);
 await mdTool(anna, 'rotate');
 await mdClick(anna, 12000, 5600);
 await mdTyped(anna, 'rotation', '20');
-await anna.waitForSelector('#pv-side [data-problem="modify"]');
+try {
+  await anna.waitForSelector('#pv-side [data-problem="modify"]');
+} catch (error) {
+  const said = await anna.evaluate(() => ({ tool: S.tool, sel: S.sel, pend: S.pend, toast: document.getElementById('toast-m')?.textContent, side: document.querySelector('#pv-side')?.textContent.slice(0, 400) }));
+  console.log(`      Anna's page after turning the door: ${JSON.stringify(said)}`);
+  throw error;
+}
 const mdRefusal = await anna.locator('#pv-side [data-problem="modify"]').textContent();
 check(mdRefusal.length > 10 && /host|wall/i.test(mdRefusal), `a door turned alone is refused in words: "${mdRefusal}"`);
 check(await anna.evaluate(() => S.tool === 'rotate'), 'the tool stays, with the reason, after a refusal');
@@ -4527,7 +4542,7 @@ const mdMirroredLine = [...mdReflect([mdCopyLine[0], mdCopyLine[1]]), ...mdRefle
 await mdPick(anna, mdCopy, 0.9);
 await mdTool(anna, 'mirror');
 await anna.waitForSelector(mdField('axis'));
-await mdClick(anna, mdTurned[0] + (mdTurned[2] - mdTurned[0]) * 0.7, mdTurned[1] + (mdTurned[3] - mdTurned[1]) * 0.7);
+await mdClick(anna, mdTurned[0] + (mdTurned[2] - mdTurned[0]) * 0.85, mdTurned[1] + (mdTurned[3] - mdTurned[1]) * 0.85);
 const mdKnownCopy = [...mdKnownTurn, mdCopy, mdCopyDoor];
 const mdMirror = await mdWallAt(ben, mdKnownCopy, mdMirroredLine);
 const mdMirrorDoor = await mdDoorOn(ben, mdMirror);
@@ -4550,7 +4565,7 @@ check((await ben.evaluate(() => window.spare.elements.size)) === mdCount, 'a mir
 await mdBodiesMatch([mdMirror, mdMirrorDoor], 'after the mirror in place');
 
 // Move, by a typed distance and angle: 500 mm straight up the plan.
-await mdPick(anna, mdMirror, 0.5);
+await mdPick(anna, mdMirror, 0.92);
 await mdTool(anna, 'move');
 await anna.locator(mdField('distance')).fill('500 mm');
 await anna.locator(mdField('angle')).fill('90');
@@ -4560,7 +4575,7 @@ await mdLineIs(mdMirror, mdMovedLine, 'the wall moved by a typed distance and an
 await mdBodiesMatch([mdMirror, mdMirrorDoor], 'after the move');
 
 // Array in a row, 600 mm apart, picked with two clicks: two more walls, each with its door.
-await mdPick(anna, mdMirror, 0.5);
+await mdPick(anna, mdMirror, 0.92);
 await mdTool(anna, 'array');
 await anna.locator(mdField('mode')).selectOption('linear');
 await anna.locator(mdField('count')).fill('3');
