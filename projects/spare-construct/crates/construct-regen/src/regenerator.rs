@@ -11,6 +11,10 @@
 //!
 //! Note A05's checkpoints start here: each pass returns the bodies it built, and the server appends
 //! them to the log in a checkpoint entry, which every browser compares with what it built itself.
+//! A pass also says where it began and whether another pass regenerated part of the log under it
+//! (a read that caught up for itself, another server): a body is what the log builds only at the
+//! point its own pass reached, and [`Regenerator::catch_up_alone`] keeps a pass to one unbroken
+//! stretch of the log, so a checkpoint can name each body with a point it holds at.
 //!
 //! Types, a document's parameter table and its levels have no shape: they are listed by kind and
 //! never built. A recipe that names a parameter is filled first ([`crate::parameters::filled`]),
@@ -119,8 +123,15 @@ pub fn cells_between(x0: i64, y0: i64, x1: i64, y1: i64) -> Vec<(i64, i64)> {
 /// What one pass did: the body each element built to, by document, and how far it got.
 #[derive(Debug, Default, PartialEq)]
 pub struct Pass {
+    /// Where regeneration stood when the pass first looked: the log number it found regenerated
+    /// through. `None` until it has looked.
+    pub from: Option<u64>,
     /// The log number it regenerated through.
     pub through: u64,
+    /// Whether another pass moved regeneration on between two of this one's steps (a read that
+    /// caught up for itself, another server, a rebuild's clear): it found the log regenerated
+    /// somewhere other than where its last step left it.
+    pub overtaken: bool,
     /// The body content ID each element built to, by document and then by element.
     pub bodies: BTreeMap<Id, BTreeMap<Id, Id>>,
 }
@@ -151,7 +162,28 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     pub async fn catch_up(&self, project: &Id) -> Result<Pass, StoreError> {
         let mut pass = Pass::default();
         loop {
-            let done = self.step(project, &mut pass).await?;
+            let done = self.step(project, &mut pass, false).await?;
+            if done {
+                return Ok(pass);
+            }
+        }
+    }
+
+    /// Brings a project's shapes on towards the end of its log, as [`Regenerator::catch_up`]
+    /// does, but stops where another pass has moved regeneration on under it
+    /// ([`Pass::overtaken`]; then the caller asks again). So every body it hands back was built
+    /// by this pass over one unbroken stretch of the log, from [`Pass::from`] to
+    /// [`Pass::through`], and is what the log builds at `through`: what a checkpoint may name
+    /// with that point (the server's `shapes`). A pass that ran on across another's work holds
+    /// bodies built before that work, which may have built the same elements again.
+    ///
+    /// # Errors
+    ///
+    /// As [`Regenerator::catch_up`].
+    pub async fn catch_up_alone(&self, project: &Id) -> Result<Pass, StoreError> {
+        let mut pass = Pass::default();
+        loop {
+            let done = self.step(project, &mut pass, true).await?;
             if done {
                 return Ok(pass);
             }
@@ -382,10 +414,15 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     /// older than one another writer (a server, or a rebuild's clear) committed in between, and
     /// this would write it back without a conflict: entries applied twice, or a cursor over rows
     /// that had just been cleared.
-    async fn step(&self, project: &Id, pass: &mut Pass) -> Result<bool, StoreError> {
+    ///
+    /// `alone`: stop, doing nothing, where another pass has moved regeneration on since this
+    /// pass's last step ([`Regenerator::catch_up_alone`]).
+    async fn step(&self, project: &Id, pass: &mut Pass, alone: bool) -> Result<bool, StoreError> {
         let mut txn = self.kv.begin().await?;
         let mut built = Vec::new();
-        let moved = self.step_in(&mut txn, project, pass, &mut built).await;
+        let moved = self
+            .step_in(&mut txn, project, pass, &mut built, alone)
+            .await;
         let (to, head) = match moved {
             Ok(Some(moved)) => moved,
             Ok(None) => {
@@ -416,13 +453,15 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 
     /// Reads where regeneration stands and regenerates the next batch in `txn`, moving the cursor
-    /// on: how far it moved it, and the head it read. Nothing when the log is all regenerated.
+    /// on: how far it moved it, and the head it read. Nothing when the log is all regenerated, or
+    /// when `alone` and another pass has moved the cursor since this pass's last step.
     async fn step_in(
         &self,
         txn: &mut K::Txn,
         project: &Id,
         pass: &mut Pass,
         built: &mut Vec<(Id, Id, Option<Id>)>,
+        alone: bool,
     ) -> Result<Option<(u64, u64)>, StoreError> {
         let scope = Scope::Project(project.clone());
         let cursor = Place::Regenerated {
@@ -430,6 +469,15 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         }
         .key();
         let through: u64 = read_row(txn, &cursor).await?.unwrap_or(0);
+        // The cursor is where this pass's last step left it (its commit, or the cursor it read
+        // before a conflict) unless another pass committed in between.
+        if pass.from.is_some() && through != pass.through {
+            pass.overtaken = true;
+            if alone {
+                return Ok(None);
+            }
+        }
+        pass.from.get_or_insert(through);
         pass.through = through;
         let head: u64 = read_row(txn, &scope.head()).await?.unwrap_or(0);
         if through >= head {
