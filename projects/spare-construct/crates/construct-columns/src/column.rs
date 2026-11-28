@@ -337,10 +337,11 @@ pub fn column_of(record: &Element) -> Result<Column, ColumnError> {
     Ok(column)
 }
 
-/// Whether a record is a column.
+/// Whether a record is a column: of the kind and with a column's recipe. (A plain box standing
+/// for a column, as a sample model holds, has the kind and not the recipe: it is not one.)
 #[must_use]
 pub fn is_column(record: &Element) -> bool {
-    record.kind == COLUMN_KIND
+    record.kind == COLUMN_KIND && is_column_recipe(&record.recipe)
 }
 
 /// A new column's element record: of type `column_type`, its base tied by `base`, with `column`.

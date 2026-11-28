@@ -1017,7 +1017,6 @@ fn use_instead(what: &str, command: &str) -> String {
 struct GenericArgs {
     #[serde(default, with = "kit_ops::id::option")]
     element: Option<Id>,
-    kind: Option<String>,
     recipe: Option<construct_model::geometry::Recipe>,
     #[serde(default, rename = "type", with = "kit_ops::id::option")]
     type_id: Option<Id>,
@@ -1049,11 +1048,7 @@ pub async fn generic_rules<T: Txn>(
         .as_ref()
         .is_some_and(construct_columns::is_column_recipe);
     Ok(match edit.cmd.as_str() {
-        "element.create"
-            if a_column_recipe || args.kind.as_deref() == Some(construct_columns::COLUMN_KIND) =>
-        {
-            Err(use_instead("A column is made", "column.place"))
-        }
+        "element.create" if a_column_recipe => Err(use_instead("A column is made", "column.place")),
         "element.set" | "element.move" | "element.delete"
             if edit.cmd != "element.set" || args.recipe.is_some() =>
         {

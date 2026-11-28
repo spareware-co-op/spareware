@@ -29,7 +29,7 @@ import { READ_ONLY, readOnlyTable } from './floor.js';
 // cut where the view's cut plane crosses it (filled), a thin outline where it ends below the
 // plane, dashed where it starts above it. In 3D it is the shape the browser built, as any shape.
 
-const isColumn = (record) => record?.kind === 'column';
+const isColumn = (record) => record?.kind === 'column' && record?.recipe?.op === 'column';
 const MODES = [
   ['point', 'At a point'],
   ['pick', 'At grid intersections: pick grid lines'],
