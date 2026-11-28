@@ -142,6 +142,14 @@ impl Tool for RoofTool {
     const NAME: &'static str = "roof";
     const COMMANDS: &'static [&'static str] = &COMMANDS;
     const GUARDS: &'static [&'static str] = &[ElementTool::NAME, ParamTool::NAME];
+    const FIELDS: &'static [construct_schedules::Quantity] = &[
+        construct_schedules::ROOF_AREA,
+        construct_schedules::ROOF_SLOPE_AREA,
+        construct_schedules::ROOF_THICKNESS,
+        construct_schedules::ROOF_VOLUME,
+        construct_schedules::ROOF_MASS,
+        construct_schedules::ROOF_RIDGE_HEIGHT,
+    ];
 
     async fn apply<T: Txn>(
         txn: &mut T,
