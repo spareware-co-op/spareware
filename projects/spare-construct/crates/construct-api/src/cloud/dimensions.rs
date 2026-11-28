@@ -1,54 +1,78 @@
-//! The commands that make and change a document's linear dimensions (CON-A9-F1-P1), and the read-
-//! only listing of a view's dimensions with their values worked out. They go through the same edit
-//! log as `element.*`, with the same access check (`model.edit`) and the same claims: a piece
-//! another person is working on is refused, and one person's edits land in log order.
+//! The commands that make and change a document's dimensions (CON-A9-F1-P1: linear, ordinate,
+//! angular, radial, diameter and arc length), its dimension styles, and the read-only listing of a
+//! view's dimensions with their values worked out. They go through the same edit log as
+//! `element.*`, with the same access check (`model.edit`) and the same claims: a piece another
+//! person is working on is refused, and one person's edits land in log order. Each command is one
+//! entry, so one undo takes back all it wrote.
 //!
 //! A dimension is an element record of the dimensions category with no shape
-//! ([`construct_dimensions`]): its view, how it lies, and the references it is bound to. Its value
-//! is never stored: [`listing`] works it out from where each reference is, at the log's head, every
-//! time it is asked ([`locate`] reads the document's records, as the regenerator does: a layered
-//! wall's filled recipe, a grid's recipe, a hosted element's place on its wall). A reference that
-//! was deleted, or has no place in the view, is reported by name as a warning in the shape
-//! construct-warnings uses, and the segments it ends have no value.
+//! ([`construct_dimensions`]): its view, how it lies, the references it is bound to, its style and
+//! its overrides. Its value is never stored: [`listing`] works it out from where each reference is,
+//! at the log's head, every time it is asked ([`locate`] reads the document's records, as the
+//! regenerator does: a layered wall's filled recipe, a grid's recipe (a line or an arc), a hosted
+//! element's place on its wall). A reference that was deleted, has no place in the view or is not
+//! the shape its dimension needs is reported by name as a warning in the shape construct-warnings
+//! uses, and what depends on it has no value.
 //!
 //! | Command | Arguments | What it writes |
 //! | --- | --- | --- |
-//! | `dimension.create` | `dimension` (the new ID), `view`, `layout`, `references` (two or more) | A dimension record |
-//! | `dimension.reference.add` | `dimension`, `reference`; optional `at` (the position, from 0; default last) | The dimension, with one more reference |
+//! | `dimension.create` | `dimension` (the new ID), `view`, `layout`, `references`; optional `ordinate` (yes: values read from the first reference), `style` | A dimension record |
+//! | `dimension.reference.add` | `dimension`, `reference`; optional `at` (the position, from 0; default last) | The dimension, with one more reference (a string only) |
 //! | `dimension.reference.remove` | `dimension`, `at` | The dimension, one reference fewer (it keeps two) |
-//! | `dimension.move` | `dimension`, and `line` (a horizontal or vertical one) or `through` (an aligned one) | The dimension, its offset line moved |
-//! | `dimension.equal` | `dimension`, `groups`: lists of segment numbers from 0 to be equal (none clears) | The dimension, its equalities stored; nothing enforces them yet |
+//! | `dimension.move` | `dimension`, and `line` (a horizontal or vertical one), `through` (an aligned one) or `place` (an angular, radial, diameter or arc length one) | The dimension, its line or arc moved |
+//! | `dimension.equal` | `dimension`, `groups`: lists of segment numbers from 0 to be equal (none clears) | The dimension, its equalities stored as data and reported; nothing moves |
+//! | `dimension.equalize` | `dimension`, `groups` (as `dimension.equal`) | The references' elements moved so the segments of each group are equal, and the equalities stored: one step ([`equalize`]) |
+//! | `dimension.style` | `dimension`, `style` (an ID; null: the first built-in style) | The dimension, in that style |
+//! | `dimension.override` | `dimension`, and any of `text`, `prefix`, `suffix` (each left out or null: none) | The dimension's overrides of its shown text, all three as given; the true value is still worked out and listed |
 //! | `dimension.delete` | `dimension` | Its pointer goes |
+//! | `dimension.style.create` | `style` (the new ID), `name`, optional `from` (a style to start from; default the first built-in), and any of the look's fields | A style record of the document's own ([`styles`]) |
+//! | `dimension.style.change` | `style`, and any of `name` and the look's fields | The style |
+//! | `dimension.style.delete` | `style` | Its pointer goes; refused while a dimension is in it |
 //!
 //! The values: `layout` is `{"kind": "horizontal", "y": <typed length>}`, `{"kind": "vertical",
-//! "x": ...}` or `{"kind": "aligned", "through": {"x": ..., "y": ...}, "direction": {"x": ...,
-//! "y": ...}}`; a `reference` is `{"element": <ID>, "feature": <key>}` with the feature one of
-//! `wall.face.exterior`, `wall.face.interior`, `wall.line`, `grid.line`, `level`, `centre`,
-//! `edge.start`, `edge.end` ([`construct_dimensions::Feature`]). Typed lengths are read with
-//! construct-params' metric display settings (`5000`, `1.2 m`).
+//! "x": ...}`, `{"kind": "aligned", "through": {"x": ..., "y": ...}, "direction": {"x": ...,
+//! "y": ...}}`, or one of `angular`, `radial`, `diameter` and `arc_length` with a `place`
+//! (`{"x", "y"}`: where the person put it; the stored layout is worked out from it and the
+//! references as they are now, [`construct_dimensions::placed`]) or with its own fields
+//! (`first` and `second`, each `forward` or `backward`, and `radius`; `toward` `{"x", "y"}`;
+//! `offset`). An angular dimension has two references, each a straight line; a radial, diameter
+//! or arc length one has one, a curve (a curved grid line today). A `reference` is `{"element":
+//! <ID>, "feature": <key>}` with the feature one of `wall.face.exterior`, `wall.face.interior`,
+//! `wall.line`, `grid.line`, `level`, `centre`, `edge.start`, `edge.end`
+//! ([`construct_dimensions::Feature`]). Typed lengths are read with construct-params' metric
+//! display settings (`5000`, `1.2 m`).
 //!
 //! Refused by name: a view that is not there, or is not a plan (a section's or elevation's frame is
-//! job 8.1's: interim); an ID that is taken; fewer than two references; two neighbours the same; a
-//! reference that cannot be found or read now (a deleted element, a level in a plan, a curved
-//! grid, a face that runs along the offset line) with the reason; changing the references of a
-//! dimension that holds equalities; deleting a view that holds dimensions
-//! ([`held_refusal`]). An undo that would leave a dimension in a view that is not there is turned
-//! back ([`undo_rules`]).
+//! job 8.1's: interim); an ID that is taken; the wrong number of references for the kind; two
+//! neighbours the same; a reference that cannot be found or read now (a deleted element, a level
+//! in a plan, a curved grid for a line, a straight one for a radius, a face that runs along the
+//! offset line) with the reason; a style that is not there; changing the references of a
+//! dimension that holds equalities; deleting a view that holds dimensions ([`held_refusal`]); and
+//! for `dimension.equalize`, a reference whose element cannot move so, naming it (another
+//! person's claim on it, a box wall that moves by whole millimetres only, an opening whose wall
+//! runs across the dimension, an element that would not fit its host). An undo that would leave a
+//! dimension in a view that is not there, or in a style that is not there, is turned back
+//! ([`undo_rules`]).
 //!
 //! The generic commands do not go behind these ([`generic_rules`]): `element.create` of a
-//! dimension and `element.set`, `element.move` or `element.delete` of one are refused, naming the
-//! command to use. Deleting an element a dimension names is not refused: the dimension says so.
+//! dimension or a style and `element.set`, `element.move` or `element.delete` of one are refused,
+//! naming the command to use. Deleting an element a dimension names is not refused: the dimension
+//! says so.
 //!
 //! Interim: the places of a reference ([`locate`]) are read from the records for plans. The one
 //! function that learns sections and elevations (job 8.1) is [`locate`]; nothing else changes. A
 //! door's or window's centre falls on a half step when its opening is an odd number of steps wide;
 //! it is then the nearer step above (a bound of half a step, 78 nm).
 
+mod equalize;
+pub mod styles;
+
 use crate::cloud::elements::write_record;
 use construct_categories::DIMENSIONS;
 use construct_dimensions::{
-    DIMENSION_KIND, Dimension, DimensionError, Dimensions, Direction, Edge, Feature, Layout,
-    Located, Locus, Measured, Missing, PlainText, Reference, Side, display, labels, measure,
+    Curve, DIMENSION_KIND, Dimension, DimensionError, Dimensions, Direction, Edge, Feature, Figure,
+    Kind as DimensionKind, Layout, Located, Locus, Look, Measured, Missing, Overrides, Placing,
+    PlainText, Ray, Reference, STYLE_KIND, Side, Styles, Sweep, display, labels, measure, placed,
 };
 use construct_grids::{Datum, Point, Shape, datum_of_recipe};
 use construct_model::element::Element;
@@ -69,13 +93,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Every command here.
-pub const COMMANDS: [&str; 6] = [
+pub const COMMANDS: [&str; 12] = [
     "dimension.create",
     "dimension.reference.add",
     "dimension.reference.remove",
     "dimension.move",
     "dimension.equal",
+    "dimension.equalize",
+    "dimension.style",
+    "dimension.override",
     "dimension.delete",
+    "dimension.style.create",
+    "dimension.style.change",
+    "dimension.style.delete",
 ];
 
 /// The answer to a command that would make or change a dimension as an element.
@@ -102,7 +132,14 @@ struct Args {
     at: Option<usize>,
     line: Option<String>,
     through: Option<PointArgs>,
+    place: Option<PointArgs>,
     groups: Option<Vec<Vec<usize>>>,
+    ordinate: Option<bool>,
+    #[serde(default, with = "kit_ops::id::option")]
+    style: Option<Id>,
+    text: Option<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
 }
 
 /// A layout as a person sends it.
@@ -114,6 +151,18 @@ struct LayoutArgs {
     x: Option<String>,
     through: Option<PointArgs>,
     direction: Option<PointArgs>,
+    place: Option<PointArgs>,
+    first: Option<String>,
+    second: Option<String>,
+    radius: Option<String>,
+    toward: Option<PointArgs>,
+    offset: Option<String>,
+}
+
+/// A layout asked for: given in full, or to be worked out from where a person put it.
+enum Asked {
+    Given(Layout),
+    Placed(Placing, Point),
 }
 
 /// A point or a vector as a person sends it.
@@ -158,6 +207,100 @@ fn words(error: &DimensionError) -> String {
     error.to_string()
 }
 
+fn ray_of(text: Option<&str>, what: &str) -> Result<Ray, String> {
+    let text = need(text, what)?;
+    Ray::from_key(text)
+        .ok_or_else(|| format!("{text:?} is not a way along a line: forward or backward."))
+}
+
+/// A layout of an angle, a radius, a diameter or an arc length.
+fn placed_layout_of(args: &LayoutArgs, placing: Placing) -> Result<Asked, String> {
+    let others =
+        args.y.is_some() || args.x.is_some() || args.through.is_some() || args.direction.is_some();
+    let own = match placing {
+        Placing::Angular => args.first.is_some() || args.second.is_some() || args.radius.is_some(),
+        Placing::Radial | Placing::Diameter => args.toward.is_some(),
+        Placing::ArcLength => args.offset.is_some(),
+    };
+    let foreign = match placing {
+        Placing::Angular => args.toward.is_some() || args.offset.is_some(),
+        Placing::Radial | Placing::Diameter => {
+            args.first.is_some()
+                || args.second.is_some()
+                || args.radius.is_some()
+                || args.offset.is_some()
+        }
+        Placing::ArcLength => {
+            args.first.is_some()
+                || args.second.is_some()
+                || args.radius.is_some()
+                || args.toward.is_some()
+        }
+    };
+    let fields = match placing {
+        Placing::Angular => "first, second and radius",
+        Placing::Radial | Placing::Diameter => "toward",
+        Placing::ArcLength => "offset",
+    };
+    if others || foreign || (own == args.place.is_some()) {
+        let article = if matches!(placing, Placing::Angular | Placing::ArcLength) {
+            "An"
+        } else {
+            "A"
+        };
+        return Err(format!(
+            "{article} {} layout takes a place, or {fields}.",
+            args.kind
+        ));
+    }
+    if let Some(place) = &args.place {
+        return Ok(Asked::Placed(placing, point_of(place)?));
+    }
+    let made = match placing {
+        Placing::Angular => Layout::angular(
+            ray_of(args.first.as_deref(), "first (forward or backward)")?,
+            ray_of(args.second.as_deref(), "second (forward or backward)")?,
+            length(&need(args.radius.clone(), "a radius")?)?,
+        ),
+        Placing::Radial | Placing::Diameter => {
+            let toward = need(args.toward.as_ref(), "toward")?;
+            Direction::new(length(&toward.x)?, length(&toward.y)?).map(|toward| {
+                if placing == Placing::Radial {
+                    Layout::radial(toward)
+                } else {
+                    Layout::diameter(toward)
+                }
+            })
+        }
+        Placing::ArcLength => Layout::arc_length(length(&need(args.offset.clone(), "an offset")?)?),
+    };
+    made.map(Asked::Given).map_err(|e| words(&e))
+}
+
+fn asked_of(args: &LayoutArgs) -> Result<Asked, String> {
+    if let Some(placing) = Placing::from_key(&args.kind) {
+        return placed_layout_of(args, placing);
+    }
+    let own = args.place.is_some()
+        || args.first.is_some()
+        || args.second.is_some()
+        || args.radius.is_some()
+        || args.toward.is_some()
+        || args.offset.is_some();
+    if own && matches!(args.kind.as_str(), "horizontal" | "vertical" | "aligned") {
+        return Err(format!(
+            "A {} layout takes {}.",
+            args.kind,
+            match args.kind.as_str() {
+                "horizontal" => "only y",
+                "vertical" => "only x",
+                _ => "a through point and a direction",
+            }
+        ));
+    }
+    layout_of(args).map(Asked::Given)
+}
+
 fn layout_of(args: &LayoutArgs) -> Result<Layout, String> {
     let has = (
         args.y.is_some(),
@@ -193,7 +336,8 @@ fn layout_of(args: &LayoutArgs) -> Result<Layout, String> {
             Layout::aligned(through, direction).map_err(|e| words(&e))
         }
         other => Err(format!(
-            "{other:?} is not a layout: horizontal, vertical or aligned."
+            "{other:?} is not a layout: horizontal, vertical or aligned. The others are angular, \
+             radial, diameter and arc_length."
         )),
     }
 }
@@ -549,9 +693,18 @@ pub async fn locate<R: Reader>(
                     _ => Err(too_far()),
                 }
             }
-            Some(Ok(Datum::Grid(Shape::Arc { .. }))) => Err(Missing::no_such_part(
-                "a curved grid has no straight line to measure to",
-            )),
+            // A curved grid is its arc: a radius, a diameter or an arc length reads it, and a
+            // line dimension says it has no straight line to measure to.
+            Some(Ok(Datum::Grid(Shape::Arc {
+                centre,
+                radius,
+                from,
+                to,
+            }))) => Ok(Locus::Arc(Curve {
+                centre,
+                radius,
+                sweep: Sweep::Between { from, to },
+            })),
             Some(Ok(Datum::Plane(_))) | None => Err(Missing::no_such_part("it is not a grid line")),
             Some(Err(e)) => Err(Missing::unreadable(&e.to_string())),
         }),
@@ -582,9 +735,11 @@ async fn located<R: Reader>(
 // ---------------------------------------------------------------------------------------------
 // The document's dimensions, and what a page reads.
 
-/// A document as the dimension commands read it: its dimensions and views, and each record's hash.
+/// A document as the dimension commands read it: its dimensions, styles and views, and each
+/// record's hash.
 pub struct World {
     dimensions: Dimensions,
+    styles: Styles,
     views: construct_views::Views,
     all: BTreeMap<Id, (Id, Element)>,
 }
@@ -594,6 +749,12 @@ impl World {
     #[must_use]
     pub fn dimensions(&self) -> &Dimensions {
         &self.dimensions
+    }
+
+    /// The document's dimension styles, with the built-in ones.
+    #[must_use]
+    pub fn styles(&self) -> &Styles {
+        &self.styles
     }
 
     /// The document's views.
@@ -627,8 +788,13 @@ pub async fn read_world<R: Reader>(
         Ok(views) => views,
         Err(e) => return Ok(Err(e.to_string())),
     };
+    let styles = match Styles::from_records(found.iter().copied()) {
+        Ok(styles) => styles,
+        Err(e) => return Ok(Err(e.to_string())),
+    };
     Ok(Ok(World {
         dimensions,
+        styles,
         views,
         all,
     }))
@@ -657,7 +823,7 @@ fn stored(length: Length) -> String {
 /// How a dimension lies, as a page reads it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct LayoutView {
-    /// `horizontal`, `vertical` or `aligned`.
+    /// `horizontal`, `vertical`, `aligned`, `angular`, `radial`, `diameter` or `arc_length`.
     pub kind: String,
     /// The y of a horizontal dimension's line.
     pub y: Option<String>,
@@ -667,6 +833,16 @@ pub struct LayoutView {
     pub through: Option<PointView>,
     /// An aligned dimension's direction.
     pub direction: Option<PointView>,
+    /// Which way along its first line an angle opens: `forward` or `backward`.
+    pub first: Option<String>,
+    /// Which way along its second line.
+    pub second: Option<String>,
+    /// An angle's arc radius.
+    pub radius: Option<String>,
+    /// The way a radius's or a diameter's line runs from the centre.
+    pub toward: Option<PointView>,
+    /// How far an arc length's arc is outside the arc it measures.
+    pub offset: Option<String>,
 }
 
 fn layout_view(layout: &Layout) -> LayoutView {
@@ -676,17 +852,36 @@ fn layout_view(layout: &Layout) -> LayoutView {
         x: None,
         through: None,
         direction: None,
+        first: None,
+        second: None,
+        radius: None,
+        toward: None,
+        offset: None,
+    };
+    let vector = |d: Direction| PointView {
+        x: stored(d.dx()),
+        y: stored(d.dy()),
     };
     match *layout {
         Layout::Horizontal { y } => view.y = Some(stored(y)),
         Layout::Vertical { x } => view.x = Some(stored(x)),
         Layout::Aligned { through, direction } => {
             view.through = Some(point_view(through));
-            view.direction = Some(PointView {
-                x: stored(direction.dx()),
-                y: stored(direction.dy()),
-            });
+            view.direction = Some(vector(direction));
         }
+        Layout::Angular {
+            first,
+            second,
+            radius,
+        } => {
+            view.first = Some(first.key().to_owned());
+            view.second = Some(second.key().to_owned());
+            view.radius = Some(stored(radius));
+        }
+        Layout::Radial { toward } | Layout::Diameter { toward } => {
+            view.toward = Some(vector(toward));
+        }
+        Layout::ArcLength { offset } => view.offset = Some(stored(offset)),
     }
     view
 }
@@ -704,17 +899,25 @@ pub struct ReferenceView {
     pub usable: bool,
 }
 
-/// One segment of a dimension as a page reads it.
+/// One segment of a dimension as a page reads it: one value (a segment of a string, an ordinate
+/// value, an angle, a radius, a diameter or an arc length).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct SegmentView {
     /// The reference it starts at, from 0.
     pub from: usize,
     /// The reference it ends at.
     pub to: usize,
-    /// Its value in stored length text, or `None` when it cannot be worked out.
+    /// Its value in stored length text, or `None` when it cannot be worked out or is an angle.
     pub value: Option<String>,
-    /// Its value as the person's units show it: `2400 mm`.
+    /// An angular dimension's value in stored angle text (`angle:<units>`), or `None`.
+    pub angle: Option<String>,
+    /// What is shown: the value as the style's units show it (`2400 mm`, `90.00°`), with the
+    /// dimension's overrides.
     pub text: Option<String>,
+    /// The true value as the style's units show it, overrides or not: what is shown when asked.
+    pub value_text: Option<String>,
+    /// Whether what is shown is not the true value alone (an override is on).
+    pub overridden: bool,
     /// Whether the value is the true one, to the step.
     pub exact: bool,
     /// Where its text is centred, on the offset line.
@@ -742,8 +945,118 @@ pub struct WitnessView {
 pub struct EqualView {
     /// The segments held equal, from 0.
     pub segments: Vec<usize>,
-    /// Whether they are equal now; `None` when one cannot be worked out. Nothing enforces it yet.
+    /// Whether their true values are the same now; `None` when one cannot be worked out.
     pub equal: Option<bool>,
+    /// Whether their values are within one grid step of each other (what `dimension.equalize`
+    /// makes); `None` when one cannot be worked out.
+    pub holds: Option<bool>,
+}
+
+/// What a dimension is drawn as, as a page reads it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FigureView {
+    /// `line` (an offset line through the witness lines' ends), `arc`, `leader` or `none`.
+    pub kind: String,
+    /// An arc's or a leader's centre.
+    pub centre: Option<PointView>,
+    /// An arc's radius, in stored length text.
+    pub radius: Option<String>,
+    /// Where an arc or a leader starts.
+    pub from: Option<PointView>,
+    /// Where it ends (a leader: on the curve).
+    pub to: Option<PointView>,
+    /// An arc's middle.
+    pub middle: Option<PointView>,
+    /// Whether an arc runs anticlockwise from `from` to `to`.
+    pub anticlockwise: Option<bool>,
+    /// Whether an arc sweeps more than half a turn.
+    pub large: Option<bool>,
+}
+
+fn figure_view(figure: &Figure) -> FigureView {
+    let none = |kind: &str| FigureView {
+        kind: kind.to_owned(),
+        centre: None,
+        radius: None,
+        from: None,
+        to: None,
+        middle: None,
+        anticlockwise: None,
+        large: None,
+    };
+    match *figure {
+        Figure::Line => none("line"),
+        Figure::Arc {
+            centre,
+            radius,
+            from,
+            to,
+            middle,
+            anticlockwise,
+            large,
+        } => FigureView {
+            kind: "arc".to_owned(),
+            centre: Some(point_view(centre)),
+            radius: Some(stored(radius)),
+            from: Some(point_view(from)),
+            to: Some(point_view(to)),
+            middle: Some(point_view(middle)),
+            anticlockwise: Some(anticlockwise),
+            large: Some(large),
+        },
+        Figure::Leader { centre, from, to } => FigureView {
+            centre: Some(point_view(centre)),
+            from: Some(point_view(from)),
+            to: Some(point_view(to)),
+            ..none("leader")
+        },
+        Figure::Nothing => none("none"),
+    }
+}
+
+/// How a dimension is drawn, by its style, as a page reads it. Sizes are as drawn in a view at
+/// 1:100 (the page scales them to the view's scale, as every text), in stored length text.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct LookView {
+    /// `tick`, `arrow` or `dot`.
+    pub marker: String,
+    /// `above` or `inline`.
+    pub text_place: String,
+    /// How far a witness line stops short of its reference.
+    pub gap: String,
+    /// How far a witness line runs past the dimension's line.
+    pub extension: String,
+    /// How high the text is.
+    pub height: String,
+    /// Whether a radius or a diameter marks its arc's centre.
+    pub centre_mark: bool,
+}
+
+/// A paper size as drawn in a view at 1:100.
+fn at_100(paper: Length) -> Length {
+    Length::from_steps(paper.steps().saturating_mul(100))
+}
+
+fn look_view(look: &Look) -> LookView {
+    LookView {
+        marker: look.marker.key().to_owned(),
+        text_place: look.text.key().to_owned(),
+        gap: stored(at_100(look.gap)),
+        extension: stored(at_100(look.extension)),
+        height: stored(at_100(look.height)),
+        centre_mark: look.centre_mark,
+    }
+}
+
+/// A dimension's overrides as a page reads them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct OverridesView {
+    /// The text shown in place of the value.
+    pub text: Option<String>,
+    /// The text before it.
+    pub prefix: Option<String>,
+    /// The text after it.
+    pub suffix: Option<String>,
 }
 
 /// A warning as a page reads it (the shape construct-warnings gives every warning).
@@ -776,6 +1089,16 @@ fn warning_view(warning: &construct_dimensions::Warning) -> WarningView {
 pub struct DimensionView {
     /// Its permanent ID.
     pub id: String,
+    /// What it measures: `linear`, `ordinate`, `angular`, `radial`, `diameter` or `arc_length`.
+    pub kind: String,
+    /// The ID of the style it is drawn in.
+    pub style: String,
+    /// How that style draws it.
+    pub look: LookView,
+    /// Its overrides of the shown text.
+    pub overrides: OverridesView,
+    /// What it is drawn as.
+    pub figure: FigureView,
     /// How it lies.
     pub layout: LayoutView,
     /// Its references, in order.
@@ -794,7 +1117,8 @@ pub struct DimensionView {
     pub warnings: Vec<WarningView>,
 }
 
-/// One view's dimensions with their values, as of the log's head.
+/// One view's dimensions with their values, as of the log's head, and the document's dimension
+/// styles.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct DimensionListing {
     /// The view.
@@ -803,24 +1127,35 @@ pub struct DimensionListing {
     pub view_name: String,
     /// Its dimensions, by ID.
     pub dimensions: Vec<DimensionView>,
+    /// The document's dimension styles: the built-in ones, then its own by ID.
+    pub styles: Vec<styles::StyleView>,
 }
 
 fn view_of_dimension(
     dimension: &Dimension,
     measured: &Measured,
-    units: &Units,
+    look: &Look,
+    project: &Units,
 ) -> Result<DimensionView, String> {
-    let shown = labels(measured, units, &PlainText::standard()).map_err(|e| e.to_string())?;
+    let units = look.units(project);
+    let text = PlainText::of_height(at_100(look.height));
+    let shown = labels(measured, &units, &text).map_err(|e| e.to_string())?;
+    let overrides = dimension.overrides();
+    let ordinate = dimension.kind() == DimensionKind::Ordinate;
     let segments = measured
         .segments
         .iter()
         .map(|segment| {
-            let label = shown.iter().find(|label| label.segment == segment.from);
+            let numbered = if ordinate { segment.to } else { segment.from };
+            let label = shown.iter().find(|label| label.segment == numbered);
             SegmentView {
                 from: segment.from,
                 to: segment.to,
                 value: segment.value.map(stored),
-                text: label.map(|label| label.text.clone()),
+                angle: segment.angle.map(|angle| Value::Angle(angle).stored()),
+                text: label.map(|label| overrides.apply(&label.text)),
+                value_text: label.map(|label| label.text.clone()),
+                overridden: !overrides.is_none(),
                 exact: segment.exact,
                 middle: segment.middle.map(point_view),
                 text_height: label
@@ -832,11 +1167,23 @@ fn view_of_dimension(
         .collect();
     let overall_text = measured
         .overall
-        .map(|overall| display(overall, units))
+        .map(|overall| display(overall, &units))
         .transpose()
         .map_err(|e| e.to_string())?;
     Ok(DimensionView {
         id: dimension.id().to_string(),
+        kind: dimension.kind().key().to_owned(),
+        style: dimension.style().map_or_else(
+            || construct_dimensions::TICKS_ID.to_owned(),
+            ToString::to_string,
+        ),
+        look: look_view(look),
+        overrides: OverridesView {
+            text: overrides.text().map(str::to_owned),
+            prefix: overrides.prefix().map(str::to_owned),
+            suffix: overrides.suffix().map(str::to_owned),
+        },
+        figure: figure_view(&measured.figure),
         layout: layout_view(dimension.layout()),
         references: dimension
             .references()
@@ -868,6 +1215,7 @@ fn view_of_dimension(
             .map(|state| EqualView {
                 segments: state.segments.clone(),
                 equal: state.equal,
+                holds: state.holds,
             })
             .collect(),
         warnings: measured.warnings.iter().map(warning_view).collect(),
@@ -902,7 +1250,8 @@ pub async fn listing<R: Reader>(
         let references: Vec<&Reference> = dimension.references().iter().collect();
         let table = located(reader, project, document, &references).await?;
         let measured = measure(dimension, &table);
-        match view_of_dimension(dimension, &measured, &units) {
+        let look = world.styles.look_of(dimension.style());
+        match view_of_dimension(dimension, &measured, &look, &units) {
             Ok(one) => found.push(one),
             Err(why) => return Ok(Err(why)),
         }
@@ -911,6 +1260,12 @@ pub async fn listing<R: Reader>(
         view: view.to_string(),
         view_name: shown.name().to_owned(),
         dimensions: found,
+        styles: world
+            .styles
+            .all()
+            .into_iter()
+            .map(styles::style_view)
+            .collect(),
     })))
 }
 
@@ -1057,10 +1412,6 @@ pub async fn apply<T: Txn>(
     edit: &Edit,
     claim_ms: u64,
 ) -> Result<Outcome, StoreError> {
-    let args: Args = match serde_json::from_value(edit.args.clone()) {
-        Ok(args) => args,
-        Err(e) => return Ok(Err(format!("That edit isn't valid: {e}"))),
-    };
     let mut run = Run {
         txn,
         project,
@@ -1073,12 +1424,22 @@ pub async fn apply<T: Txn>(
         Ok(world) => world,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    if edit.cmd.starts_with("dimension.style.") {
+        return styles::apply(&mut run, &world).await;
+    }
+    let args: Args = match serde_json::from_value(edit.args.clone()) {
+        Ok(args) => args,
+        Err(e) => return Ok(Err(format!("That edit isn't valid: {e}"))),
+    };
     match edit.cmd.as_str() {
         "dimension.create" => create(&mut run, &world, args).await,
         "dimension.reference.add" => add_reference(&mut run, &world, args).await,
         "dimension.reference.remove" => remove_reference(&mut run, &world, args).await,
         "dimension.move" => move_line(&mut run, &world, args).await,
         "dimension.equal" => set_equal(&mut run, &world, args).await,
+        "dimension.equalize" => equalize::apply(&mut run, &world, args).await,
+        "dimension.style" => set_style(&mut run, &world, args).await,
+        "dimension.override" => set_overrides(&mut run, &world, args).await,
         "dimension.delete" => delete(&mut run, &world, args).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
@@ -1131,20 +1492,78 @@ async fn measure_now<T: Txn>(
     Ok(measure(dimension, &table))
 }
 
+/// A stand-in layout of the kind `placing` makes, to read the references by before the place is
+/// worked out.
+fn provisional(placing: Placing) -> Result<Layout, String> {
+    let one = Length::from_steps(1);
+    let along = Direction::new(one, Length::from_steps(0)).map_err(|e| words(&e))?;
+    match placing {
+        Placing::Angular => Layout::angular(Ray::Forward, Ray::Forward, one).map_err(|e| words(&e)),
+        Placing::Radial => Ok(Layout::radial(along)),
+        Placing::Diameter => Ok(Layout::diameter(along)),
+        Placing::ArcLength => Layout::arc_length(one).map_err(|e| words(&e)),
+    }
+}
+
+/// The layout a place means for `dimension`'s references as they are now, or why there is none.
+async fn placed_now<T: Txn>(
+    run: &mut Run<'_, T>,
+    dimension: &Dimension,
+    placing: Placing,
+    place: Point,
+) -> Result<Result<Layout, String>, StoreError> {
+    let mut loci = Vec::new();
+    for reference in dimension.references() {
+        match locate(run.txn, run.project, run.document, reference).await? {
+            Ok(locus) => loci.push(locus),
+            Err(missing) => return Ok(Err(missing.detail)),
+        }
+    }
+    Ok(placed(placing, place, &loci).map_err(|e| words(&e)))
+}
+
+/// Whether a style a command names is one of the document's or a built-in one.
+fn style_refusal(world: &World, style: Option<&Id>) -> Result<(), String> {
+    match style {
+        Some(id) if world.styles.get(id).is_none() => {
+            Err(format!("There is no dimension style {id} in this model."))
+        }
+        _ => Ok(()),
+    }
+}
+
 async fn create<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> Answer {
     let made = (|| {
         let id = need(args.dimension.clone(), "a dimension")?;
         let view = need(args.view.clone(), "a view")?;
-        let layout = layout_of(need(args.layout.as_ref(), "a layout")?)?;
+        let asked = asked_of(need(args.layout.as_ref(), "a layout")?)?;
         let references = need(args.references.as_ref(), "references")?
             .iter()
             .map(reference_of)
             .collect::<Result<Vec<_>, _>>()?;
         plan_refusal(world, &view)?;
-        Dimension::new(id, view, layout, references).map_err(|e| words(&e))
+        style_refusal(world, args.style.as_ref())?;
+        if args.text.is_some() || args.prefix.is_some() || args.suffix.is_some() {
+            return Err("A dimension's text is overridden by dimension.override.".to_owned());
+        }
+        let layout = match &asked {
+            Asked::Given(layout) => *layout,
+            Asked::Placed(placing, _) => provisional(*placing)?,
+        };
+        let dimension = if args.ordinate == Some(true) {
+            Dimension::ordinate(id, view, layout, references)
+        } else {
+            Dimension::new(id, view, layout, references)
+        };
+        Ok((
+            dimension
+                .map_err(|e| words(&e))?
+                .with_style(args.style.clone()),
+            asked,
+        ))
     })();
-    let dimension = match made {
-        Ok(dimension) => dimension,
+    let (mut dimension, asked) = match made {
+        Ok(found) => found,
         Err(refusal) => return Ok(Err(refusal)),
     };
     if world.record(dimension.id()).is_some() {
@@ -1154,6 +1573,20 @@ async fn create<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> Answ
     let every: Vec<usize> = (0..dimension.references().len()).collect();
     if let Err(refusal) = unusable_among(&measured, &every) {
         return Ok(Err(refusal));
+    }
+    if let Asked::Placed(placing, place) = asked {
+        let layout = match placed_now(run, &dimension, placing, place).await? {
+            Ok(layout) => layout,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        dimension = match dimension.relaid(layout) {
+            Ok(dimension) => dimension,
+            Err(e) => return Ok(Err(words(&e))),
+        };
+        let measured = measure_now(run, &dimension).await?;
+        if let Err(refusal) = unusable_among(&measured, &every) {
+            return Ok(Err(refusal));
+        }
     }
     run.write_all(vec![Write::Put(
         Box::new(dimension.to_record(run.document)),
@@ -1168,6 +1601,23 @@ async fn put<T: Txn>(
     hash: &Id,
     before: &Dimension,
     changed: Dimension,
+) -> Answer {
+    if changed == *before {
+        return Ok(Ok(Applied::default()));
+    }
+    run.write_all(vec![Write::Put(
+        Box::new(changed.to_record(run.document)),
+        Some(hash.clone()),
+    )])
+    .await
+}
+
+/// Writes a changed style over the one before, or nothing at all when it is the same.
+async fn put_style<T: Txn>(
+    run: &mut Run<'_, T>,
+    hash: &Id,
+    before: &construct_dimensions::DimensionStyle,
+    changed: construct_dimensions::DimensionStyle,
 ) -> Answer {
     if changed == *before {
         return Ok(Ok(Applied::default()));
@@ -1225,12 +1675,32 @@ async fn move_line<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> A
         Ok(found) => found,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    if let (Some(place), None, None) = (&args.place, &args.line, &args.through) {
+        let Some(placing) = Placing::of(old.layout()) else {
+            return Ok(Err(
+                "A linear or ordinate dimension's line is moved by a line or a through point."
+                    .to_owned(),
+            ));
+        };
+        let place = match point_of(place) {
+            Ok(place) => place,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        let layout = match placed_now(run, old, placing, place).await? {
+            Ok(layout) => layout,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+        return match old.clone().relaid(layout) {
+            Ok(changed) => put(run, hash, old, changed).await,
+            Err(e) => Ok(Err(words(&e))),
+        };
+    }
     let moved = (|| {
-        let layout = match (&args.line, &args.through) {
-            (Some(line), None) => old.layout().with_line(length(line)?),
-            (None, Some(through)) => old.layout().with_through(point_of(through)?),
+        let layout = match (&args.line, &args.through, &args.place) {
+            (Some(line), None, None) => old.layout().with_line(length(line)?),
+            (None, Some(through), None) => old.layout().with_through(point_of(through)?),
             _ => {
-                return Err("This command needs a line (horizontal or vertical) or a through point (aligned).".to_owned());
+                return Err("This command needs a line (horizontal or vertical), a through point (aligned) or a place (angular, radial, diameter or arc length).".to_owned());
             }
         }
         .map_err(|e| words(&e))?;
@@ -1239,6 +1709,28 @@ async fn move_line<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> A
     match moved {
         Ok(changed) => put(run, hash, old, changed).await,
         Err(refusal) => Ok(Err(refusal)),
+    }
+}
+
+async fn set_style<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> Answer {
+    let (hash, old) = match dimension_of(world, args.dimension.clone()) {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    if let Err(refusal) = style_refusal(world, args.style.as_ref()) {
+        return Ok(Err(refusal));
+    }
+    put(run, hash, old, old.clone().with_style(args.style)).await
+}
+
+async fn set_overrides<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> Answer {
+    let (hash, old) = match dimension_of(world, args.dimension.clone()) {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    match Overrides::new(args.text, args.prefix, args.suffix) {
+        Ok(overrides) => put(run, hash, old, old.clone().with_overrides(overrides)).await,
+        Err(e) => Ok(Err(words(&e))),
     }
 }
 
@@ -1262,6 +1754,24 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, world: &World, args: Args) -> Answ
     };
     run.write_all(vec![Write::Remove(old.id().clone(), hash.clone())])
         .await
+}
+
+/// Why a dimension style cannot be deleted: a dimension is in it. `None` when none is.
+fn style_held(world: &World, style: &Id) -> Option<String> {
+    let held: Vec<&Dimension> = world
+        .dimensions
+        .all()
+        .into_iter()
+        .filter(|d| d.style() == Some(style))
+        .collect();
+    held.first().map(|first| {
+        format!(
+            "{} dimension(s), such as {}, are in this style; give them another with \
+             dimension.style first.",
+            held.len(),
+            first.id()
+        )
+    })
 }
 
 /// Why a view cannot be deleted: it holds dimensions. `None` when it holds none (or no dimension
@@ -1317,7 +1827,15 @@ pub async fn generic_rules<T: Txn>(
         .as_ref()
         .is_some_and(|recipe| records::category_of(recipe).is_ok_and(|c| c == DIMENSIONS));
     let by_kind = args.kind.as_deref() == Some(DIMENSION_KIND);
+    let style_kind = args.kind.as_deref() == Some(STYLE_KIND)
+        || args
+            .recipe
+            .as_ref()
+            .is_some_and(|recipe| *recipe == construct_dimensions::style_recipe());
     Ok(match edit.cmd.as_str() {
+        "element.create" if style_kind => Err(format!(
+            "A dimension style is made: use dimension.style.create. {BY_DIMENSION_COMMANDS}"
+        )),
         "element.create" if by_recipe || by_kind => Err(format!(
             "A dimension is made: use dimension.create. {BY_DIMENSION_COMMANDS}"
         )),
@@ -1326,6 +1844,11 @@ pub async fn generic_rules<T: Txn>(
                 return Ok(Ok(()));
             };
             match records::read_element(txn, project, &edit.target, id).await? {
+                Some((_, record)) if record.kind == STYLE_KIND => Err(
+                    "A dimension style is changed with dimension.style.change and deleted with \
+                     dimension.style.delete."
+                        .to_owned(),
+                ),
                 Some((_, record)) if record.kind == DIMENSION_KIND => {
                     Err(match edit.cmd.as_str() {
                         "element.delete" => {
@@ -1333,7 +1856,8 @@ pub async fn generic_rules<T: Txn>(
                         }
                         _ => {
                             "A dimension is changed: use dimension.move, dimension.reference.add, \
-                          dimension.reference.remove or dimension.equal."
+                          dimension.reference.remove, dimension.equal, dimension.equalize, \
+                          dimension.style or dimension.override."
                                 .to_owned()
                         }
                     })
@@ -1348,9 +1872,9 @@ pub async fn generic_rules<T: Txn>(
     })
 }
 
-/// Whether the dimensions an undo wrote still stand: every record reads and every dimension is in
-/// a plan that is there. The whole document is checked whenever a dimension or a view was written
-/// or taken away.
+/// Whether the dimensions an undo wrote still stand: every record reads, every dimension is in a
+/// plan that is there and in a style that is there, and no two styles share a name. The whole
+/// document is checked whenever a dimension, a style or a view was written or taken away.
 ///
 /// # Errors
 /// A store error; the inner error names what would not stand.
@@ -1363,7 +1887,7 @@ pub async fn undo_rules<T: Txn>(
 ) -> Result<Result<(), String>, StoreError> {
     let touched = written
         .iter()
-        .any(|record| matches!(record.kind.as_str(), DIMENSION_KIND | "view"));
+        .any(|record| matches!(record.kind.as_str(), DIMENSION_KIND | STYLE_KIND | "view"));
     // A piece taken away may be a view or a dimension: its kind is not known any more.
     if !touched && deleted.is_empty() {
         return Ok(Ok(()));
@@ -1379,6 +1903,15 @@ pub async fn undo_rules<T: Txn>(
                 dimension.id()
             )));
         }
+        if let Err(why) = style_refusal(&world, dimension.style()) {
+            return Ok(Err(format!(
+                "the dimension {} would be left in a style that is not there: {why}",
+                dimension.id()
+            )));
+        }
+    }
+    if let Err(why) = styles::names_unique(&world) {
+        return Ok(Err(why));
     }
     Ok(Ok(()))
 }

@@ -264,6 +264,10 @@ fn every_kind_asks_its_category() {
         Ok(construct_categories::DIMENSIONS)
     );
     assert_eq!(
+        category_of_kind("dimension.style"),
+        Ok(construct_categories::DIMENSIONS)
+    );
+    assert_eq!(
         category_of_kind("viewport"),
         Ok(construct_categories::VIEWPORTS)
     );
