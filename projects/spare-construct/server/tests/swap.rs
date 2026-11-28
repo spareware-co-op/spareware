@@ -229,13 +229,23 @@ fn only_the_regen_crate_knows_the_stand_in() {
         files.len() > 2,
         "the page's modules are not where this test looks"
     );
-    for folder in [
+    // And every source file under these, a module's own folder of submodules included.
+    let mut folders: Vec<String> = [
         "server/src",
         "crates/construct-api/src/cloud",
         "crates/construct-model/src",
-    ] {
-        for entry in std::fs::read_dir(format!("{root}/{folder}")).unwrap() {
-            files.push(entry.unwrap().path().display().to_string());
+    ]
+    .iter()
+    .map(|folder| format!("{root}/{folder}"))
+    .collect();
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                folders.push(path.display().to_string());
+            } else {
+                files.push(path.display().to_string());
+            }
         }
     }
     for file in files {
