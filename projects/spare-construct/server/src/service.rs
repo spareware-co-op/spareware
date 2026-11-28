@@ -196,6 +196,7 @@ async fn to_draw<R: Reader>(
     model: &Id,
     one: &cloud::views::Shaped,
     shaped: &[cloud::views::Shaped],
+    with_openings: bool,
 ) -> Result<Result<ToDraw, String>, StoreError> {
     let record = &one.record;
     let Some(category) =
@@ -248,9 +249,14 @@ async fn to_draw<R: Reader>(
             Err(why) => return Ok(Err(why)),
         }
     };
-    let opened = match opened_in(reader, project, model, record, &recipe, shaped).await? {
-        Ok(opened) => opened,
-        Err(why) => return Ok(Err(why)),
+    // Only a section cuts a wall's openings in its layers; a plan does not read them.
+    let opened = if with_openings {
+        match opened_in(reader, project, model, record, &recipe, shaped).await? {
+            Ok(opened) => opened,
+            Err(why) => return Ok(Err(why)),
+        }
+    } else {
+        None
     };
     Ok(Ok(ToDraw {
         id: record.id.clone(),
@@ -1460,7 +1466,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             if !listing.cut.contains(&one.record.id.to_string()) {
                 continue;
             }
-            match to_draw(&mut snapshot, project, model, one, &shaped).await? {
+            match to_draw(&mut snapshot, project, model, one, &shaped, false).await? {
                 Ok(element) => elements.push(element),
                 Err(why) => left_out.push(Skipped {
                     element: one.record.id.to_string(),
@@ -1533,7 +1539,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             if !listing.cut.contains(&id) && !listing.seen.contains(&id) {
                 continue;
             }
-            match to_draw(&mut snapshot, project, model, one, &shaped).await? {
+            match to_draw(&mut snapshot, project, model, one, &shaped, true).await? {
                 Ok(element) => elements.push(element),
                 Err(why) => left_out.push(Skipped { element: id, why }),
             }
