@@ -1,12 +1,22 @@
 //! The tool contract of the command layer (CON-A8, note A96 "The command layer"; piece A97).
 //!
 //! A tool of a project's commands is one module of [`crate::cloud`] that implements [`Tool`]: its
-//! name, the commands it runs, the generic commands its guard is asked before, and its undo rule.
+//! name, the commands it runs, the generic commands its guard is asked before, its undo rule, its
+//! warning rules and its schedule fields.
 //! Each tool is named once, in the ordered `tools!` list in `cloud/mod.rs`, which expands to
 //! [`Tools`](crate::cloud::Tools): whether a command is a tool's, whether it is a step of undo,
-//! running it behind the guards of the tools that guard it, and every tool's undo rule. So the
-//! orderer's commands ([`commands`](crate::cloud::commands)) and undo
-//! ([`undo`](crate::cloud::undo)) name no tool.
+//! running it behind the guards of the tools that guard it, every tool's undo rule, and every
+//! tool's warning rules and schedule fields. So the orderer's commands
+//! ([`commands`](crate::cloud::commands)), undo ([`undo`](crate::cloud::undo)), the warnings
+//! ([`warnings`](crate::cloud::warnings)) and the schedules
+//! ([`schedules`](crate::cloud::schedules)) name no tool.
+//!
+//! **Warnings and schedule fields** (note A96, step two). The warnings are worked out from one
+//! model, read once for each check ([`construct_warnings::Model`], by
+//! [`read_warnings`](crate::cloud::warnings::read_warnings)), and every tool's rules are asked of
+//! that same model, so no rule reads the store. A schedule is read against every tool's fields.
+//! construct-warnings and construct-schedules keep their own types and tables (`RULES`,
+//! `QUANTITIES`, each entry a constant of its own) and are handed the tools' ones.
 //!
 //! **Adding a tool** adds its module (`cloud/<tool>.rs`, implementing [`Tool`]) and two lines in
 //! `cloud/mod.rs`: its `pub mod` line, which Rust needs (it is not made by the macro, because
@@ -30,6 +40,8 @@
 //! reads a clock.
 
 use construct_model::element::Element;
+use construct_schedules::Quantity;
+use construct_warnings::Rule;
 use kit_core::Id;
 use kit_ops::Edit;
 use kit_store::{StoreError, Txn};
@@ -56,6 +68,12 @@ pub trait Tool {
     /// Where its [`Tool::undo_rules`] are asked among the tools': lowest first, and the list's
     /// order where two are equal.
     const UNDO_ORDER: u16 = u16::MAX;
+    /// The warning rules of its records: each finds its kind's warnings in the one model read for
+    /// the check, and none reads the store. A kind is one tool's.
+    const RULES: &'static [Rule] = &[];
+    /// The read-only quantities its elements have, which a schedule of their category can show,
+    /// filter on and sort by. A quantity is one tool's.
+    const FIELDS: &'static [Quantity] = &[];
 
     /// Runs one of its commands.
     ///
@@ -141,6 +159,36 @@ macro_rules! tools {
                     undo_order: <$module::$tool as $crate::cloud::tool::Tool>::UNDO_ORDER,
                 },
             )+];
+
+            /// Every tool's warning rules, by its name, in the list's order.
+            pub const RULES: &'static [(&'static str, &'static [::construct_warnings::Rule])] = &[$(
+                (
+                    <$module::$tool as $crate::cloud::tool::Tool>::NAME,
+                    <$module::$tool as $crate::cloud::tool::Tool>::RULES,
+                ),
+            )+];
+
+            /// Every tool's schedule fields, by its name, in the list's order.
+            pub const FIELDS: &'static [(&'static str, &'static [::construct_schedules::Quantity])] = &[$(
+                (
+                    <$module::$tool as $crate::cloud::tool::Tool>::NAME,
+                    <$module::$tool as $crate::cloud::tool::Tool>::FIELDS,
+                ),
+            )+];
+
+            /// Every tool's warning rules, one after another in the list's order.
+            pub fn rules() -> impl Iterator<Item = &'static ::construct_warnings::Rule> {
+                Self::RULES.iter().flat_map(|(_, rules)| rules.iter())
+            }
+
+            /// Every tool's schedule fields, one after another in the list's order.
+            #[must_use]
+            pub fn fields() -> Vec<::construct_schedules::Quantity> {
+                Self::FIELDS
+                    .iter()
+                    .flat_map(|(_, fields)| fields.iter().copied())
+                    .collect()
+            }
 
             /// Whether a tool runs this command.
             #[must_use]
