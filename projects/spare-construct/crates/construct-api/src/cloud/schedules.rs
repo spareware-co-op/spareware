@@ -36,7 +36,9 @@
 //! ([`crate::cloud::views::phases`]), as for views; the job that stores phases through the log
 //! replaces them in one place.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use crate::cloud::views;
 use construct_categories::{CategoryId, SCHEDULES};
 use construct_model::element::Element;
@@ -73,6 +75,45 @@ pub const BY_SCHEDULE_COMMANDS: &str = "Schedules are made and changed by the sc
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The schedule tool ([`Tool`]): schedules and their fields, filters and sorting.
+pub struct ScheduleTool;
+
+impl Tool for ScheduleTool {
+    const NAME: &'static str = "schedule";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const UNDO_ORDER: u16 = 50;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        _deleted: &[Id],
+        _whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written).await
+    }
 }
 
 /// A filter as a person sends it.
