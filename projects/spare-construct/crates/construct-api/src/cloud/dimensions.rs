@@ -44,7 +44,9 @@
 //! door's or window's centre falls on a half step when its opening is an odd number of steps wide;
 //! it is then the nearer step above (a bound of half a step, 78 nm).
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use construct_categories::DIMENSIONS;
 use construct_dimensions::{
     DIMENSION_KIND, Dimension, DimensionError, Dimensions, Direction, Edge, Feature, Layout,
@@ -86,6 +88,45 @@ pub const BY_DIMENSION_COMMANDS: &str =
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The dimension tool ([`Tool`]): linear dimensions bound to references.
+pub struct DimensionTool;
+
+impl Tool for DimensionTool {
+    const NAME: &'static str = "dimension";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const UNDO_ORDER: u16 = 70;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        deleted: &[Id],
+        _whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written, deleted).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.
