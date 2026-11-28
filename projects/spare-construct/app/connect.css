@@ -27,6 +27,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .stack-log { margin: 0; list-style: none; font-size: 12px; color: var(--ink-2); }
 .dw .stack-ghost { pointer-events: none; }
 .dw .element { cursor: move; }
+/* Words drawn with an element (a door's or a window's name above it, who is editing it) are not the
+   element: a click on them goes to what is drawn under them, as a room's tag and a slope arrow's
+   heights already let it. A window's name can lie over a floor beside its wall, and how far it
+   reaches depends on the browser's font, so a click meant for the floor must not pick the window. */
+.dw .element text { pointer-events: none; }
 .dw .claim.mine { fill: none; stroke: var(--success); }
 /* A layered wall: each layer in its material's cut colour (set on the part, from the server's
    materials), a neutral fill for a material not listed, and the wall's outline over them. */
@@ -46,6 +51,21 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .roof-ridge { stroke-dasharray: 8 4; }
 .dw .roof-valley { stroke-dasharray: 2 3; }
 .dw .roof-verge { stroke-width: 1px; }
+.dw .floor-slope line { stroke: var(--app-strong); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .floor-slope path { fill: var(--app-strong); pointer-events: none; }
+.dw .floor-slope text { pointer-events: none; }
+.dw .floor-slab-edge { fill: var(--ink-3); fill-opacity: .35; stroke: var(--ink-3); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .floor-edge-hit { stroke: var(--app-strong); stroke-opacity: .3; stroke-width: 9px; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.dw .floor-edge-hit:hover { stroke-opacity: .6; }
+/* A stair: its runs and landings as one body to pick it by, each tread's line (dashed where the stair is above the view's cut plane), the cut line, and the walking line with its arrow. */
+.dw .stair { fill: var(--sink); fill-opacity: .35; stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .stair.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+.dw .stair-tread { stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-above { stroke-dasharray: 6 4; }
+.dw .stair-landing { fill: none; stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-cut { stroke: var(--ink); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-walk { fill: none; stroke: var(--ink); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-walk-start, .dw .stair-arrow { fill: var(--ink); stroke: none; pointer-events: none; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */
@@ -88,3 +108,28 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .room-tag text { pointer-events: none; fill: var(--ink-2); }
 .dw .room-tag .room-name { font-weight: 650; fill: var(--ink); }
 .dw .room-tag .room-state { fill: var(--danger); }
+
+/* The Warnings part of the project browser: each warning's sentence is a row that selects its
+   element; a warning of several elements offers each below it. */
+.stack-warning .leaf { align-items: flex-start; height: auto; padding-top: 4px; padding-bottom: 4px; }
+.stack-warning[data-severity="error"] .leaf { border-left-color: var(--danger, currentColor); }
+.stack-warning-at { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 4px 27px; }
+.stack-sched h3 { margin: 4px 0; font-size: 13px; }
+.stack-sched .grow { flex: 1; min-width: 120px; }
+.stack-sched .sched-scroll { max-height: 40vh; overflow: auto; margin: 6px 0; border: 1px solid var(--hairline); }
+.sched-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sched-table th, .sched-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+.sched-table thead th { position: sticky; top: 0; background: var(--page); font-weight: 600; }
+.sched-table tr.click { cursor: pointer; }
+.sched-table tr.sel td { background: var(--hover, rgba(127, 127, 127, 0.18)); }
+/* Linear dimensions: the open view's own are picked by a band along the offset line; the text is never picked. */
+.dw .dim.own { cursor: pointer; }
+.dw .dim-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
+.dw .dim-line, .dw .dim-tick { stroke: var(--ink); }
+.dw .dim-w { stroke: var(--ink-3); }
+.dw .dimt { fill: var(--ink); pointer-events: none; }
+.dw .dimt.bad { fill: var(--danger); }
+.dw .dim.bad .dim-line, .dw .dim.bad .dim-tick { stroke: var(--danger); }
+.dw .dim[data-picked="yes"] .dim-line, .dw .dim[data-picked="yes"] .dim-tick { stroke: var(--app-strong); stroke-width: 2px; }
+.dw .dim.lost .dimt { pointer-events: auto; cursor: pointer; }
+.dw .dim-pick { pointer-events: none; }

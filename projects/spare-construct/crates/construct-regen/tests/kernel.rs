@@ -209,6 +209,24 @@ fn a_rectangle_floor_is_its_layers() {
     kernel_suite::a_rectangle_floor_is_its_layers(|| Cuboids);
 }
 
+/// A sloped floor, or one with slab edges, on an engine that takes only level boxes is the
+/// engine's refusal, never a flat floor or one without its edges: the server's engine builds
+/// both (its tests/kernel.rs runs the suite's `a_sloped_floor_is_its_layers` and
+/// `a_floor_with_slab_edges_is_one_solid`).
+#[test]
+fn a_shaped_floor_the_engine_cannot_build_is_refused() {
+    use construct_model::geometry::Geometry;
+    let k = construct_regen::kernel::Kernel::new(Cuboids).unwrap();
+    let flat = kernel_suite::floor_of(&[&kernel_suite::RECTANGLE], &[("structure", 200)]);
+    let tops = serde_json::json!([[0, -40 * 6400, -40 * 6400, 0]]);
+    let sloped = kernel_suite::shaped_floor(flat.clone(), &[("tops", tops)]);
+    assert!(k.build(&sloped).is_err());
+    let square = [[0, 0], [4000, 0], [4000, 300], [0, 300]];
+    let down = kernel_suite::slab_edge("e0", "downturn", (square, -200), (square, -600));
+    let edged = kernel_suite::shaped_floor(flat, &[("edges", serde_json::json!([down]))]);
+    assert!(k.build(&edged).is_err());
+}
+
 #[test]
 fn an_opening_in_a_wall_is_refused_by_name() {
     kernel_suite::an_opening_in_a_wall_is_refused_by_name(|| Cuboids);
@@ -217,6 +235,11 @@ fn an_opening_in_a_wall_is_refused_by_name() {
 #[test]
 fn an_opening_in_a_floor_is_refused_by_name() {
     kernel_suite::an_opening_in_a_floor_is_refused_by_name(|| Cuboids);
+}
+
+#[test]
+fn a_shaped_floor_that_is_cut_is_refused_by_name() {
+    kernel_suite::a_shaped_floor_that_is_cut_is_refused_by_name(|| Cuboids);
 }
 
 #[test]
@@ -387,6 +410,11 @@ fn a_door_is_cut_from_each_layer_of_a_layered_wall() {
 #[test]
 fn a_layered_wall_at_an_angle_is_its_strips_extruded() {
     kernel_suite::a_layered_wall_at_an_angle_is_its_strips_extruded(|| Prisms);
+}
+
+#[test]
+fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape() {
+    kernel_suite::walls_joined_at_an_l_and_a_t_fill_the_joined_shape(|| Prisms);
 }
 
 /// A test engine that answers only an extrusion straight up of a strictly convex polygon, which
@@ -623,6 +651,56 @@ fn a_layered_walls_layers_are_solids_with_their_faces_named() {
     assert!(boxed[0].material.is_none());
 }
 
+/// A drawing cuts a curtain wall one part at a time: a solid for each panel with a slab and each
+/// mullion, in the order the wall's display lists them, each with its part's word and material and
+/// a plane for each of its six faces, named by its key, so no two faces of the wall are called
+/// alike. Every side's plane holds the two corners of the edge that sweeps it, and its base and
+/// top stand at the heights the part's box does. A door panel adds none.
+#[test]
+fn a_curtain_walls_parts_are_solids_with_their_faces_named() {
+    use construct_regen::kernel::Kernel;
+    use std::collections::BTreeSet;
+    let k = Kernel::new(Prisms).unwrap();
+    let wall = kernel_suite::curtain(
+        [6000, 0],
+        3000,
+        &kernel_suite::curtain_spec(1500, 1000, true),
+        None,
+    );
+    let layers = k.layers(&wall).unwrap();
+    assert_eq!(layers.len(), 12 + 31);
+    let built = construct_regen::geometry().build(&wall).unwrap();
+    let mut names = BTreeSet::new();
+    for (at, layer) in layers.iter().enumerate() {
+        let part = &built.displays[0].parts[at];
+        assert_eq!(layer.function, part.function, "part {at}");
+        assert_eq!(layer.material.as_deref(), Some(part.material.as_str()));
+        let faces = &layer.solid.faces;
+        assert_eq!(faces.len(), 6, "part {at}");
+        for face in faces {
+            assert!(
+                names.insert(face.name.name.clone()),
+                "part {at}: a name twice"
+            );
+        }
+        let corners = &layer.solid.solid.corners;
+        for face in faces.iter().filter(|f| f.plane.normal[2] == 0) {
+            let [nx, ny, _] = face.plane.normal;
+            let held = |c: &[i64; 2]| i128::from(c[0]) * nx + i128::from(c[1]) * ny;
+            let on = corners
+                .iter()
+                .filter(|c| held(c) == face.plane.offset)
+                .count();
+            let outside = corners
+                .iter()
+                .filter(|c| held(c) > face.plane.offset)
+                .count();
+            assert_eq!((on, outside), (2, 0), "part {at}, {}", face.name.role);
+        }
+    }
+    assert_eq!(names.len(), 43 * 6);
+}
+
 /// A test engine that answers an extrusion as [`Cuboids`] does, and a loft of two sections the
 /// second of which is the first moved by one vector, which it keeps as the prism it is and meshes
 /// as its two ends (each cut into triangles by clipping ears, so a section need not be convex) and
@@ -818,6 +896,12 @@ fn a_flat_roof_is_its_layers() {
 /// A solved roof (job 6.2) on a test engine that keeps each extruded piece: each layer's pieces
 /// are extruded and united in the recipe's order, the body lists them, and the pieces hold the
 /// layer's plan area (24 m2) by its upright height. An engine that cannot unite them says so.
+/// A stair's run is lofted and its landing extruded on the test engine that keeps each loft.
+#[test]
+fn a_stair_is_its_pieces() {
+    kernel_suite::a_stair_is_its_pieces(|| Lofts);
+}
+
 #[test]
 fn a_solved_roof_unites_its_pieces_on_the_engine() {
     use construct_model::geometry::Geometry;
@@ -1104,4 +1188,176 @@ fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
 #[test]
 fn a_family_that_does_not_fit_is_refused_with_a_reason() {
     kernel_suite::a_family_that_does_not_fit_is_refused_with_a_reason(|| Pieces);
+}
+
+#[test]
+fn a_curtain_wall_is_its_panels_and_mullions() {
+    kernel_suite::a_curtain_wall_is_its_panels_and_mullions(|| Cuboids);
+}
+
+#[test]
+fn a_door_panel_is_its_familys_solids() {
+    kernel_suite::a_door_panel_is_its_familys_solids(|| Pieces);
+}
+
+/// What one built shape is, for a pin: its body's content id, its bounds, its names and every
+/// display.
+fn shape_of(built: &construct_model::geometry::Built) -> serde_json::Value {
+    serde_json::json!({
+        "body": built.body_id(),
+        "bounds": built.bounds,
+        "names": built.names,
+        "displays": built.displays,
+    })
+}
+
+/// Walls along x and y host as they did before hosting at any angle came (piece A83): on each of
+/// the four ways a partition runs (its faces off whole millimetres, 12.5 mm layers), a box door,
+/// a wall opening, a placed door and a placed window, each on either side, are seated where they
+/// were with the recipe they were handed, the wall built with each, each built alone on the
+/// kernel's builder and on the stand-in, all exactly the bytes they were on main before (the pin
+/// was taken there).
+#[test]
+fn walls_along_the_axes_host_byte_for_byte_as_before() {
+    use construct_families::Turn;
+    use construct_model::element::{Element, Placement};
+    use construct_model::geometry::{Geometry, Hosted as HostedAt};
+    use construct_params::Length;
+    use construct_regen::hosting;
+    use construct_regen::stand_in::Boxes;
+    use std::collections::BTreeMap;
+    let k = construct_regen::kernel::Kernel::new(Pieces).unwrap();
+    let edition = k.edition();
+    let id = |text: &str| kit_core::Id::parse(text).unwrap();
+    let element = |key: &str, recipe: &construct_model::geometry::Recipe| Element {
+        id: id(key),
+        document: id("doc"),
+        kind: "door".to_owned(),
+        name: key.to_owned(),
+        level: 0,
+        placement: Placement {
+            x: 1000,
+            y: 2000,
+            z: 0,
+        },
+        recipe: recipe.clone(),
+        props: BTreeMap::new(),
+        references: Vec::new(),
+    };
+    let mut all = Vec::new();
+    for (start, end) in [
+        ([0, 0], [4000, 0]),
+        ([4000, 0], [0, 0]),
+        ([0, 0], [0, 4000]),
+        ([0, 4000], [0, 0]),
+    ] {
+        let wall = kernel_suite::layered_wall(start, end, 2700, &kernel_suite::PARTITION);
+        let axis = if start[0] == end[0] { "y" } else { "x" };
+        let host = element("W-1", &wall);
+        let door = kernel_suite::recipe(
+            "door.single",
+            serde_json::json!({ "width": 900, "thickness": 100, "height": 2100, "axis": axis }),
+        );
+        let kinds = [
+            (door, 0),
+            (kernel_suite::plain_opening(900, 1200, axis), 900),
+            (
+                kernel_suite::placed(kernel_suite::DOOR_FAMILY, "d900x2100", Turn::None),
+                0,
+            ),
+            (
+                kernel_suite::placed(kernel_suite::WINDOW_FAMILY, "w1200x1200", Turn::None),
+                0,
+            ),
+        ];
+        for role in ["exterior", "interior"] {
+            let face = hosting::side_by_role(&edition, &wall, role).unwrap();
+            for (recipe, up) in &kinds {
+                let mut hosted = element("D-1", recipe);
+                hosting::write(
+                    &mut hosted,
+                    &host.id,
+                    &face,
+                    Length::from_mm(1500),
+                    Length::from_mm(*up),
+                );
+                let how = hosting::read(&hosted).unwrap().unwrap();
+                let (at, seated) =
+                    hosting::seat(&edition, &host, &wall, &hosted, &hosted.recipe, &how).unwrap();
+                let list = [HostedAt {
+                    key: "D-1",
+                    recipe: &seated,
+                    at,
+                }];
+                construct_regen::kernel::fits(&edition, &wall, &list).unwrap();
+                let walled = Geometry::build_hosting(&k, &wall, &list).unwrap();
+                all.push(serde_json::json!({
+                    "at": at,
+                    "seated": seated,
+                    "walled": shape_of(&walled),
+                    "kernel": shape_of(&k.build(&seated).unwrap()),
+                    "stand_in": shape_of(&Boxes.build(&seated).unwrap()),
+                }));
+            }
+        }
+    }
+    let digest = kit_ops::sha256_hex(serde_json::to_string(&all).unwrap().as_bytes());
+    // Taken on main at 93c7e8510, before this piece changed anything.
+    assert_eq!(
+        digest,
+        "ca7fc24fa7e394c05886ebea744ef0833f227d4771fcc42039b4807852e2c234"
+    );
+}
+
+/// A test engine that extrudes as [`Prisms`] does and answers a subtraction or a union with its
+/// first solid unchanged: it judges what the builder asks of a wall at an angle and of what is
+/// seated in it (each layer's cells, each element's own), not the shape the engine gives.
+struct Seated;
+
+impl Engine for Seated {
+    type Solid = Prism;
+
+    fn edition(&self) -> Edition {
+        Edition {
+            engine: "test.seated".to_owned(),
+            ..Cuboids.edition()
+        }
+    }
+
+    fn extrude(&mut self, profile: &Profile, by: [i64; 3]) -> Result<Prism, EngineError> {
+        Prisms.extrude(profile, by)
+    }
+
+    fn subtract(&mut self, target: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Ok(target.clone())
+    }
+
+    fn subtract_pieces(&mut self, _: &Prism, _: &Prism) -> Result<Vec<Prism>, EngineError> {
+        Err(unsupported("subtract_pieces"))
+    }
+
+    fn loft(&mut self, _: &[Section]) -> Result<Prism, EngineError> {
+        Err(unsupported("loft"))
+    }
+
+    fn unite(&mut self, a: &Prism, _: &Prism) -> Result<Prism, EngineError> {
+        Ok(a.clone())
+    }
+
+    fn volume(&mut self, _: &Prism) -> Result<Volume, EngineError> {
+        Err(unsupported("volume"))
+    }
+
+    fn mesh(&mut self, s: &Prism) -> Result<DisplayMesh, EngineError> {
+        Prisms.mesh(s)
+    }
+
+    fn section(&mut self, _: &Prism, _: &GridPlane) -> Result<Cut, EngineError> {
+        Err(unsupported("section"))
+    }
+}
+
+#[test]
+fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
+    kernel_suite::elements_at_any_angle_cut_their_wall_and_stand_in_it(|| Seated);
 }

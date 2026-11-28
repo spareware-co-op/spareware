@@ -241,15 +241,28 @@ fn built_ins_survive_a_project_table() {
 fn every_kind_asks_its_category() {
     assert_eq!(category_of_kind("wall.straight"), Ok(WALLS));
     assert_eq!(category_of_kind("wall.layered"), Ok(WALLS));
+    assert_eq!(
+        category_of_kind("wall.curtain"),
+        Ok(construct_categories::CURTAIN_WALLS)
+    );
     assert_eq!(category_of_kind("door.single"), Ok(DOORS));
     assert_eq!(category_of_kind("family.instance"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("block"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("floor"), Ok(construct_categories::FLOORS));
     assert_eq!(category_of_kind("roof"), Ok(construct_categories::ROOFS));
+    assert_eq!(category_of_kind("stair"), Ok(construct_categories::STAIRS));
     assert_eq!(category_of_kind("workshop.part"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("workshop.assembly"), Ok(GENERIC_MODELS));
     assert_eq!(category_of_kind("view"), Ok(construct_categories::VIEWS));
+    assert_eq!(
+        category_of_kind("schedule"),
+        Ok(construct_categories::SCHEDULES)
+    );
     assert_eq!(category_of_kind("sheet"), Ok(construct_categories::SHEETS));
+    assert_eq!(
+        category_of_kind("dimension"),
+        Ok(construct_categories::DIMENSIONS)
+    );
     assert_eq!(
         category_of_kind("viewport"),
         Ok(construct_categories::VIEWPORTS)

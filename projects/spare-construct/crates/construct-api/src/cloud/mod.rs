@@ -9,6 +9,8 @@
 //! - [`grids`]: grid lines and reference planes, through the same log.
 //! - [`families`]: placing a family of the library on a wall, a door or a window, through the same
 //!   log.
+//! - [`loading`]: the families a document holds: loaded, reloaded keeping their placed copies,
+//!   swapped, and door and window types made by the generator, through the same log.
 //! - [`openings`]: openings in walls and floors, and shafts through floors, through the same log.
 //! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
 //! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
@@ -19,12 +21,23 @@
 //!   log.
 //! - [`roofs`]: roof types and their layers, and roofs on a rectangle (flat, mono-pitch and gable),
 //!   through the same log.
+//! - [`curtains`]: curtain wall types (their grid and parts) and curtain walls, drawn on their own
+//!   line or embedded in a wall, their grid lines, segments and panels, through the same log.
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
+//! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
+//!   landings), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
+//! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping, a
+//!   dimension's reference that is gone), read-only
+//!   and worked out each time from the document.
+//! - [`schedules`]: making and changing schedules (a category, fields, filters, sorting), and the
+//!   read of their rows, through the same log.
 //! - [`sheets`]: sheets, the viewports on them and their alignments, through the same log.
 //! - [`modify`]: moving, copying, turning, mirroring and arraying a selection, hosted elements
 //!   with their hosts, through the same log.
+//! - [`dimensions`]: linear dimensions bound to references, and the listing of a view's dimensions
+//!   with their values worked out, through the same log.
 //! - [`undo`]: undo and redo, as new entries in the same log that reverse a person's own steps.
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
@@ -33,6 +46,8 @@
 
 pub mod access;
 pub mod commands;
+pub mod curtains;
+pub mod dimensions;
 pub mod directory;
 pub mod elements;
 pub mod families;
@@ -40,17 +55,21 @@ pub mod floors;
 pub mod grids;
 pub mod hosting;
 pub mod levels;
+pub mod loading;
 pub mod modify;
 pub mod openings;
 pub mod params;
 pub mod roofs;
 pub mod rooms;
+pub mod schedules;
 pub mod sheets;
 pub mod spaces;
+pub mod stairs;
 pub mod transaction;
 pub mod undo;
 pub mod views;
 pub mod walls;
+pub mod warnings;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;

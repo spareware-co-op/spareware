@@ -248,6 +248,19 @@ async fn frame_at<T: Txn>(
             )));
         }
     };
+    // An embedded curtain wall is fitted as the plain opening it cuts in its host.
+    match hosting::cut_of(
+        &host.edition,
+        &host.record,
+        &host.recipe,
+        element,
+        &recipe,
+        hosting,
+    ) {
+        Ok(Some((at, cut))) => return Ok(Ok((cut, at))),
+        Ok(None) => {}
+        Err(e) => return Ok(Err(e.message)),
+    }
     let seated = hosting::seat(
         &host.edition,
         &host.record,
@@ -352,7 +365,10 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         return Ok(Err("That element already exists.".to_owned()));
     }
     let kind = args.kind.unwrap_or_else(|| DOOR.to_owned());
-    if kind == records::TYPE_KIND || kind == records::TABLE_KIND || id.as_str() == records::TABLE_ID
+    if kind == records::TYPE_KIND
+        || kind == records::TABLE_KIND
+        || kind == construct_regen::families::RECORD_KIND
+        || id.as_str() == records::TABLE_ID
     {
         return Ok(Err(
             "Types and the parameter table are changed by their own commands, not as elements."

@@ -32,8 +32,10 @@
 //! ([`RoomError::SlopedLimit`]) are refused by name until the kernel's exact arcs and sloped
 //! bounds reach rooms; both are rows of the interim register. Not here, with their places kept:
 //! the commands that place, rename, number, move and delete rooms (construct-api), room
-//! separation lines and rooms bounded by floors and ceilings (job 6.3), and wall joins and
-//! openings changing a room's faces (they change only the outlines the regenerator hands in).
+//! separation lines and rooms bounded by floors and ceilings (job 6.3), and wall joins changing a
+//! room's faces: they change only the outlines the regenerator hands in (construct-regen's
+//! `rooms` hands each wall's outline as its joints shape it), and the search here takes any
+//! polygon, at any angle.
 
 pub mod error;
 mod exact;
