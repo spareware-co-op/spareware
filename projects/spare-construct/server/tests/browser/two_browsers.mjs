@@ -9,6 +9,16 @@
 import { execSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
+// One section on its own, or the state each section leaves saved: see sections.mjs. With neither
+// SAVE_SECTIONS nor START_AT set, none of this runs and the test below runs whole, as always.
+//   SAVE_SECTIONS=<folder>  after each section, save the state it leaves
+//   START_AT=<label>        start at that section, on the state saved after the one before it
+//   ONLY=1                  with START_AT: that section alone       START_AT=?  lists the sections
+if (!globalThis.__sectionsChild && (process.env.SAVE_SECTIONS || process.env.START_AT)) {
+  await (await import('./sections.mjs')).runSections(import.meta.url);
+  process.exit(0);
+}
+
 const base = process.env.STACK_URL || 'http://localhost:8080';
 const shots = process.env.SHOTS;
 const channel = process.env.BROWSER || 'msedge';
@@ -960,6 +970,93 @@ check(
 );
 await freshWalls.context().close();
 
+console.log('\n   Wall joins and wrapping');
+// Anna's undo of the move puts the corner wall back at the first wall's end. A joint's choice is
+// kept by the wall of the lower ID, so she picks that wall and makes the joint a butt in its
+// palette: both pages take the server's new filling of both walls. She lets go of it by clicking
+// off, and Ben picks the same wall, gives it its own wrapping at its ends and switches which wall
+// runs through: Anna's page takes each. Every body both pages built matches the server's, and a
+// fresh load holds what the server has. Nobody changes what the other touched in the last 30 s.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'element.move');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await bothTake(layeredId, cornered, 'her undo puts the corner wall back, and both pages take the first wall at the corner again');
+const keeperWall = layeredId < cornerId ? layeredId : cornerId;
+const otherWall = keeperWall === layeredId ? cornerId : layeredId;
+const jointOn = (page, [id, other]) =>
+  page.evaluate(([w, o]) => JSON.stringify(window.spare.elements.get(w)?.el.recipe.args.joining?.with?.[o] ?? null), [id, other]);
+const bothHold = async (want, label) => {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(
+      ([w, o, text]) => JSON.stringify(window.spare.elements.get(w)?.el.recipe.args.joining?.with?.[o] ?? null) === text,
+      [keeperWall, otherWall, want],
+    );
+  }
+  pass(label);
+};
+const pickWall = async (page, id) => {
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-joins="${id}"] [data-joint]`);
+};
+await anna.keyboard.press('Escape');
+await pickWall(anna, keeperWall);
+check(
+  (await anna.locator(`#pv-side select[data-joint="${otherWall}"]`).inputValue()) === 'mitre',
+  "Anna's palette lists the joint with the other wall, a mitre as the rule makes it",
+);
+await anna.locator(`#pv-side select[data-joint="${otherWall}"]`).selectOption('butt');
+await bothHold(JSON.stringify({ first: keeperWall, kind: 'butt' }), 'Anna makes the joint a butt, and both pages hold it on the wall that keeps it');
+const butted = await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== cornered,
+  'the server works the butt',
+);
+await bothTake(layeredId, butted, "both pages take the server's filling of the first wall at the butt");
+await bothTake(cornerId, await filledByServer(cornerId), 'and of the corner wall');
+await ben.waitForFunction((id) => window.spare.claims.get(id)?.person === 'anna', keeperWall);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), keeperWall);
+pass('Anna lets go of the wall, and Ben sees it free');
+
+await ben.keyboard.press('Escape');
+await pickWall(ben, keeperWall);
+check(
+  (await ben.locator(`#pv-side select[data-joint="${otherWall}"]`).inputValue()) === 'butt',
+  "Ben's palette shows the joint as Anna made it",
+);
+await ben.locator('#pv-side [data-wall-wrap] select[data-wrap="ends"]').selectOption('exterior');
+for (const page of [anna, ben]) {
+  await page.waitForFunction(
+    (w) => window.spare.elements.get(w)?.el.recipe.args.wrapping?.ends === 'exterior' && window.spare.elements.get(w)?.fill?.recipe?.args?.wrap?.ends === 'exterior',
+    keeperWall,
+  );
+}
+pass("Ben gives the wall its own wrapping at its ends, and both pages take it, filled by the server");
+await ben.locator(`#pv-side [data-act="stackjointswitch"][data-joint="${otherWall}"]`).click();
+await bothHold(JSON.stringify({ first: otherWall, kind: 'butt' }), 'Ben switches which wall runs through, and both pages hold it');
+const switched = await until(
+  async () => await filledByServer(layeredId),
+  (text) => text !== butted,
+  'the server works the switched butt',
+);
+await bothTake(layeredId, switched, "both pages take the first wall as the switched joint shapes it");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built at the chosen joints matches the server's`);
+}
+const freshJoins = await signIn('anna');
+await freshJoins.waitForFunction((id) => window.spare.elements.get(id)?.fill, layeredId);
+check(
+  (await filledOnPage(freshJoins, layeredId)) === switched &&
+    (await jointOn(freshJoins, [keeperWall, otherWall])) === JSON.stringify({ first: otherWall, kind: 'butt' }),
+  'a fresh load holds the joint and the first wall as the server has them now',
+);
+await freshJoins.context().close();
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims.has(id), keeperWall);
+pass('Ben lets go of the wall, and Anna sees it free');
+
 const viewer = await signIn('anna', '**/shapes/**');
 await viewer.waitForSelector('g.element[data-id="D-101"] .body');
 check(await viewer.evaluate(() => window.spare.viewing), "a browser that can't build still draws the stored shapes");
@@ -1547,6 +1644,298 @@ await anna.keyboard.press('Delete');
 await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), dimWallA);
 await ben.click('#browser [data-act="view"][data-a="l1"]');
 pass('both walls are deleted, and the plan is as it was before the dimension');
+console.log('\n   Dimensions: angles, an aligned dimension and equal segments');
+// Both people have Level 1's working plan open. Anna draws grid lines south of the building, above the view bar (the
+// wall tool draws along x or y; a grid goes any way): one running east, one at 3:4 off it, one
+// square to that (a 3:4:5 corner, off the axes) and one parallel to the 3:4 grid, 500 mm across
+// it. With the dimension tool she measures the angle between the first two (36.87°, the nearest
+// unit, not exact) and the corner (90.00°, exact), each by picking the two grids and clicking
+// inside the angle she means, and the aligned distance across the parallel pair (500 mm). Ben's
+// browser draws each as the server worked it out, and Ben reads the angle in his palette. Then she
+// draws four walls across a run and dimensions them as a string; Ben is working on one of them when
+// she makes the segments equal, and the server says so by name; once he lets go she makes them
+// equal, the walls move in one step and both browsers show three equal segments; her undo puts
+// every wall back. Each thing is drawn after the last one is there, as a person draws.
+for (const page of [anna, ben]) {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await page.click(viewLeaf('Level 1 working plan'));
+}
+await anna.waitForSelector('#pv-canvas svg');
+await ben.waitForSelector('#pv-canvas svg');
+// A click on the plan where a person would click: once nothing covers that spot (a note, a
+// toast, the edge of the window), and if something does, it is said what.
+const clickPlan = async (page, x, y) => {
+  const [sx, sy] = await onScreen(page, x, y);
+  await page
+    .waitForFunction(([px, py]) => document.elementFromPoint(px, py)?.closest('#pv-canvas svg'), [sx, sy])
+    .catch(async (error) => {
+      const over = await page.evaluate(([px, py]) => {
+        const e = document.elementFromPoint(px, py);
+        return e ? `${e.tagName} ${e.id} ${e.getAttribute('class')} ${e.textContent?.slice(0, 80)}` : `nothing (the window is ${innerWidth} by ${innerHeight})`;
+      }, [sx, sy]);
+      console.log(`   (${x}, ${y}) in ${page === anna ? 'Anna' : 'Ben'}'s plan, at ${Math.round(sx)}, ${Math.round(sy)} on screen, is under ${over}`);
+      throw error;
+    });
+  await page.mouse.click(sx, sy);
+};
+const angText = (id) => `#pv-canvas g.dim[data-dim="${id}"] text.dimt[data-segment]`;
+const ownGridIds = (page) => page.locator(ownGrids).evaluateAll((gs) => gs.map((g) => g.dataset.datum));
+// Anna draws a grid from one point to another; both browsers have it before she draws the next.
+const angGrid = async (from, to) => {
+  const before = await ownGridIds(anna);
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await anna.click('#ribbon [data-act="dtool"][data-a="architecture:grid"]');
+  await anna.waitForSelector('#pv-canvas svg');
+  await clickPlan(anna, ...from);
+  await anna.waitForFunction(() => document.querySelector('#hint')?.textContent.includes('other end'));
+  await clickPlan(anna, ...to);
+  await anna.waitForFunction(() => !document.querySelector('#hint')?.textContent.includes('other end'));
+  for (const page of [anna, ben]) {
+    await page
+      .waitForFunction(
+        ([at, seen]) => [...document.querySelectorAll(at)].some((g) => !seen.includes(g.dataset.datum)),
+        [ownGrids, before],
+      )
+      .catch(async (error) => {
+        // Say what the page had in hand, so a miss is read to its cause.
+        const state = await page.evaluate(() => ({
+          hint: document.querySelector('#hint')?.textContent,
+          problems: [...window.spare.problems.entries()],
+          pending: window.spare.pending.length,
+          view: window.spare.openView,
+        }));
+        console.log(`   the grid from ${from} to ${to} is not drawn in ${page === anna ? 'Anna' : 'Ben'}'s browser: ${JSON.stringify(state)}`);
+        throw error;
+      });
+  }
+  await anna.keyboard.press('Escape');
+  return (await ownGridIds(anna)).find((id) => !before.includes(id));
+};
+// East; 3:4 off it; square to that; parallel to the 3:4 grid, 500 mm across.
+const angGrids = [];
+for (const [from, to] of [
+  [[7000, 8500], [9400, 8500]],
+  [[7400, 8800], [8600, 9700]],
+  [[9600, 8800], [9000, 9600]],
+  [[7100, 9200], [8300, 10100]],
+]) {
+  angGrids.push(await angGrid(from, to));
+}
+check(
+  (await anna.locator(gridGroup(angGrids[1])).getAttribute('data-x1')) === '8600' &&
+    (await ben.locator(gridGroup(angGrids[3])).getAttribute('data-y1')) === '10100',
+  'Anna draws four grids, one east, one at 3:4, one square to it and one parallel to it, and both browsers have them where she drew them',
+);
+// Anna draws walls, one at a time: each is there before she draws the next.
+const newLayered = (before) =>
+  [...window.spare.elements.values()]
+    .filter((p) => p.el.recipe.op === 'wall.layered' && !before.includes(p.el.id) && p.fill?.recipe?.args?.layers)
+    .map((p) => [p.el.id, p.el.recipe.args.start.map((v) => Number(v.split(':').pop()) / 6400)]);
+const drawWalls = async (page, walls) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+  await page.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
+  const before = await wallsOf(page);
+  for (const [n, [x0, y0, x1, y1]] of walls.entries()) {
+    await page.waitForSelector('#pv-canvas svg');
+    await clickPlan(page, x0, y0);
+    await page.waitForFunction(() => document.querySelector('#hint')?.textContent.includes('end point'));
+    await clickPlan(page, x1, y1);
+    await page.waitForFunction(
+      ([seen, count]) => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered' && !seen.includes(p.el.id)).length === count,
+      [before, n + 1],
+    );
+  }
+  await page.keyboard.press('Escape');
+};
+const bothHave = async (before, count) => {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction(
+      ([seen, n]) => [...window.spare.elements.values()].filter((p) => p.el.recipe.op === 'wall.layered' && !seen.includes(p.el.id) && p.fill?.recipe?.args?.layers).length === n,
+      [before, count],
+    );
+  }
+};
+
+// The tool offers every kind; an angle is two grids and a click inside the angle meant.
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Annotate' }).click();
+await anna.locator('#ribbon [data-act="dtool"][data-a="architecture:dim"]').first().click();
+const kindSelect = '#pv-side select[data-key="dim-layout"]';
+await anna.waitForSelector(kindSelect);
+const kinds = await anna.locator(`${kindSelect} option`).evaluateAll((options) => options.map((o) => o.value));
+check(
+  ['horizontal', 'vertical', 'aligned', 'ordinate-x', 'ordinate-y', 'angular', 'radial', 'diameter', 'arc_length'].every((k) => kinds.includes(k)),
+  'the dimension tool offers linear, aligned, ordinate, angle, radius, diameter and arc length dimensions',
+);
+const makeDimension = async (kind, picks, place) => {
+  await anna.locator(kindSelect).selectOption(kind);
+  await anna.waitForFunction(([at, k]) => document.querySelector(at)?.value === k, [kindSelect, kind]);
+  for (const [i, [x, y]] of picks.entries()) {
+    await clickPlan(anna, x, y);
+    await anna.waitForSelector(`#pv-canvas g.dim-pick[data-pick="${i}"]`);
+  }
+  const before = (await dimListing()).map((d) => d.id);
+  await clickPlan(anna, place[0], place[1]);
+  await anna.waitForFunction(
+    ([at, seen]) => [...document.querySelectorAll(at)].some((g) => !seen.includes(g.dataset.dim)),
+    ['#pv-canvas g.dim[data-kind="dimension"]', before],
+  );
+  const made = (await dimListing()).find((d) => !before.includes(d.id));
+  return made;
+};
+const acute = await makeDimension('angular', [[8200, 8500], [8000, 9250]], [8000, 8750]);
+check(acute.kind === 'angular' && acute.figure.kind === 'arc', 'Anna picks the east grid and the 3:4 grid and clicks inside the angle: the server makes an angle drawn as an arc');
+for (const page of [anna, ben]) {
+  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(acute.id), '36.87°']);
+}
+check(
+  acute.segments[0].angle === 'angle:331829079' && acute.segments[0].exact === false,
+  'both browsers show 36.87°: the nearest unit to 36.8699°, marked not exact',
+);
+check((await ben.locator(`#pv-canvas g.dim[data-dim="${acute.id}"] path.dim-arc`).count()) === 1, "and Ben's browser draws its arc");
+const corner = await makeDimension('angular', [[8000, 9250], [9300, 9200]], [8500, 9400]);
+for (const page of [anna, ben]) {
+  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(corner.id), '90.00°']);
+}
+check(corner.segments[0].exact === true, 'the 3:4:5 corner off the axes is exactly 90.00° in both browsers');
+const across = await makeDimension('aligned', [[8000, 9250], [7700, 9650]], [7850, 9450]);
+for (const page of [anna, ben]) {
+  await page.waitForFunction(([at, text]) => document.querySelector(at)?.textContent === text, [angText(across.id), '500 mm']);
+}
+check(across.layout.kind === 'aligned' && across.segments[0].exact, 'an aligned dimension across the parallel grids reads 500 mm, exactly, in both browsers');
+await shot(anna, 'anna-angles');
+await shot(ben, 'ben-angles');
+
+// Ben picks the angle: his palette reads it as the server words it.
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const [arcX, arcY] = await ben.evaluate((id) => {
+  const d = window.spare.dimensions.list.find((x) => x.id === id);
+  return [Number(d.figure.middle.x.split(':').pop()) / 6400, Number(d.figure.middle.y.split(':').pop()) / 6400];
+}, acute.id);
+await clickPlan(ben, arcX, arcY);
+await ben.waitForSelector(`#pv-canvas g.dim[data-dim="${acute.id}"][data-picked="yes"]`);
+check((await ben.locator('#pv-side [data-dim-kind]').textContent()) === 'Angle', "Ben picks the angle by its arc and his palette says it is an angle");
+check((await ben.locator('#pv-side [data-dim-segment="0"]').textContent()) === '36.87°', 'with its value');
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A string across four walls, made equal.
+await anna.keyboard.press('Escape');
+const eqWallsBefore = await wallsOf(anna);
+await drawWalls(anna, [
+  [11000, 8500, 11000, 9700],
+  [11600, 8500, 11600, 9700],
+  [13500, 8500, 13500, 9700],
+  [14000, 8500, 14000, 9700],
+]);
+await bothHave(eqWallsBefore, 4);
+const eqWalls = (await anna.evaluate(newLayered, eqWallsBefore)).sort((a, b) => a[1][0] - b[1][0]).map((w) => w[0]);
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Annotate' }).click();
+await anna.locator('#ribbon [data-act="dtool"][data-a="architecture:dim"]').first().click();
+await anna.waitForSelector(kindSelect);
+const eqRun = await makeDimension('horizontal', [[11000, 9100], [11600, 9100], [13500, 9100], [14000, 9100]], [12500, 10000]);
+const runTexts = (page) => page.locator(`#pv-canvas g.dim[data-dim="${eqRun.id}"] text.dimt[data-segment]`).allTextContents();
+for (const page of [anna, ben]) {
+  await page.waitForFunction((at) => document.querySelectorAll(at).length === 3, `#pv-canvas g.dim[data-dim="${eqRun.id}"] text.dimt[data-segment]`);
+}
+check(JSON.stringify(await runTexts(ben)) === JSON.stringify(['600 mm', '1900 mm', '500 mm']), 'Anna dimensions the four walls as a string: 600, 1900 and 500 mm in both browsers');
+
+// Anna lets go of the third wall; Ben takes it.
+await anna.keyboard.press('Escape');
+await anna.waitForFunction(() => !document.querySelector('#pv-side select[data-key="dim-layout"]'));
+await clickPlan(anna, 13500, 9100);
+await anna.waitForFunction((id) => document.querySelector(`g.element[data-id="${id}"]`) && window.spare.claims?.get?.(id)?.person, eqWalls[2]);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !window.spare.claims?.get?.(id), eqWalls[2]);
+await ben.waitForFunction((id) => !window.spare.claims?.get?.(id), eqWalls[2]);
+await clickPlan(ben, 13500, 9100);
+await anna.waitForSelector(`g.element[data-id="${eqWalls[2]}"] text.claimt`);
+pass('Anna lets go of the third wall and Ben takes it: Anna sees him working on it');
+
+// Anna picks the string and makes its segments equal: the server names the wall in Ben's hands.
+await clickPlan(anna, 12500, 10000);
+await anna.waitForSelector(`#pv-canvas g.dim[data-dim="${eqRun.id}"][data-picked="yes"]`);
+await anna.click('#pv-side [data-act="stackdimequal"]');
+const eqRefusal = `#pv-side [data-problem="dim:${eqRun.id}"]`;
+await anna.waitForSelector(eqRefusal);
+const refusedWords = await anna.locator(eqRefusal).textContent();
+check(
+  refusedWords.includes(`Reference 3 (the reference line of ${eqWalls[2]}) cannot move`) && refusedWords.includes('Ben is working on it'),
+  `Anna's "make the segments equal" is turned back, naming the wall Ben is working on (${refusedWords})`,
+);
+check(JSON.stringify(await runTexts(ben)) === JSON.stringify(['600 mm', '1900 mm', '500 mm']), 'and nothing moved');
+
+// Ben lets go; Anna makes them equal; both see three equal segments and the walls where they went.
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] text.claimt`), eqWalls[2]);
+await anna.click('#pv-side [data-act="stackdimequal"]');
+for (const page of [anna, ben]) {
+  await page.waitForFunction(
+    (at) => [...document.querySelectorAll(at)].map((t) => t.textContent).join('|') === '1000 mm|1000 mm|1000 mm',
+    `#pv-canvas g.dim[data-dim="${eqRun.id}"] text.dimt[data-segment]`,
+  );
+}
+await ben.waitForFunction(
+  ([a, b]) => [a, b].map((w) => Number(window.spare.elements.get(w).el.recipe.args.start[0].split(':').pop()) / 6400).join() === '12000,13000',
+  [eqWalls[1], eqWalls[2]],
+);
+pass("Ben lets go and Anna makes the segments equal: in Ben's browser the inner walls are at 12000 and 13000");
+const equalNow = (await dimListing()).find((d) => d.id === eqRun.id);
+check(equalNow.equalities[0]?.holds === true && equalNow.equalities[0]?.equal === true, 'the server holds the three segments equal, exactly');
+await anna.waitForSelector('#pv-side [data-dim-equal]');
+check((await anna.locator('#pv-side [data-dim-equal]').textContent()).endsWith(': equal'), "Anna's palette says they are equal");
+await shot(ben, 'ben-equal');
+
+// One step: Anna's undo puts both walls back and the equality goes.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'dimension.equalize');
+await anna.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) {
+  await page.waitForFunction(
+    (at) => [...document.querySelectorAll(at)].map((t) => t.textContent).join('|') === '600 mm|1900 mm|500 mm',
+    `#pv-canvas g.dim[data-dim="${eqRun.id}"] text.dimt[data-segment]`,
+  );
+}
+await ben.waitForFunction(
+  ([a, b]) => [a, b].map((w) => Number(window.spare.elements.get(w).el.recipe.args.start[0].split(':').pop()) / 6400).join() === '11600,13500',
+  [eqWalls[1], eqWalls[2]],
+);
+pass("Anna's undo puts both walls back in one step, in Ben's browser too");
+
+// Anna deletes what she made: the four dimensions, then the eight walls.
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+for (const made of [eqRun, acute, corner, across]) {
+  const [mx, my] = await anna.evaluate((id) => {
+    const d = window.spare.dimensions.list.find((x) => x.id === id);
+    const at = d.figure.kind === 'arc' ? d.figure.middle : d.segments[0].middle;
+    return [Number(at.x.split(':').pop()) / 6400, Number(at.y.split(':').pop()) / 6400];
+  }, made.id);
+  // The band along a line or an arc is picked; the text on it is not, so the click is just off it.
+  await clickPlan(anna, mx, my);
+  await anna.waitForSelector(`#pv-canvas g.dim[data-dim="${made.id}"][data-picked="yes"]`);
+  await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+  await anna.keyboard.press('Delete');
+  await ben.waitForFunction((id) => !document.querySelector(`#pv-canvas g.dim[data-dim="${id}"]`), made.id);
+}
+for (const id of eqWalls) {
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  await pickAt(anna, id, 0.5);
+  await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+  await anna.keyboard.press('Delete');
+  await ben.waitForFunction((wall) => !document.querySelector(`g.element[data-id="${wall}"]`), id);
+}
+for (const id of angGrids) {
+  await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const bubble = await boxOf(anna.locator(`${gridGroup(id)} circle.bub`), `grid ${id}'s bubble`);
+  await anna.mouse.click(bubble.x + bubble.width / 2, bubble.y + bubble.height / 2);
+  await anna.waitForSelector(`${gridGroup(id)}[data-picked="yes"]`);
+  await anna.waitForSelector('#ribbon >> text=Delete');
+  await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+  await anna.keyboard.press('Delete');
+  await ben.waitForFunction((at) => !document.querySelector(at), gridGroup(id));
+}
+check((await dimListing()).length === 0, 'Anna deletes the dimensions, the walls and the grids, and the server lists no dimension');
+await ben.click('#browser [data-act="view"][data-a="l1"]');
 console.log('\n   Roofs, on a rectangle');
 // Anna makes a gable roof over the seed building, of a type she chooses in the roof tool's options;
 // Ben sees it, its ridge drawn from its record. A roof the server refuses (hips) is turned back in the
@@ -2408,6 +2797,187 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   if (mismatched.length) console.log(`   built differently on ${name}'s page: ${mismatched.map((m) => m.id).join(', ')}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the generated door's included, matches the server's`);
+}
+
+console.log('\n   Components');
+// Anna puts a desk beside the wall of the last section, and hangs a basin on that wall's face, from the
+// Component tool; Ben sees both, the desk of its family's category (furniture), standing on
+// a level at the point she clicked and turned half a turn, the basin of plumbing fixtures hung on a named face
+// of the wall. Ben changes the desk's type and turns it; Anna sees the new size. Ben deletes it and undoes the
+// delete; a point that is not whole millimetres is refused in words under the field; a fresh load agrees.
+// Nobody changes what the other touched in the last 30 s without the other letting go first, and an undo
+// claims the element it writes too.
+const cmpKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.keyboard.press('Escape');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:component"]');
+await anna.waitForSelector('#pv-side select[data-key="component-category"] option', { state: 'attached' });
+const cmpCategories = await anna.locator('#pv-side select[data-key="component-category"] option').allTextContents();
+check(
+  ['Furniture', 'Casework', 'Plumbing fixtures', 'Lighting fixtures', 'Planting', 'Generic models'].every((name) => cmpCategories.includes(name)),
+  `the component tool lists the library's categories: ${cmpCategories.join(', ')}`,
+);
+await anna.locator('#pv-side select[data-key="component-category"]').selectOption({ label: 'Furniture' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-family"] option')].some((o) => o.textContent === 'Desk'),
+);
+const cmpFamilies = await anna.locator('#pv-side select[data-key="component-family"] option').allTextContents();
+check(['Desk', 'Chair', 'Bed', 'Sofa'].every((name) => cmpFamilies.includes(name)), `and the furniture in it: ${cmpFamilies.join(', ')}`);
+await anna.locator('#pv-side select[data-key="component-family"]').selectOption({ label: 'Desk' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-type"] option')].some((o) => o.textContent === '1500 x 750'),
+);
+await anna.locator('#pv-side select[data-key="component-type"]').selectOption({ label: '1500 x 750' });
+await anna.locator('#pv-side select[data-key="component-turn"]').selectOption({ label: '180°' });
+
+// The desk goes on the clear side of her wall, its back toward it: the click is the middle of the desk.
+const cmpDesk = await onPlan(anna, 9000, -700);
+await anna.mouse.click(cmpDesk.x, cmpDesk.y);
+const cmpOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.props['@category'] === '1700' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(cmpOf, cmpKnown);
+const cmpId = await ben.evaluate(cmpOf, cmpKnown);
+const cmpRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cmpId);
+check(
+  cmpRecord.kind === 'family' &&
+    cmpRecord.recipe.args.type === 'd1500x750' &&
+    cmpRecord.props['@place.turn'] === 'angle:1620000000' &&
+    (cmpRecord.references ?? []).length === 0 &&
+    Math.abs(cmpRecord.placement.x - 9000) <= 100 &&
+    Math.abs(cmpRecord.placement.y + 700) <= 100,
+  "the desk Anna places is in Ben's browser: furniture on no wall, at the point she clicked, turned half a turn",
+);
+const cmpParts = ([id]) => document.querySelectorAll(`g.element[data-id="${id}"] polygon.part`).length > 0;
+await ben.waitForFunction(cmpParts, [cmpId]);
+await anna.waitForFunction(cmpParts, [cmpId]);
+pass('and both browsers draw its top and its legs, each in its material');
+
+// The basin hangs on the wall's face: it is a click on the wall, the side clicked the side it hangs on.
+await anna.locator('#pv-side select[data-key="component-category"]').selectOption({ label: 'Plumbing fixtures' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-family"] option')].some((o) => o.textContent === 'Basin'),
+);
+await anna.locator('#pv-side select[data-key="component-family"]').selectOption({ label: 'Basin' });
+await anna.waitForFunction(() =>
+  [...document.querySelectorAll('#pv-side select[data-key="component-type"] option')].some((o) => o.textContent === 'Standard'),
+);
+await anna.locator('#pv-side select[data-key="component-type"]').selectOption({ label: 'Standard' });
+check(
+  (await anna.locator('#pv-side select[data-key="component-turn"]').count()) === 0,
+  'a family that hangs on a wall has no turn to choose: its wall turns it',
+);
+const cmpWallBox = await box(anna, famWall);
+await anna.mouse.click(cmpWallBox.x + cmpWallBox.width * 0.8, cmpWallBox.y + cmpWallBox.height / 2 + 1);
+const cmpBasinOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.recipe.op === 'family.instance' && p.el.props['@category'] === '1900' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(cmpBasinOf, cmpKnown);
+const cmpBasin = await ben.evaluate(cmpBasinOf, cmpKnown);
+await anna.keyboard.press('Escape');
+const cmpBasinRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, cmpBasin);
+check(
+  cmpBasinRecord.kind === 'family' && cmpBasinRecord.recipe.args.type === 'standard',
+  `the basin Anna hangs is in Ben's browser, of the type she chose (${cmpBasinRecord.kind}, ${cmpBasinRecord.recipe.args.type})`,
+);
+check(
+  cmpBasinRecord.references.length === 1 &&
+    cmpBasinRecord.references[0].kind === 'face' &&
+    cmpBasinRecord.references[0].element === famWall &&
+    /^length:q0:/.test(cmpBasinRecord.props['@host.along']),
+  `hung on a named face of her wall at an offset along it (${JSON.stringify(cmpBasinRecord.references)}, ${cmpBasinRecord.props['@host.along']})`,
+);
+await ben.waitForFunction(cmpParts, [cmpBasin]);
+await anna.waitForFunction(cmpParts, [cmpBasin]);
+pass('and both browsers draw it');
+if (process.env.STACK_GEOMETRY === 'kernel') {
+  await until(
+    async () => (await asAnna(`shape/${famWall}`)).built.result.shape?.names ?? [],
+    (names) => !names.some((n) => n.role.startsWith(`tool(${cmpBasin})`)),
+    'the server cuts nothing from the wall for the basin',
+  );
+  await ben.waitForFunction(
+    ([wall, basin]) => !window.spare.elements.get(wall)?.shape?.names?.some((n) => n.role.startsWith(`tool(${basin})`)),
+    [famWall, cmpBasin],
+  );
+  pass("the basin takes nothing from the wall, on the server and as Ben's page builds it");
+}
+await shot(ben, 'ben-components');
+
+// Ben retypes the desk, and turns it: Anna sees the new size and the new turn.
+const cmpSize = (page) =>
+  page.evaluate((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return [max[0] - min[0], max[1] - min[1]];
+  }, cmpId);
+const cmpSizeBefore = await cmpSize(anna);
+const cmpPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const at = await box(page, id);
+  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+  await page.waitForSelector(`#pv-side [data-family-properties="${id}"] select[data-key="family-retype"]`);
+};
+await cmpPick(ben, cmpId);
+await ben.locator('#pv-side select[data-key="family-retype"]').selectOption({ label: '1800 x 800' });
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.type === 'd1800x800', cmpId);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return max[0] - min[0] === before[0] + 300 && max[1] - min[1] === before[1] + 50;
+  },
+  [cmpId, cmpSizeBefore],
+);
+pass("Ben changes the desk's type to 1800 x 800, and Anna's browser draws the new size");
+await ben.locator('#pv-side select[data-key="family-turn"]').selectOption({ label: '270°' });
+await anna.waitForFunction((id) => window.spare.elements.get(id)?.el.props['@place.turn'] === 'angle:2430000000', cmpId);
+await anna.waitForFunction(
+  ([id, before]) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return max[0] - min[0] === before[1] + 50 && max[1] - min[1] === before[0] + 300;
+  },
+  [cmpId, cmpSizeBefore],
+);
+pass('and turns it three quarters round, and her browser draws it across, long way along y');
+
+// A point that is not whole millimetres is refused in words, under the field, and nothing changes.
+const cmpX = '#pv-side input[data-key="family-point-x"]';
+await ben.locator(cmpX).fill('9000.5 mm');
+await ben.locator(cmpX).press('Enter');
+await ben.waitForSelector(`#pv-side [data-problem="family:${cmpId}"]`);
+const cmpWords = await ben.locator(`#pv-side [data-problem="family:${cmpId}"]`).textContent();
+check(cmpWords.includes('is not a whole number of millimetres'), `the refusal reads: ${cmpWords}`);
+check(
+  (await anna.evaluate((id) => window.spare.elements.get(id).el.placement.x, cmpId)) === cmpRecord.placement.x,
+  'and the desk is where it was',
+);
+
+// Ben deletes the desk, and undoes the delete.
+await cmpPick(ben, cmpId);
+await ben.keyboard.press('Delete');
+await anna.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), cmpId);
+pass("Ben deletes the desk, and it is gone from Anna's plan");
+await ben.waitForFunction(() => window.spare.steps.undo?.cmd === 'family.delete');
+await ben.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+await anna.waitForFunction(cmpParts, [cmpId]);
+await ben.waitForFunction(cmpParts, [cmpId]);
+pass('and his undo puts it back, in both browsers');
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A fresh load agrees: the same records, the same type and turn, nothing built differently.
+const cmpFresh = await signIn('anna');
+await cmpFresh.waitForFunction(cmpParts, [cmpId]);
+await cmpFresh.waitForFunction(cmpParts, [cmpBasin]);
+for (const id of [cmpId, cmpBasin]) {
+  const here = await anna.evaluate((x) => window.spare.elements.get(x).hash, id);
+  check(
+    (await cmpFresh.evaluate((x) => window.spare.elements.get(x).hash, id)) === here,
+    `a fresh load holds ${id}'s record as Anna's page does`,
+  );
+}
+await cmpFresh.waitForFunction((id) => window.spare.elements.get(id).el.props['@place.turn'] === 'angle:2430000000', cmpId);
+pass('at the turn Ben gave the desk');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', cmpFresh]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the desk's and the basin's included, matches the server's`);
 }
 
 console.log('\n   Openings and shafts');
@@ -4277,5 +4847,253 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+
+console.log('\n   View templates, element overrides and view filters');
+// Anna opens Level 1's plan and sets an override on one wall (a colour and halftone, then hiding it,
+// then clearing it) from the Overrides dialog on the view's line, and Ben's page reads it and, on
+// a server with the geometry kernel, both draw it. She gives walls a text parameter and a filter on
+// it with a colour, and a second filter that matches too: the first in the list wins the colour, and
+// moving it down gives the colour to the other. Then she makes a view template from the view, ties
+// the view to it and changes the template (its scale, then what walls cut): Ben's page, which has the
+// same view open, follows each change at once, and his try to give the tied view a graphics rule of
+// its own is turned back in the server's words. She unties the view, which keeps what it showed,
+// and deletes the template. Each step is read from the server's lists in both pages; the drawing
+// is checked on the kernel's server only, which is the one that draws.
+const vtKernel = process.env.STACK_GEOMETRY === 'kernel';
+const vtView = 'VP-1';
+const vtLeaf = (name) => `#browser [data-act="stackview"]:has(span:text-is("${name}"))`;
+const vtDialog = '#stack-manage';
+const vtField = (key) => `${vtDialog} [data-key="${key}"]`;
+const vtWall = '#pv-canvas g.drawn line[data-element="W-101"]';
+const vtClose = async (page) => {
+  await page.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+  await page.waitForSelector('#dlg', { state: 'hidden' });
+};
+// Waits until a list the server reads satisfies a test, written as the source of a function of the
+// list (it is read in the page, where the list is fetched).
+const vtUntil = (page, path, source) =>
+  page.waitForFunction(
+    async ([url, test]) => {
+      const data = await fetch(url).then((r) => r.json());
+      // eslint-disable-next-line no-eval
+      return eval(test)(data);
+    },
+    [`${model}/${path}`, source],
+    { polling: 250 },
+  );
+const vtStrokes = (page, colour) => page.locator(`#pv-canvas g.drawn line[stroke="${colour}"]`);
+
+await toArchitecture(anna);
+await toArchitecture(ben);
+await anna.click(vtLeaf('Level 1 plan'));
+await ben.click(vtLeaf('Level 1 plan'));
+let vtPlain = null;
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'attached' });
+  vtPlain = await ben.locator(vtWall).first().getAttribute('stroke-width');
+}
+
+// --- An override on one wall.
+await anna.keyboard.press('Escape');
+let vtSelected = false;
+for (const at of [0.1, 0.9, 0.5, 0.3, 0.7]) {
+  const where = await box(anna, 'W-101');
+  await anna.mouse.click(where.x + where.width * at, where.y + where.height / 2);
+  vtSelected = (await anna.locator('g.element[data-id="W-101"] .body.sel').count()) === 1;
+  if (vtSelected) break;
+}
+check(vtSelected, 'Anna selects the wall W-101 in the plan');
+await anna.click('#browser [data-act="stackviewoverrides"]');
+await anna.waitForSelector(`${vtDialog} [data-ov-element="W-101"]`);
+await anna.locator(vtField('ov-use-colour')).check();
+await anna.locator(vtField('ov-colour')).fill('#1040c0');
+await anna.locator(vtField('ov-halftone')).check();
+await anna.click(vtField('ov-make'));
+await anna.waitForSelector(`${vtDialog} [data-override="W-101"]:has-text("#1040c0")`);
+await vtUntil(
+  ben,
+  `views/${vtView}/overrides`,
+  '(l) => l.overrides.length === 1 && l.overrides[0].element === "W-101" && l.overrides[0].look.halftone === true && l.overrides[0].look.colour.join() === "16,64,192"',
+);
+pass("Anna gives the wall a colour and halftone in this view: Ben's page reads the override");
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(`${vtWall}[stroke="#1040c0"][opacity="0.5"]`, { state: 'attached' });
+    check(
+      (await vtStrokes(page, '#1040c0').evaluateAll((lines) => lines.every((l) => l.dataset.element === 'W-101'))) === true,
+      "only that wall's lines are drawn in its colour, in both browsers",
+    );
+  }
+}
+await shot(anna, 'anna-element-override');
+await anna.locator(vtField('ov-hide')).check();
+await anna.click(vtField('ov-make'));
+await vtUntil(ben, `views/${vtView}/overrides`, '(l) => l.overrides[0].look.shown === false && l.overrides[0].look.halftone === true');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'detached' });
+  pass('the wall hidden in this view leaves the drawing in both browsers, the other walls stay');
+} else {
+  pass("the wall hidden in this view: Ben's page reads it");
+}
+await anna.click(`${vtDialog} [data-act="stackoverrideclear"][data-a="W-101"]`);
+await anna.waitForSelector(`${vtDialog} [data-ov-none]`);
+await vtUntil(ben, `views/${vtView}/overrides`, '(l) => l.overrides.length === 0');
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(vtWall, { state: 'attached' });
+    await page.waitForFunction((sel) => !document.querySelector(sel), `${vtWall}[stroke="#1040c0"]`);
+  }
+}
+pass('one clear takes the override away, and the wall is drawn as it was in both browsers');
+await vtClose(anna);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// --- Two filters on a parameter of walls.
+await anna.evaluate(() => {
+  const definition = { id: 'P-vtfire', name: 'Fire rating', kind: 'text', holder: 'instance', choices: [] };
+  window.spare.edit('parameter.define', { definition });
+  window.spare.edit('parameter.bind', { parameter: 'P-vtfire', categories: [100] });
+});
+await anna.waitForFunction(() => window.spare.pending.length === 0);
+const vtRate = async (value) => {
+  await anna.evaluate((text) => window.spare.edit('element.param', { element: 'W-101', parameter: 'P-vtfire', value: text }), value);
+  await anna.waitForFunction(() => window.spare.pending.length === 0);
+};
+await vtRate('1h');
+await anna.click('#browser [data-act="stackviewfilters"]');
+await anna.waitForSelector(vtField('filter-name'));
+await anna.locator(vtField('filter-category')).selectOption('100');
+await anna.waitForFunction((sel) => [...document.querySelectorAll(`${sel} option`)].some((o) => o.value === 'P-vtfire'), vtField('filter-parameter'));
+await anna.locator(vtField('filter-parameter')).selectOption('P-vtfire');
+await anna.locator(vtField('filter-name')).fill('One hour');
+await anna.locator(vtField('filter-value')).fill('1h');
+await anna.locator(vtField('filter-use-colour')).check();
+await anna.locator(vtField('filter-colour')).fill('#10a040');
+await anna.click(vtField('filter-make'));
+await anna.waitForSelector(`${vtDialog} [data-filter]:has-text("One hour")`);
+await anna.locator(vtField('filter-name')).fill('Rated');
+await anna.locator(vtField('filter-value')).fill('h');
+await anna.locator(vtField('filter-op')).selectOption('contains');
+await anna.locator(vtField('filter-colour')).fill('#c01010');
+await anna.locator(vtField('filter-halftone')).check();
+await anna.click(vtField('filter-make'));
+await anna.waitForSelector(`${vtDialog} [data-filter]:has-text("Rated")`);
+await vtUntil(
+  ben,
+  `views/${vtView}/filters`,
+  '(l) => l.filters.map((f) => f.name).join() === "One hour,Rated" && l.filters[0].parameter_name === "Fire rating" && l.filters[1].op === "contains"',
+);
+pass("Anna adds two filters on a wall parameter: Ben's page reads them in their order");
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    // Both match the wall rated 1h: the first filter wins the colour, the second adds the halftone.
+    await page.waitForSelector(`${vtWall}[stroke="#10a040"][opacity="0.5"]`, { state: 'attached' });
+  }
+  pass("the wall rated 1h is drawn in the first filter's colour and the second's halftone, in both browsers");
+}
+// Moving the first filter down gives the colour to the other: the order decides.
+await anna.locator(`${vtDialog} [data-filter] [data-act="stackfilterdown"]`).first().click();
+await vtUntil(ben, `views/${vtView}/filters`, '(l) => l.filters.map((f) => f.name).join() === "Rated,One hour"');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(`${vtWall}[stroke="#c01010"]`, { state: 'attached' });
+}
+pass('moving a filter down gives its colour to the one that is now first, and Ben follows');
+// A parameter that changes changes the drawing: a rating no filter matches draws the wall as it was.
+await vtRate('none');
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction((sel) => !document.querySelector(sel), `${vtWall}[stroke="#c01010"]`);
+    await page.waitForSelector(`${vtWall}:not([stroke="#c01010"]):not([stroke="#10a040"])`, { state: 'attached' });
+  }
+  await vtRate('1h');
+  for (const page of [anna, ben]) await page.waitForSelector(`${vtWall}[stroke="#c01010"]`, { state: 'attached' });
+  pass("the wall's rating changed and changed back: the filters are asked again and the drawing follows in both browsers");
+}
+for (const name of ['Rated', 'One hour']) {
+  await anna.locator(`${vtDialog} [data-filter]:has-text("${name}") [data-act="stackfilteroff"]`).click();
+  await anna.waitForFunction((n) => ![...document.querySelectorAll('#stack-manage [data-filter]')].some((row) => row.textContent.includes(n)), name);
+}
+await vtUntil(ben, `views/${vtView}/filters`, '(l) => l.filters.length === 0');
+await vtClose(anna);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// --- A view template, tied to the view.
+await anna.click('#browser [data-act="stackviewtemplates"]');
+await anna.waitForSelector(vtField('new-template-name'));
+await anna.locator(vtField('new-template-name')).fill('Working plan');
+await anna.locator(vtField('new-template-name')).press('Enter');
+await anna.waitForSelector(`${vtDialog} [data-template]:has(h3:text-is("Working plan"))`);
+const vtTemplate = (await asAnna('view-templates'))[0].id;
+check((await asAnna('view-templates')).length === 1, 'Anna makes a view template from the view');
+await anna.click(`${vtDialog} [data-act="stacktpltie"][data-a="${vtTemplate}"]`);
+await anna.waitForSelector(`${vtDialog} [data-tpl-tied="${vtTemplate}"]`);
+await ben.waitForSelector(`#browser [data-view-follows="${vtTemplate}"]:has-text("Follows Working plan")`);
+pass("Anna ties the view to the template and Ben's browser says the view follows it");
+
+// She changes the template's scale: the view in Ben's page changes with it.
+const vtOldScale = (await asAnna('views')).find((v) => v.id === vtView).scale;
+await anna.locator(`${vtDialog} [data-key="tpl-scale:${vtTemplate}"]`).fill('20');
+await anna.locator(`${vtDialog} [data-key="tpl-scale:${vtTemplate}"]`).press('Enter');
+await vtUntil(ben, 'views', `(l) => l.find((v) => v.id === "${vtView}").scale === 20`);
+await ben.waitForSelector(`${vtLeaf('Level 1 plan')}[title$="1:20"]`);
+check(vtOldScale !== 20, "the template's scale reaches the view tied to it: Ben's browser lists it at 1:20");
+if (vtKernel) {
+  await ben.waitForFunction(([sel, was]) => {
+    const line = document.querySelector(sel);
+    return line && line.getAttribute('stroke-width') !== was;
+  }, [vtWall, vtPlain]);
+  pass("Ben's plan is drawn again at the new scale, its pens printing as that scale says");
+}
+
+// She hides what walls cut in the template, from its own Graphics: both pages lose the walls.
+await anna.click(`${vtDialog} [data-act="stacktplgraphics"][data-a="${vtTemplate}"]`);
+await anna.waitForSelector(vtField('gfx-category'));
+await anna.locator(vtField('gfx-category')).selectOption('100');
+await anna.waitForSelector(`${vtDialog} [data-gfx-origin="project"]`);
+await anna.locator(vtField('gfx-shown')).uncheck();
+await anna.waitForSelector(`${vtDialog} [data-gfx-rule="100"]:has-text("hidden")`);
+await vtUntil(ben, `views/${vtView}/graphics`, '(l) => l.rules.some((r) => r.category === 100 && r.cut && r.cut.shown === false)');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'detached' });
+  pass("walls hidden in the template leave the plan of the view tied to it, in both browsers");
+} else {
+  pass("walls hidden in the template: the view tied to it lists the rule in Ben's page");
+}
+
+// Ben cannot give the tied view a rule of his own: the server says why, beside his control.
+await ben.click('#browser [data-act="stackviewgraphics"]');
+await ben.waitForSelector(vtField('gfx-category'));
+await ben.locator(vtField('gfx-category')).selectOption('100');
+await ben.waitForSelector(`${vtDialog} [data-gfx-origin="category"]`);
+await ben.locator(vtField('gfx-halftone')).click();
+await ben.waitForSelector(`${vtDialog} [data-problem="graphics:100:cut"]`);
+const vtWords = await ben.locator(`${vtDialog} [data-problem="graphics:100:cut"]`).textContent();
+check(
+  /follows the view template Working plan, which sets its graphics rules: change it in the template, or untie the view first\./.test(vtWords),
+  `the tied view refuses a rule of its own, in words: ${vtWords}`,
+);
+await vtClose(ben);
+
+// She unties the view: it keeps what it showed, and the template can go.
+await anna.click(`#dlg .dlg-f [data-act="dgclose"]`);
+await anna.waitForSelector('#dlg', { state: 'hidden' });
+await anna.click('#browser [data-act="stackviewtemplates"]');
+await anna.waitForSelector(`${vtDialog} [data-act="stacktpluntie"]`);
+await anna.click(`${vtDialog} [data-act="stacktpluntie"]`);
+await ben.waitForFunction(() => !document.querySelector('#browser [data-view-follows]'));
+const vtKept = (await asAnna('views')).find((v) => v.id === vtView);
+check(vtKept.template === null && vtKept.scale === 20, 'she unties the view: it follows nothing and keeps the scale it showed');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'detached' });
+}
+await anna.click(`${vtDialog} [data-act="stacktpldelete"][data-a="${vtTemplate}"]`);
+await anna.waitForSelector(`${vtDialog} [data-tpl-none]`);
+check((await asAnna('view-templates')).length === 0, 'she deletes the template: the server holds none');
+await vtClose(anna);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, after the view templates, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

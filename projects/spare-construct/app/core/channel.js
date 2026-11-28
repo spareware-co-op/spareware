@@ -187,7 +187,7 @@ function apply(entry, sent, got) {
     refreshSide();
   }
   const families = /^family\./.test(entry.cmd) || UNDOING.has(entry.cmd);
-  if (reads || families || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$|^view\.graphics\./.test(entry.cmd)) {
+  if (reads || families || /^element\.(type|create|delete)$|^wall\.draw$|^roof\.(create|delete|retype)$|^view\./.test(entry.cmd)) {
     if (entry.target === C.model?.id) loadManage();
   }
   // The document's families, as the server lists them, may have changed: what is held, placed or made.
@@ -203,7 +203,7 @@ function apply(entry, sent, got) {
 }
 
 /** The commands that can change where walls meet: a wall made, moved, retyped, changed or deleted. */
-const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.draw)$/;
+const MEETS_WALLS = /^(element\.(create|move|set|type|delete)|wall\.(draw|join|join\.end|wrap))$/;
 
 /** The commands that change a type, a parameter or a level: what a recipe that reads records reads. */
 const READ_BY_RECIPES = /^(type|parameter|level|wall\.type|floor\.type|roof\.type|curtain\.type|opening|shaft)\.|^(floor|roof|curtain)\.defaults$/;
@@ -231,6 +231,7 @@ const WORDS = {
   'family.retype': 'changed the type of',
   'family.move': 'moved along its wall:',
   'family.flip': 'flipped to the other side of its wall:',
+  'family.turn': 'turned',
   'family.set': 'set a value of',
   'family.delete': 'deleted',
   'family.load': 'loaded a family',
@@ -246,8 +247,12 @@ const WORDS = {
   'level.tie': 'tied to a level',
   'level.top': 'tied the top of',
   'wall.draw': 'drew',
+  'wall.join': 'changed a joint of',
+  'wall.join.end': 'changed where joins are allowed on',
+  'wall.wrap': 'changed the wrapping of',
   'wall.type.create': 'made a wall type',
   'wall.type.layers': 'changed the layers of a wall type',
+  'wall.type.wrap': 'changed the wrapping of a wall type',
   'wall.type.rename': 'renamed a wall type',
   'wall.type.duplicate': 'copied a wall type',
   'wall.type.delete': 'deleted a wall type',

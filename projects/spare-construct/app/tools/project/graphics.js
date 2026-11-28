@@ -1,5 +1,6 @@
 // Tool: a view's graphics rules.
 
+import { late } from '../../core/late.js';
 import { register } from '../../core/registry.js';
 import { C } from '../../core/state.js';
 import { canEdit, capital, manage, problem } from '../../core/problems.js';
@@ -43,6 +44,7 @@ function graphicsHtml(m) {
   html += `<div class="stack-line">${edge('cut', 'Cut')}${edge('projection', 'Seen beyond the cut')}</div>`;
   html += `<div class="small faint" data-gfx-origin="${esc(look.origin)}">${esc(ORIGIN_WORDS[look.origin])}</div>`;
   html += '<table class="props">';
+  html += prow('Category drawn', `<input type="checkbox" data-chg="stackgfxdrawn" data-key="gfx-drawn"${d.hidden.includes(here.category) ? '' : ' checked'}${off} aria-label="Category drawn">`, '');
   html += prow('Shown', `<input type="checkbox" data-chg="stackgfxshown" data-key="gfx-shown"${style.shown ? ' checked' : ''}${off} aria-label="Shown">`, '');
   html += prow('Pen', `<select class="inp" data-chg="stackgfxpen" data-key="gfx-pen"${off} aria-label="Pen">${pens.join('')}</select>`, '');
   html += prow('Line pattern', `<select class="inp" data-chg="stackgfxpattern" data-key="gfx-pattern"${off} aria-label="Line pattern">${lines.join('')}</select>`, '');
@@ -72,8 +74,9 @@ function graphicsHtml(m) {
 /** Sends one part of the rule the dialog shows; the server keeps the parts not named. */
 function graphicsSet(part) {
   const m = C.manage;
-  manage('view.graphics.set', { view: m.view, category: m.category, edge: m.edge, style: part }, `graphics:${m.category}:${m.edge}`);
+  manage('view.graphics.set', { ...late.ownerArgs(m), category: m.category, edge: m.edge, style: part }, `graphics:${m.category}:${m.edge}`);
 }
+CHG.stackgfxdrawn = (box) => manage('view.categories.set', { ...late.ownerArgs(C.manage), category: C.manage.category, shown: box.checked }, `graphics:${C.manage.category}:${C.manage.edge}`);
 const graphicsStyle = () => {
   const m = C.manage;
   const look = m.data.looks.find((l) => l.category === m.category);
@@ -101,9 +104,11 @@ CHG.stackgfxhalftone = (box) => graphicsSet({ halftone: box.checked });
 CHG.stackgfxtransparency = (input) => graphicsSet({ transparency: input.value === '' ? null : Number(input.value) });
 ACT.stackgfxclear = (button) => {
   const m = C.manage;
-  manage('view.graphics.clear', { view: m.view, category: m.category, edge: button.dataset.a }, `graphics:${m.category}:${button.dataset.a}`);
+  manage('view.graphics.clear', { ...late.ownerArgs(m), category: m.category, edge: button.dataset.a }, `graphics:${m.category}:${button.dataset.a}`);
 };
-ACT.stackgfxclearall = (button) => manage('view.graphics.clear', { view: C.manage.view, category: Number(button.dataset.a) }, 'graphics');
+ACT.stackgfxclearall = (button) => manage('view.graphics.clear', { ...late.ownerArgs(C.manage), category: Number(button.dataset.a) }, 'graphics');
 
 // What this tool plugs into the core with (core/registry.js; note A96-tool-architecture.md).
 register.dialogs({ id: 'graphics', order: 30, html: (m) => graphicsHtml(m) });
+
+export { hexOf, rgbOf };

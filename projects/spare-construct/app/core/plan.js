@@ -37,6 +37,7 @@ function hint() {
   // The tool in use says what to do next (register.hints): the first that answers.
   const told = firstAnswer('hints', (entry) => entry.hint());
   if (told !== undefined) return told;
+  if (S.tool === 'component') return '<b>Component:</b> choose a category, a family and a type in the properties palette, then click in the plan to place it (on a wall for one that hangs on it).';
   return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
 }
 
@@ -86,6 +87,7 @@ function propertiesPalette() {
     }
     html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
     html += '</table>';
+    if (e.recipe.op === LAYERED) html += late.wallJoinsHtml(piece);
     // Rows of the element's own kind (register.properties): every answer.
     for (const entry of entries('properties')) {
       const rows = entry.properties(piece);
@@ -245,6 +247,13 @@ const snap = (value) => Math.round(value / SNAP_MM) * SNAP_MM;
 /** Spare Construct's own operations, by what they make. */
 const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
 
+/** An element dragged to where its record now says: a family that stands is moved by its own command. */
+function sendMove(piece) {
+  const { id, placement } = piece.el;
+  if (late.isStanding(piece.el)) edit('family.move', { element: id, x: `${placement.x} mm`, y: `${placement.y} mm` });
+  else edit('element.move', { element: id, placement });
+}
+
 function watchThePlan() {
   const canvas = $('#pv-canvas');
   let drag = null;
@@ -255,6 +264,7 @@ function watchThePlan() {
     const at = toModel(event);
     if (S.tool !== 'select') {
       if (C.readOnly || !C.model) say('Open a model in your team’s WIP to add to it.');
+      else if (S.tool === 'component') late.placeComponent(at);
       else placeWith(at, event);
       return;
     }
@@ -309,7 +319,7 @@ function watchThePlan() {
     const now = performance.now();
     if (now - lastSent >= SEND_EVERY_MS) {
       lastSent = now;
-      edit('element.move', { element: drag.id, placement: piece.el.placement });
+      sendMove(piece);
     }
   });
 
@@ -322,7 +332,7 @@ function watchThePlan() {
         edit(move, { element: drag.id, along: `${drag.along} mm` });
       }
     } else if (piece) {
-      edit('element.move', { element: drag.id, placement: piece.el.placement });
+      sendMove(piece);
     }
     drag = null;
   };

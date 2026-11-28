@@ -233,7 +233,7 @@ function placedOn(el, face, host, builder = C.builder) {
   // A wall at an angle seats what is hosted in it as the package works it out (`seatAtAngle`).
   const angled = seatAtAngle(builder, el, role, host, along, up);
   if (angled) return angled.at;
-  if (el.recipe.op === late.FAMILY_OP) return late.onFamily(role, host, along, up)?.at ?? el.placement;
+  if (el.recipe.op === late.FAMILY_OP) return late.onFamily(role, host, along, up, late.faceFamily(el))?.at ?? el.placement;
   if (host.el.recipe.op === LAYERED) return onLayered(el, role, host, along, up);
   const thickness = host.el.recipe.args.thickness;
   const own = late.isWallOpening(el) ? thickness : el.recipe.args.thickness;

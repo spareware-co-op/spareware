@@ -11,6 +11,11 @@
 //!   its `material` (the material's ID) and its two faces' offsets from the reference line,
 //!   `exterior` and `interior`, each a construct-params stored length (`length:q0:<steps>`),
 //!   positive toward the exterior, from the exterior finish face to the interior finish face.
+//! - With the layers, the wall's wrapping ([`WRAP`], job 6.1): its type's wrapping at free ends
+//!   and at inserts, each replaced by the wall's own where its record gives one (construct-walls'
+//!   [`OwnWrap`], the stored recipe argument [`WRAPPING`]), with each layer's wraps flag and the
+//!   core's two boundaries, so the join rule and the builders turn the same layers. Written only
+//!   when something wraps: a wall that wraps nothing is filled as before, byte for byte.
 //! - A recipe that reads its type this way reads the parameter table and the type ([`reads_type`]):
 //!   the regenerator lists both in its `reads` row, so a change to the type's layers builds every
 //!   wall of it again, and a wall changed to another type is built with the new type's layers.
@@ -20,11 +25,12 @@
 //! layers' faces are exact in construct-params' unit, and nothing is rounded.
 
 use crate::parameters::Context;
+use crate::wall_plan::WRAP;
 use construct_model::element::Element;
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::Value;
 use construct_types::ElementType;
-use construct_walls::{assembly_of, offsets_of};
+use construct_walls::{Assembly, OwnWrap, Side, WRAPPING, assembly_of, offsets_of};
 use serde_json::{Value as Json, json};
 
 /// The key of the argument form that reads the layers of the element's wall type.
@@ -87,9 +93,25 @@ fn layers(context: &Context, element: &Element, ty: &ElementType) -> Result<Json
     Ok(Json::Array(listed))
 }
 
+/// The [`WRAP`] argument of a wall of `assembly` whose own wrapping is `own`; `None` when it
+/// wraps nothing.
+fn wrap_arg(assembly: &Assembly, own: OwnWrap) -> Option<Json> {
+    let wrapping = assembly.wrap().overridden(own.ends, own.inserts);
+    if wrapping.is_none() {
+        return None;
+    }
+    let flags: Vec<bool> = assembly.layers().iter().map(|layer| layer.wraps).collect();
+    Some(json!({
+        "core": [assembly.boundary(Side::Exterior), assembly.boundary(Side::Interior)],
+        "ends": wrapping.ends.key(),
+        "inserts": wrapping.inserts.key(),
+        "layers": flags,
+    }))
+}
+
 /// The recipe a shape is built from: each `{"wall":"type"}` argument filled with the layers of
-/// `element`'s wall type `ty`, read against `context`. A recipe that reads no type is returned as
-/// it is.
+/// `element`'s wall type `ty`, read against `context`, and its wrapping ([`WRAP`]) where it wraps
+/// anything. A recipe that reads no type is returned as it is.
 ///
 /// # Errors
 /// A build failure, which is model state like any other: `NoWallType` for an element that names
@@ -111,10 +133,18 @@ pub fn filled(
     };
     let read = layers(context, element, ty)?;
     let mut out = recipe.clone();
+    out.args.remove(WRAP);
     for arg in out.args.values_mut() {
         if is_type_arg(arg) {
             *arg = read.clone();
         }
+    }
+    let bad = |why: String| failure("BadWallType", format!("its type {}: {why}", ty.id()));
+    let assembly = assembly_of(ty).map_err(|e| bad(e.to_string()))?;
+    let own = OwnWrap::from_json(recipe.args.get(WRAPPING))
+        .map_err(|e| failure("BadWrapping", e.to_string()))?;
+    if let Some(wrap) = wrap_arg(&assembly, own) {
+        out.args.insert(WRAP.to_owned(), wrap);
     }
     Ok(out)
 }

@@ -223,6 +223,11 @@ fn walls_joined_at_an_l_and_a_t_fill_the_joined_shape() {
 }
 
 #[test]
+fn a_wall_wraps_at_its_free_ends_and_its_inserts() {
+    kernel_suite::a_wall_wraps_at_its_free_ends_and_its_inserts(engine);
+}
+
+#[test]
 fn joined_walls_meet_without_overlap_on_the_engine() {
     kernel_suite::joined_walls_meet_without_overlap_on_the_engine(engine);
 }
@@ -238,6 +243,11 @@ fn a_family_cuts_every_layer_and_stands_in_its_opening() {
 #[test]
 fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
     kernel_suite::elements_at_any_angle_cut_their_wall_and_stand_in_it(engine);
+}
+
+#[test]
+fn the_starter_content_builds_and_hangs_without_cutting() {
+    kernel_suite::the_starter_content_builds_and_hangs_without_cutting(engine);
 }
 
 #[test]

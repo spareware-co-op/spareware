@@ -22,6 +22,21 @@
 //! | `view.crop.set` | `view`, and any of `region`, `annotation` (`null` for none), `on` | The view's crop: made from `region` when the view has none, else the named parts change |
 //! | `view.crop.clear` | `view` | The crop goes; nothing at all when there is none |
 //! | `view.crop.show` | `view`, `shown` (true or false) | Whether the crop's outline is shown in the view |
+//! | `view.categories.set` | `view`, `category`, `shown` | Whether the view draws the category (or subcategory) at all |
+//! | `view.override.set` | `view`, `element`, `appearance` | One element's look in this view: any of `pen`, `pattern`, `colour`, `halftone`, `shown` |
+//! | `view.override.clear` | `view`, optional `element` | One element's override, or every override of the view |
+//! | `view.filter.add` | `view`, `name`, `category`, `parameter`, `op`, `value`, optional `appearance` | A filter, last in the view's list |
+//! | `view.filter.set`, `view.filter.remove`, `view.filter.move` | `view`, `filter`, then the parts to change, or `place` | The filter changed, taken away or moved to a place in the list |
+//! | `view.template.create` | `template` (the new ID), `name`, optional `source` (a view) | A view template holding the view's settings, all included |
+//! | `view.template.rename`, `view.template.delete` | `template`, `name` for the first | The template; a delete is refused while views are tied to it |
+//! | `view.template.set` | `template`, any of `scale`, `detail`, `included` | The template's settings and which are included |
+//! | `view.template.update` | `template`, `source` (a view) | The template's settings taken from the view's |
+//! | `view.template.tie`, `view.template.untie`, `view.template.apply` | `view` and, for the first and last, `template` | The view follows the template; stops following it; or copies it once |
+//!
+//! The commands about graphics, categories and filters name a `view` or a `template`, never both:
+//! a view template holds the same five settings a view does. See [`crate::cloud::view_templates`]
+//! for templates, overrides and filters: a view tied to a template cannot change a setting the
+//! template includes (it is refused in words); an override is always the view's own.
 //!
 //! A crop (CON-A8-F1-P3) is a plan's, section's or elevation's window onto the model: a `region`
 //! is `{"rectangle": {"min": {"x", "y"}, "max": {"x", "y"}}}` or `{"outline": [{"x", "y"}, ...]}`
@@ -84,10 +99,12 @@ use construct_phases::{DesignOptions, ElementStaging, PhaseList, ViewSettings};
 use construct_regen::levels::read_levels;
 use construct_regen::parameters as records;
 use construct_styles::{Colour, Edge, LineStyles, ObjectStyles, PatternId};
+/// A part of a style an override or a filter gives an element: the server draws with it.
+pub use construct_views::ElementStyle;
 use construct_views::{
-    Crop, CutLine, DetailLevel, Fill, Model, PlanSetup, Point, Region, RuleStyle, Scale, Side, Tie,
-    VIEW_KIND, View, ViewElement, ViewError, ViewKind, ViewRange, Views, edge_from_key, list,
-    resolve,
+    Crop, CutLine, DetailLevel, Fill, Model, PlanSetup, Point, Region, RuleStyle, Scale, Setting,
+    Side, TEMPLATE_KIND, Tie, VIEW_KIND, View, ViewElement, ViewError, ViewKind, ViewRange,
+    ViewTemplates, Views, adjust, edge_from_key, list, resolve, resolve_in,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -96,7 +113,7 @@ use kit_sync::{Applied, Context as Ordered, Outcome, claims};
 use serde::{Deserialize, Serialize};
 
 /// Every command here.
-pub const COMMANDS: [&str; 10] = [
+pub const COMMANDS: [&str; 25] = [
     "view.create",
     "view.rename",
     "view.set",
@@ -107,6 +124,21 @@ pub const COMMANDS: [&str; 10] = [
     "view.crop.set",
     "view.crop.clear",
     "view.crop.show",
+    "view.categories.set",
+    "view.override.set",
+    "view.override.clear",
+    "view.filter.add",
+    "view.filter.set",
+    "view.filter.remove",
+    "view.filter.move",
+    "view.template.create",
+    "view.template.rename",
+    "view.template.delete",
+    "view.template.set",
+    "view.template.update",
+    "view.template.tie",
+    "view.template.untie",
+    "view.template.apply",
 ];
 
 /// The scale of a view made without one: 1:100.
@@ -133,17 +165,42 @@ pub fn is_command(cmd: &str) -> bool {
 /// The arguments of every command here; each uses some of them.
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-struct Args {
+pub(super) struct Args {
     #[serde(default, with = "kit_ops::id::option")]
-    view: Option<Id>,
+    pub(super) view: Option<Id>,
+    /// A view template's ID.
+    #[serde(default, with = "kit_ops::id::option")]
+    pub(super) template: Option<Id>,
+    /// The view a template is made from or taken from.
+    #[serde(default, with = "kit_ops::id::option")]
+    pub(super) source: Option<Id>,
+    /// An element an override is about.
+    #[serde(default, with = "kit_ops::id::option")]
+    pub(super) element: Option<Id>,
+    /// Which settings a template includes: setting key to on or off.
+    pub(super) included: Option<std::collections::BTreeMap<String, bool>>,
+    /// A filter's number in its list.
+    pub(super) filter: Option<u32>,
+    /// A filter's parameter, by ID or by name.
+    pub(super) parameter: Option<String>,
+    /// A filter's operator.
+    pub(super) op: Option<String>,
+    /// A filter's value, as typed.
+    pub(super) value: Option<String>,
+    /// The place a filter is moved to.
+    pub(super) place: Option<usize>,
+    /// What an override or a filter does to the look.
+    pub(super) appearance: Option<LookArgs>,
+    /// Whether a category is drawn, or a crop's outline is shown.
+    pub(super) shown: Option<bool>,
     /// The ID a duplicate is made under.
     #[serde(default, rename = "new", with = "kit_ops::id::option")]
     copy: Option<Id>,
     kind: Option<String>,
-    name: Option<String>,
+    pub(super) name: Option<String>,
     level: Option<String>,
-    scale: Option<u32>,
-    detail: Option<String>,
+    pub(super) scale: Option<u32>,
+    pub(super) detail: Option<String>,
     range: Option<RangeArgs>,
     from: Option<PointArgs>,
     to: Option<PointArgs>,
@@ -154,11 +211,11 @@ struct Args {
     #[serde(default, deserialize_with = "present")]
     phasing: Option<serde_json::Value>,
     /// A graphics rule's category, a subcategory's included.
-    category: Option<i64>,
+    pub(super) category: Option<i64>,
     /// A graphics rule's edge: `cut` or `projection`.
-    edge: Option<String>,
+    pub(super) edge: Option<String>,
     /// A graphics rule's style.
-    style: Option<StyleArgs>,
+    pub(super) style: Option<StyleArgs>,
     /// A crop's region.
     region: Option<RegionArgs>,
     /// A crop's annotation region; `null` takes it away, so `null` is kept apart from none.
@@ -166,8 +223,6 @@ struct Args {
     annotation: Option<serde_json::Value>,
     /// Whether a crop is on.
     on: Option<bool>,
-    /// Whether a crop's outline is shown.
-    shown: Option<bool>,
 }
 
 /// A crop region as a person names it.
@@ -180,10 +235,49 @@ enum RegionArgs {
     Outline(Vec<PointArgs>),
 }
 
+/// The parts of a look an element override or a filter names: any of them.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(super) struct LookArgs {
+    pen: Option<i64>,
+    pattern: Option<i64>,
+    colour: Option<Vec<i64>>,
+    halftone: Option<bool>,
+    shown: Option<bool>,
+}
+
+impl LookArgs {
+    /// The style these parts name.
+    pub(super) fn style(&self) -> Result<ElementStyle, String> {
+        let pen = self
+            .pen
+            .map(|n| {
+                u16::try_from(n).map_err(|_| format!("There is no pen {n} for this category."))
+            })
+            .transpose()?;
+        let pattern = self
+            .pattern
+            .map(|n| {
+                u32::try_from(n)
+                    .map(PatternId)
+                    .map_err(|_| format!("There is no line pattern {n}."))
+            })
+            .transpose()?;
+        let colour = self.colour.as_deref().map(colour_of).transpose()?;
+        Ok(ElementStyle {
+            pen,
+            pattern,
+            colour,
+            halftone: self.halftone,
+            shown: self.shown,
+        })
+    }
+}
+
 /// The parts of a graphics rule's style a person names; the rest keep what they were.
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-struct StyleArgs {
+pub(super) struct StyleArgs {
     pen: Option<i64>,
     pattern: Option<i64>,
     colour: Option<Vec<i64>>,
@@ -243,13 +337,13 @@ struct Named {
 }
 
 /// A command's answer: a store failure, or the command's own result.
-type Answer = Result<Outcome, StoreError>;
+pub(super) type Answer = Result<Outcome, StoreError>;
 
-fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
+pub(super) fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
     value.ok_or_else(|| format!("This command needs {what}."))
 }
 
-fn units() -> Units {
+pub(super) fn units() -> Units {
     Units::default()
 }
 
@@ -257,7 +351,7 @@ fn length(text: &str) -> Result<Length, String> {
     parse_length(text, &units()).map_err(|e| e.to_string())
 }
 
-fn id_of(text: &str, what: &str) -> Result<Id, String> {
+pub(super) fn id_of(text: &str, what: &str) -> Result<Id, String> {
     Id::parse(text).map_err(|_| format!("{text:?} is not {what}'s ID."))
 }
 
@@ -288,6 +382,7 @@ pub struct World {
     phases: PhaseList,
     options: DesignOptions,
     views: Views,
+    templates: ViewTemplates,
     lines: LineStyles,
     objects: ObjectStyles,
 }
@@ -304,10 +399,17 @@ impl World {
         }
     }
 
-    /// The document's views.
+    /// The document's views as they show: a view tied to a template has the template's included
+    /// settings.
     #[must_use]
     pub fn views(&self) -> &Views {
         &self.views
+    }
+
+    /// The document's view templates.
+    #[must_use]
+    pub fn templates(&self) -> &ViewTemplates {
+        &self.templates
     }
 
     /// The document's levels.
@@ -357,6 +459,13 @@ pub async fn read_world<R: Reader>(
         Ok(views) => views,
         Err(e) => return Ok(Err(e.to_string())),
     };
+    let templates = match ViewTemplates::from_records(&all) {
+        Ok(templates) => templates,
+        Err(e) => return Ok(Err(e.to_string())),
+    };
+    // What a view shows is its own settings with its template's included ones over them; every
+    // reader of the world (the listing, the drawing, the graphics page) asks the views so.
+    let views = templates.effective(&views);
     let phases = match phases() {
         Ok(phases) => phases,
         Err(why) => return Ok(Err(why)),
@@ -367,6 +476,7 @@ pub async fn read_world<R: Reader>(
         phases,
         options: options(),
         views,
+        templates,
         // Interim: a document stores no pens, patterns or object styles yet, so every document has
         // our defaults. The job that stores them through the log replaces these two lines.
         lines: LineStyles::default_metric(),
@@ -395,6 +505,8 @@ pub struct ViewSummary {
     pub range: Option<RangeSummary>,
     /// The view's crop, or `None` when it has none.
     pub crop: Option<CropSummary>,
+    /// The view template the view follows, if it is tied to one.
+    pub template: Option<String>,
 }
 
 /// One height of a view range as a page lists it: the level and the offset from it, in the text
@@ -525,6 +637,7 @@ pub fn summary(view: &View, levels: &Levels) -> ViewSummary {
         level: level.map(|id| id.to_string()),
         scale: view.scale().denominator(),
         detail: view.detail().key().to_owned(),
+        template: view.template().map(ToString::to_string),
     }
 }
 
@@ -681,18 +794,18 @@ fn new_staging(world: &World) -> Result<ElementStaging, String> {
 }
 
 /// What a command is run against: the store, where, who, and when the orderer says it is.
-struct Run<'a, T: Txn> {
-    txn: &'a mut T,
-    project: &'a Id,
-    document: &'a Id,
-    edit: &'a Edit,
+pub(super) struct Run<'a, T: Txn> {
+    pub(super) txn: &'a mut T,
+    pub(super) project: &'a Id,
+    pub(super) document: &'a Id,
+    pub(super) edit: &'a Edit,
     now_ms: u64,
     claim_ms: u64,
 }
 
 impl<T: Txn> Run<'_, T> {
     /// The claim this person takes on a piece, or who else holds it.
-    async fn claim(&mut self, piece: &Id) -> Result<Result<Claim, String>, StoreError> {
+    pub(super) async fn claim(&mut self, piece: &Id) -> Result<Result<Claim, String>, StoreError> {
         let holder = claims::held_by_another(
             self.txn,
             self.project,
@@ -717,17 +830,20 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// The document's current record of a piece, and its hash.
-    async fn current(&mut self, id: &Id) -> Result<Option<(Id, Element)>, StoreError> {
+    pub(super) async fn current(&mut self, id: &Id) -> Result<Option<(Id, Element)>, StoreError> {
         records::read_element(self.txn, self.project, self.document, id).await
     }
 
     /// The document's levels and views as they are now.
-    async fn world(&mut self) -> Result<Result<World, String>, StoreError> {
+    pub(super) async fn world(&mut self) -> Result<Result<World, String>, StoreError> {
         read_world(self.txn, self.project, self.document).await
     }
 
     /// The view of this ID as it is now, with its record's hash.
-    async fn view_of(&mut self, id: &Id) -> Result<Result<(Id, View), String>, StoreError> {
+    pub(super) async fn view_of(
+        &mut self,
+        id: &Id,
+    ) -> Result<Result<(Id, View), String>, StoreError> {
         Ok(match self.current(id).await? {
             Some((hash, record)) if record.kind == VIEW_KIND => View::from_record(&record)
                 .map(|view| (hash, view))
@@ -737,7 +853,7 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// Writes one record whose piece this person claims, as the command's whole result.
-    async fn put_claimed(&mut self, record: &Element, before: Option<Id>) -> Answer {
+    pub(super) async fn put_claimed(&mut self, record: &Element, before: Option<Id>) -> Answer {
         let claim = match self.claim(&record.id).await? {
             Ok(claim) => claim,
             Err(refusal) => return Ok(Err(refusal)),
@@ -779,7 +895,14 @@ pub async fn apply<T: Txn>(
         Err(e) => return Ok(Err(format!("That edit isn't valid: {e}"))),
     };
     let graphics = edit.cmd.starts_with("view.graphics.");
-    if !graphics && (args.category.is_some() || args.edge.is_some() || args.style.is_some()) {
+    let with_category = graphics
+        || matches!(
+            edit.cmd.as_str(),
+            "view.categories.set" | "view.filter.add" | "view.filter.set"
+        );
+    if (!with_category && args.category.is_some())
+        || (!graphics && (args.edge.is_some() || args.style.is_some()))
+    {
         return Ok(Err(format!(
             "{} has no category, edge or style: graphics rules are set with view.graphics.set.",
             edit.cmd
@@ -789,12 +912,18 @@ pub async fn apply<T: Txn>(
         && (args.region.is_some()
             || args.annotation.is_some()
             || args.on.is_some()
-            || args.shown.is_some())
+            || (args.shown.is_some() && edit.cmd != "view.categories.set"))
     {
         return Ok(Err(format!(
             "{} has no region, annotation, on or shown: a crop is set with view.crop.set.",
             edit.cmd
         )));
+    }
+    // The crop commands name their own stray arguments (below, in their handlers).
+    if !edit.cmd.starts_with("view.crop.")
+        && let Some(refusal) = crate::cloud::view_templates::stray(&edit.cmd, &args)
+    {
+        return Ok(Err(refusal));
     }
     let mut run = Run {
         txn,
@@ -815,7 +944,7 @@ pub async fn apply<T: Txn>(
         "view.delete" => delete(&mut run, args).await,
         "view.graphics.set" => set_graphics(&mut run, args).await,
         "view.graphics.clear" => clear_graphics(&mut run, args).await,
-        other => Ok(Err(format!("Unknown command {other}."))),
+        other => crate::cloud::view_templates::apply(&mut run, other, args).await,
     }
 }
 
@@ -824,11 +953,11 @@ fn kinds() -> String {
     ViewKind::KEYS.join(", ")
 }
 
-fn scale_of(n: u32) -> Result<Scale, String> {
+pub(super) fn scale_of(n: u32) -> Result<Scale, String> {
     Scale::new(n).map_err(|e| e.to_string())
 }
 
-fn detail_of(key: &str) -> Result<DetailLevel, String> {
+pub(super) fn detail_of(key: &str) -> Result<DetailLevel, String> {
     DetailLevel::from_key(key)
         .ok_or_else(|| format!("{key:?} is not a detail level: coarse, medium or fine."))
 }
@@ -969,7 +1098,7 @@ fn phasing_of(value: &serde_json::Value) -> Result<Option<ViewSettings>, String>
 }
 
 /// A view's record, written as it is stored.
-fn record_of(view: &View, document: &Id) -> Element {
+pub(super) fn record_of(view: &View, document: &Id) -> Element {
     view.to_record(document)
 }
 
@@ -1027,7 +1156,7 @@ fn make(args: &Args, world: &World) -> Result<View, String> {
 }
 
 /// Replaces a view with a changed one: checks it against the document and writes it.
-async fn put_changed<T: Txn>(
+pub(super) async fn put_changed<T: Txn>(
     run: &mut Run<'_, T>,
     world: &World,
     before: (Id, View),
@@ -1050,7 +1179,7 @@ async fn put_changed<T: Txn>(
 }
 
 /// The world and the view a command is about.
-async fn subject<T: Txn>(
+pub(super) async fn subject<T: Txn>(
     run: &mut Run<'_, T>,
     view: Option<Id>,
 ) -> Result<Result<(World, Id, View), String>, StoreError> {
@@ -1122,6 +1251,14 @@ async fn set<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
         Ok(found) => found,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    for (given, setting) in [
+        (args.scale.is_some(), Setting::Scale),
+        (args.detail.is_some(), Setting::Detail),
+    ] {
+        if given && let Err(e) = world.templates.tied_refusal(&view, setting) {
+            return Ok(Err(e.to_string()));
+        }
+    }
     match changed_by(&args, view.clone()) {
         Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
         Err(refusal) => Ok(Err(refusal)),
@@ -1129,7 +1266,7 @@ async fn set<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
 }
 
 /// The first name `<stem>`, `<stem> 2`, `<stem> 3`... that no view has, case aside.
-fn free_name(views: &Views, stem: &str) -> Result<String, String> {
+pub(super) fn free_name(views: &Views, stem: &str) -> Result<String, String> {
     let taken: Vec<String> = views
         .ordered()
         .iter()
@@ -1170,6 +1307,10 @@ async fn duplicate<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
             copy.with_phasing(view.phasing().cloned())
                 .with_graphics(view.graphics().clone())
                 .with_crop(view.crop().cloned())
+                .with_hidden(view.hidden().clone())
+                .with_filters(view.filters().clone())
+                .with_overrides(view.overrides().clone())
+                .with_template(view.template().cloned())
         })
         .map_err(|e| e.to_string())
     });
@@ -1230,7 +1371,7 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
 }
 
 /// A whole number as a colour part, 0 to 255.
-fn colour_of(parts: &[i64]) -> Result<Colour, String> {
+pub(super) fn colour_of(parts: &[i64]) -> Result<Colour, String> {
     let words = || "A colour is [red, green, blue], each a whole number from 0 to 255.".to_owned();
     match parts {
         [r, g, b] => {
@@ -1242,7 +1383,7 @@ fn colour_of(parts: &[i64]) -> Result<Colour, String> {
 }
 
 /// The category a graphics command names, as the document has it.
-fn category_of(args: &Args, world: &World) -> Result<CategoryId, String> {
+pub(super) fn category_of(args: &Args, world: &World) -> Result<CategoryId, String> {
     let n = need(args.category, "a category (its number)")?;
     let missing = || format!("There is no category {n}.");
     let id = CategoryId(u32::try_from(n).map_err(|_| missing())?);
@@ -1250,7 +1391,7 @@ fn category_of(args: &Args, world: &World) -> Result<CategoryId, String> {
 }
 
 /// The edge a graphics command names.
-fn edge_of(key: &str) -> Result<Edge, String> {
+pub(super) fn edge_of(key: &str) -> Result<Edge, String> {
     edge_from_key(key).ok_or_else(|| format!("{key:?} is not an edge: cut or projection."))
 }
 
@@ -1283,7 +1424,7 @@ fn look_now(
 }
 
 /// A style with the parts a person named put over `base`.
-fn style_over(base: RuleStyle, args: &StyleArgs) -> Result<RuleStyle, String> {
+pub(super) fn style_over(base: RuleStyle, args: &StyleArgs) -> Result<RuleStyle, String> {
     let mut style = base;
     if let Some(n) = args.pen {
         style.pen =
@@ -1466,7 +1607,7 @@ async fn show_crop<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
 }
 
 /// The view after a `view.graphics.set`, or why it cannot be.
-fn graphics_set(args: &Args, world: &World, view: &View) -> Result<View, String> {
+pub(super) fn graphics_set(args: &Args, world: &World, view: &View) -> Result<View, String> {
     let category = category_of(args, world)?;
     let edge = edge_of(need(args.edge.as_deref(), "an edge (cut or projection)")?)?;
     let named = need(args.style.as_ref(), "a style")?;
@@ -1479,10 +1620,16 @@ fn graphics_set(args: &Args, world: &World, view: &View) -> Result<View, String>
 }
 
 async fn set_graphics<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    if args.template.is_some() {
+        return crate::cloud::view_templates::graphics(run, args, true).await;
+    }
     let (world, hash, view) = match subject(run, args.view.clone()).await? {
         Ok(found) => found,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    if let Err(e) = world.templates.tied_refusal(&view, Setting::Graphics) {
+        return Ok(Err(e.to_string()));
+    }
     match graphics_set(&args, &world, &view) {
         Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
         Err(refusal) => Ok(Err(refusal)),
@@ -1490,7 +1637,7 @@ async fn set_graphics<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
 }
 
 /// The view after a `view.graphics.clear`.
-fn graphics_cleared(args: &Args, world: &World, view: &View) -> Result<View, String> {
+pub(super) fn graphics_cleared(args: &Args, world: &World, view: &View) -> Result<View, String> {
     if args.style.is_some() {
         return Err("view.graphics.clear takes no style.".to_owned());
     }
@@ -1502,10 +1649,16 @@ fn graphics_cleared(args: &Args, world: &World, view: &View) -> Result<View, Str
 }
 
 async fn clear_graphics<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    if args.template.is_some() {
+        return crate::cloud::view_templates::graphics(run, args, false).await;
+    }
     let (world, hash, view) = match subject(run, args.view.clone()).await? {
         Ok(found) => found,
         Err(refusal) => return Ok(Err(refusal)),
     };
+    if let Err(e) = world.templates.tied_refusal(&view, Setting::Graphics) {
+        return Ok(Err(e.to_string()));
+    }
     match graphics_cleared(&args, &world, &view) {
         Ok(changed) => put_changed(run, &world, (hash, view), changed).await,
         Err(refusal) => Ok(Err(refusal)),
@@ -1577,6 +1730,16 @@ pub struct PatternSummary {
     pub name: String,
 }
 
+/// The parts of a graphics listing that a view and a view template share.
+struct Parts {
+    rules: Vec<RuleSummary>,
+    looks: Vec<LookSummary>,
+    pens: Vec<PenSummary>,
+    annotation_pens: Vec<PenSummary>,
+    line_patterns: Vec<PatternSummary>,
+    hidden: Vec<u32>,
+}
+
 /// A view's graphics rules as a page lists them: the rules the view holds, by category, how every
 /// category looks in the view now, and what a rule may name. A category with no rule is as the
 /// project's object styles say.
@@ -1596,14 +1759,20 @@ pub struct GraphicsListing {
     pub line_patterns: Vec<PatternSummary>,
     /// The fill patterns a cut may be given.
     pub fill_patterns: Vec<&'static str>,
+    /// The categories (and subcategories) the view does not draw, by number.
+    pub hidden: Vec<u32>,
 }
 
-/// The graphics rules of the view `id`: `None` when the document has no such view.
-#[must_use]
-pub fn graphics_of(world: &World, id: &Id) -> Option<GraphicsListing> {
-    let view = world.views.get(id)?;
-    let rules = view
-        .graphics()
+/// What `graphics` and `hidden` say, at `scale`, for every category: the shared part of a view's
+/// listing and a template's. `looked` answers how a category looks on an edge.
+fn parts(
+    world: &World,
+    graphics: &construct_views::Graphics,
+    hidden: &std::collections::BTreeSet<CategoryId>,
+    scale: Scale,
+    looked: &dyn Fn(CategoryId, Edge) -> Option<LookOf>,
+) -> Parts {
+    let rules = graphics
         .rules()
         .filter_map(|(category, rule)| {
             let found = world.categories.get(category)?;
@@ -1616,14 +1785,6 @@ pub fn graphics_of(world: &World, id: &Id) -> Option<GraphicsListing> {
             })
         })
         .collect();
-    let scale = view.scale();
-    let looked = |category: CategoryId, edge: Edge| {
-        look_in(world, id, category, edge).ok().map(|found| LookOf {
-            width: found.width.get(),
-            origin: found.origin.key(),
-            style: found.style,
-        })
-    };
     let mut all = world.categories.all();
     all.retain(|found| found.id != VIEWS && found.parent != Some(VIEWS));
     all.sort_by_key(|found| {
@@ -1687,15 +1848,135 @@ pub fn graphics_of(world: &World, id: &Id) -> Option<GraphicsListing> {
             name: pattern.name.clone(),
         })
         .collect();
-    Some(GraphicsListing {
-        view: summary(view, &world.levels),
+    Parts {
         rules,
         looks,
         pens,
         annotation_pens,
         line_patterns,
+        hidden: hidden.iter().map(|id| id.0).collect(),
+    }
+}
+
+/// How a category looks on an edge in a view, as a page lists it.
+fn looked_in(world: &World, id: &Id) -> impl Fn(CategoryId, Edge) -> Option<LookOf> {
+    let id = id.clone();
+    move |category, edge| {
+        look_in(world, &id, category, edge)
+            .ok()
+            .map(|found| LookOf {
+                width: found.width.get(),
+                origin: found.origin.key(),
+                style: found.style,
+            })
+    }
+}
+
+/// The graphics rules of the view `id`: `None` when the document has no such view.
+#[must_use]
+pub fn graphics_of(world: &World, id: &Id) -> Option<GraphicsListing> {
+    let view = world.views.get(id)?;
+    let shared = parts(
+        world,
+        view.graphics(),
+        view.hidden(),
+        view.scale(),
+        &looked_in(world, id),
+    );
+    Some(GraphicsListing {
+        view: summary(view, &world.levels),
+        rules: shared.rules,
+        looks: shared.looks,
+        pens: shared.pens,
+        annotation_pens: shared.annotation_pens,
+        line_patterns: shared.line_patterns,
         fill_patterns: construct_views::FILL_PATTERNS.to_vec(),
+        hidden: shared.hidden,
     })
+}
+
+/// The graphics rules of a view template, listed as a view's are: how every category looks under
+/// the template's rules, and what a rule may name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct TemplateGraphics {
+    /// The template.
+    pub template: crate::cloud::view_templates::TemplateSummary,
+    /// Its rules, in ascending category.
+    pub rules: Vec<RuleSummary>,
+    /// Every category a template can say anything about, a category before its subcategories.
+    pub looks: Vec<LookSummary>,
+    /// The model pens, at the template's scale.
+    pub pens: Vec<PenSummary>,
+    /// The annotation pens.
+    pub annotation_pens: Vec<PenSummary>,
+    /// The line patterns.
+    pub line_patterns: Vec<PatternSummary>,
+    /// The fill patterns a cut may be given.
+    pub fill_patterns: Vec<&'static str>,
+    /// The categories (and subcategories) the template does not draw, by number.
+    pub hidden: Vec<u32>,
+}
+
+/// The graphics rules of the view template `id`: `None` when the document has no such template.
+#[must_use]
+pub fn template_graphics_of(world: &World, id: &Id) -> Option<TemplateGraphics> {
+    let template = world.templates.get(id)?;
+    let settings = template.settings();
+    let looked = |category: CategoryId, edge: Edge| {
+        look_of_settings(world, settings, category, edge)
+            .ok()
+            .map(|found| LookOf {
+                width: found.width.get(),
+                origin: found.origin.key(),
+                style: found.style,
+            })
+    };
+    let shared = parts(
+        world,
+        &settings.graphics,
+        &settings.hidden,
+        settings.scale,
+        &looked,
+    );
+    Some(TemplateGraphics {
+        template: crate::cloud::view_templates::template_summary(world, template),
+        rules: shared.rules,
+        looks: shared.looks,
+        pens: shared.pens,
+        annotation_pens: shared.annotation_pens,
+        line_patterns: shared.line_patterns,
+        fill_patterns: construct_views::FILL_PATTERNS.to_vec(),
+        hidden: shared.hidden,
+    })
+}
+
+/// How a category looks on an edge under a set of settings (a template's), by the one rule.
+pub(super) fn look_of_settings(
+    world: &World,
+    settings: &construct_views::Settings,
+    category: CategoryId,
+    edge: Edge,
+) -> Result<construct_views::Resolved, String> {
+    let parent = world
+        .categories
+        .get(category)
+        .and_then(|found| found.parent);
+    let (top, sub) = match parent {
+        Some(parent) => (parent, Some(category)),
+        None => (category, None),
+    };
+    resolve_in(
+        &settings.graphics,
+        &settings.hidden,
+        settings.scale,
+        &world.categories,
+        &world.objects,
+        &world.lines,
+        top,
+        sub,
+        edge,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// How an element of `category` looks on `edge` in the view `id`, by the one rule
@@ -1711,6 +1992,21 @@ pub fn look_in(
     category: CategoryId,
     edge: Edge,
 ) -> Result<construct_views::Resolved, String> {
+    look_for(world, id, category, edge, None)
+}
+
+/// [`look_in`] for one element: with `own`, the style its filters and overrides give it in this
+/// view, put over the answer ([`construct_views::adjust`]). `None` is [`look_in`].
+///
+/// # Errors
+/// As [`look_in`].
+pub fn look_for(
+    world: &World,
+    id: &Id,
+    category: CategoryId,
+    edge: Edge,
+    own: Option<&ElementStyle>,
+) -> Result<construct_views::Resolved, String> {
     let view = world
         .views
         .get(id)
@@ -1723,7 +2019,7 @@ pub fn look_in(
         Some(parent) => (parent, Some(category)),
         None => (category, None),
     };
-    construct_views::resolve(
+    let found = construct_views::resolve(
         view,
         &world.categories,
         &world.objects,
@@ -1732,7 +2028,15 @@ pub fn look_in(
         sub,
         edge,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    let Some(own) = own else {
+        return Ok(found);
+    };
+    let kind = world
+        .categories
+        .get(category)
+        .map_or(CategoryKind::Model, |found| found.kind);
+    adjust(&found, own, &world.lines, kind, view.scale()).map_err(|e| e.to_string())
 }
 
 /// The part of a generic command the rules below read.
@@ -1768,6 +2072,10 @@ pub async fn generic_rules<T: Txn>(
     let by_recipe = args.recipe.as_ref().is_some_and(a_view_recipe);
     let use_instead = |what: &str, command: &str| format!("{what}: use {command}.");
     Ok(match edit.cmd.as_str() {
+        "element.create" if args.kind.as_deref() == Some(TEMPLATE_KIND) => Err(use_instead(
+            "A view template is made",
+            "view.template.create",
+        )),
         "element.create" if by_recipe || args.kind.as_deref() == Some(VIEW_KIND) => {
             Err(use_instead("A view is made", "view.create"))
         }
@@ -1776,6 +2084,10 @@ pub async fn generic_rules<T: Txn>(
                 return Ok(Ok(()));
             };
             match records::read_element(txn, project, &edit.target, id).await? {
+                Some((_, record)) if record.kind == TEMPLATE_KIND => Err(use_instead(
+                    "A view template is changed or deleted",
+                    "the view.template commands",
+                )),
                 Some((_, record)) if record.kind == VIEW_KIND => Err(match edit.cmd.as_str() {
                     "element.delete" => use_instead("A view is deleted", "view.delete"),
                     _ => use_instead(
@@ -1820,6 +2132,17 @@ pub async fn undo_rules<T: Txn>(
     for view in checked {
         if let Err(why) = world.check(view) {
             return Ok(Err(format!("{}: {why}", view.name())));
+        }
+    }
+    // Nor a view tied to a template the model would no longer have.
+    for view in world.views.ordered() {
+        if let Some(template) = view.template()
+            && world.templates.get(template).is_none()
+        {
+            return Ok(Err(format!(
+                "{} is tied to the view template {template}, which this would take away.",
+                view.name()
+            )));
         }
     }
     Ok(Ok(()))

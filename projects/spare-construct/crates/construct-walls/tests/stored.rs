@@ -49,10 +49,11 @@ const CONCRETE_ROW: &str = concat!(
     r#"\"wraps\":false}]}"},"references":[]}"#
 );
 
-/// Each default type's text, byte for byte, and read back to the same type.
+/// Each default type's text, byte for byte, and read back to the same type. The newest version is
+/// 2 (wrapping, job 6.1); a type that wraps nothing, as every default does, is still version 1.
 #[test]
 fn default_texts_pinned() {
-    assert_eq!(FORMAT_VERSION, 1);
+    assert_eq!(FORMAT_VERSION, 2);
     let texts = [PARTITION, CONCRETE, BRICK_VENEER];
     for (wall, text) in default_walls().unwrap().iter().zip(texts) {
         assert_eq!(wall.assembly.to_text().unwrap(), text, "{}", wall.id);
@@ -187,4 +188,55 @@ fn with_assembly_replaces_the_block() {
     assert_eq!(edited.id(), ty.id());
     assert_eq!(edited.params().count(), 2);
     assert_eq!(assembly_of(&ty).unwrap(), one);
+}
+
+/// A type that wraps is version 2, its wrap between its core and its layers; it reads back, keeps
+/// its wrap through every edit of its layers, and a type that wraps nothing is version 1 again.
+/// Each version's text with the other's fields is refused.
+#[test]
+fn a_type_that_wraps_is_version_2() {
+    use construct_walls::{AtEnds, AtInserts, Wrapping};
+    let wrap = Wrapping {
+        ends: AtEnds::Exterior,
+        inserts: AtInserts::Both,
+    };
+    let plain = Assembly::new(vec![finish(10), structure(20)], 1, 2).unwrap();
+    let wrapped = plain.with_wrapping(wrap);
+    let text = wrapped.to_text().unwrap();
+    let plain_text = plain.to_text().unwrap();
+    let layers = &plain_text[plain_text.find(r#""layers""#).unwrap()..];
+    assert_eq!(
+        text,
+        format!(
+            r#"{{"version":2,"core":{{"exterior":1,"interior":2}},"wrap":{{"ends":"exterior","inserts":"both"}},{layers}"#
+        )
+    );
+    assert_eq!(Assembly::from_text(&text).unwrap(), wrapped);
+    assert_eq!(wrapped.wrap(), wrap);
+    let edited = wrapped.with_inserted(0, finish(5)).unwrap();
+    assert_eq!(edited.wrap(), wrap, "an edit of the layers keeps the wrap");
+    assert_eq!(
+        wrapped
+            .with_wrapping(Wrapping::default())
+            .to_text()
+            .unwrap(),
+        plain.to_text().unwrap()
+    );
+    let v1_with_wrap = text.replace(r#""version":2"#, r#""version":1"#);
+    assert!(Assembly::from_text(&v1_with_wrap).is_err());
+    let v2_without = plain
+        .to_text()
+        .unwrap()
+        .replace(r#""version":1"#, r#""version":2"#);
+    assert!(Assembly::from_text(&v2_without).is_err());
+    let v2_none = text.replace(
+        r#""ends":"exterior","inserts":"both""#,
+        r#""ends":"none","inserts":"none""#,
+    );
+    assert!(
+        Assembly::from_text(&v2_none).is_err(),
+        "wrapping nothing is spelt as version 1"
+    );
+    let v3 = text.replace(r#""version":2"#, r#""version":3"#);
+    assert!(Assembly::from_text(&v3).is_err());
 }

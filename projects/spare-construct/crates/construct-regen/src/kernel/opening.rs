@@ -638,6 +638,12 @@ impl Cut {
         (self.lo, self.hi)
     }
 
+    /// Whether it is an insert's, which a wall's layers may wrap into (job 6.1): a door's or a
+    /// placed family's opening, not a plain opening, which is a hole and nothing more.
+    pub(super) fn is_insert(&self) -> bool {
+        self.noun != "opening"
+    }
+
     /// The engine's error on this door's opening, with the door's key in front.
     pub(super) fn engine_error(&self, error: GeometryError) -> GeometryError {
         refuse_as(self.noun, &self.key, &error.code, error.message)

@@ -117,9 +117,67 @@ pub enum ViewError {
     CropNoArea,
     /// A view with no crop to show, hide or switch.
     NoCrop(Id),
+    /// A view template needs a name with something in it besides spaces.
+    EmptyTemplateName,
+    /// The document already has a view template of this name (case does not matter).
+    DuplicateTemplateName(String),
+    /// A view template already has this ID.
+    DuplicateTemplate(Id),
+    /// No view template has this ID.
+    UnknownTemplate(Id),
+    /// A view of this kind shows no model, so no template applies to it.
+    NoTemplateOnKind {
+        /// The kind, in words.
+        kind: String,
+    },
+    /// A tied view's change to a setting its template includes.
+    TiedSetting {
+        /// The view's name.
+        view: String,
+        /// The template's name.
+        template: String,
+        /// The setting, in words.
+        setting: String,
+    },
+    /// A template that views are tied to cannot be deleted.
+    TemplateInUse {
+        /// The template's name.
+        template: String,
+        /// How many views are tied to it.
+        views: usize,
+    },
+    /// A filter needs a name with something in it besides spaces.
+    EmptyFilterName,
+    /// The list already has a filter of this name (case does not matter).
+    DuplicateFilterName(String),
+    /// No filter has this number in the list.
+    UnknownFilter(u32),
+    /// A place in the list of filters that it does not have.
+    FilterPosition {
+        /// The place asked for (0 is the first).
+        to: usize,
+        /// How many filters there are.
+        len: usize,
+    },
+    /// An operator a parameter of this kind cannot be given.
+    OperatorKind {
+        /// The operator's key.
+        op: String,
+        /// The parameter's name.
+        parameter: String,
+    },
+    /// A view of this kind shows no model, so no override or filter applies to it.
+    NoOverridesOnKind {
+        /// The kind, in words.
+        kind: String,
+    },
 }
 
 impl fmt::Display for ViewError {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm of words for each refusal; splitting it would scatter them"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyName => write!(f, "A view needs a name."),
@@ -207,6 +265,54 @@ impl fmt::Display for ViewError {
             ),
             Self::CropNoArea => write!(f, "A crop outline must enclose an area above zero."),
             Self::NoCrop(id) => write!(f, "The view {id} has no crop."),
+            Self::EmptyTemplateName => write!(f, "A view template needs a name."),
+            Self::DuplicateTemplateName(name) => write!(
+                f,
+                "There is already a view template named {name:?} in this model."
+            ),
+            Self::DuplicateTemplate(id) => write!(f, "There is already a view template {id}."),
+            Self::UnknownTemplate(id) => {
+                write!(f, "There is no view template {id} in this model.")
+            }
+            Self::NoTemplateOnKind { kind } => write!(
+                f,
+                "A {kind} view shows no model, so a view template does not apply to it."
+            ),
+            Self::TiedSetting {
+                view,
+                template,
+                setting,
+            } => write!(
+                f,
+                "{view} follows the view template {template}, which sets its {setting}: \
+                 change it in the template, or untie the view first."
+            ),
+            Self::TemplateInUse { template, views } => write!(
+                f,
+                "The view template {template} is in use by {views} view{}: untie {} first.",
+                if *views == 1 { "" } else { "s" },
+                if *views == 1 { "it" } else { "them" }
+            ),
+            Self::EmptyFilterName => write!(f, "A filter needs a name."),
+            Self::DuplicateFilterName(name) => {
+                write!(f, "There is already a filter named {name:?} here.")
+            }
+            Self::UnknownFilter(id) => write!(f, "There is no filter {id} here."),
+            Self::FilterPosition { to, len } => write!(
+                f,
+                "There is no place {to} in a list of {len} filter{}.",
+                if *len == 1 { "" } else { "s" }
+            ),
+            Self::OperatorKind { op, parameter } => write!(
+                f,
+                "A filter cannot compare the parameter {parameter} with {op}: \
+                 contains is for text, choices and links, greater_than for lengths, areas, \
+                 volumes, angles and numbers."
+            ),
+            Self::NoOverridesOnKind { kind } => write!(
+                f,
+                "A {kind} view shows no model, so it has no overrides or filters."
+            ),
         }
     }
 }

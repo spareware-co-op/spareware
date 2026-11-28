@@ -109,27 +109,36 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .room-tag .room-name { font-weight: 650; fill: var(--ink); }
 .dw .room-tag .room-state { fill: var(--danger); }
 
+/* Dimensions: the open view's own are picked by a band along the offset line, arc or leader; the text is never picked. */
+.dw .dim.own { cursor: pointer; }
+.dw .dim-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
+.dw .dim-line, .dw .dim-tick { stroke: var(--ink); }
+.dw .dim-arc { fill: none; }
+.dw .dim-arrow, .dw .dim-dot { fill: var(--ink); stroke: none; }
+.dw .dim-centre { stroke: var(--ink-3); }
+.dw .dimt.inline { paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+.dw .dim-w { stroke: var(--ink-3); }
+.dw .dimt { fill: var(--ink); pointer-events: none; }
+.dw .dimt.bad { fill: var(--danger); }
+.dw .dim.bad .dim-line, .dw .dim.bad .dim-tick { stroke: var(--danger); }
+.dw .dim.bad .dim-arrow, .dw .dim.bad .dim-dot { fill: var(--danger); }
+.dw .dim[data-picked="yes"] .dim-line, .dw .dim[data-picked="yes"] .dim-tick { stroke: var(--app-strong); stroke-width: 2px; }
+.dw .dim.lost .dimt { pointer-events: auto; cursor: pointer; }
+.dw .dim-pick { pointer-events: none; }
+/* Only the band along a dimension's line, arc or leader picks it: its witness lines run along the walls and grids it measures, which stay pickable under them, and while a tool is in hand nothing of a dimension is picked. */
+.dw .dim line, .dw .dim path:not(.dim-hit), .dw .dim polygon, .dw .dim circle { pointer-events: none; }
+.dw.press .dim, .dw.press .dim .dim-hit { pointer-events: none; }
+
 /* The Warnings part of the project browser: each warning's sentence is a row that selects its
    element; a warning of several elements offers each below it. */
 .stack-warning .leaf { align-items: flex-start; height: auto; padding-top: 4px; padding-bottom: 4px; }
 .stack-warning[data-severity="error"] .leaf { border-left-color: var(--danger, currentColor); }
 .stack-warning-at { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 4px 27px; }
 .stack-sched h3 { margin: 4px 0; font-size: 13px; }
-.stack-sched .grow { flex: 1; min-width: 120px; }
+.stack-sched .grow, .stack-manage .grow { flex: 1; min-width: 120px; }
 .stack-sched .sched-scroll { max-height: 40vh; overflow: auto; margin: 6px 0; border: 1px solid var(--hairline); }
 .sched-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .sched-table th, .sched-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
 .sched-table thead th { position: sticky; top: 0; background: var(--page); font-weight: 600; }
 .sched-table tr.click { cursor: pointer; }
 .sched-table tr.sel td { background: var(--hover, rgba(127, 127, 127, 0.18)); }
-/* Linear dimensions: the open view's own are picked by a band along the offset line; the text is never picked. */
-.dw .dim.own { cursor: pointer; }
-.dw .dim-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
-.dw .dim-line, .dw .dim-tick { stroke: var(--ink); }
-.dw .dim-w { stroke: var(--ink-3); }
-.dw .dimt { fill: var(--ink); pointer-events: none; }
-.dw .dimt.bad { fill: var(--danger); }
-.dw .dim.bad .dim-line, .dw .dim.bad .dim-tick { stroke: var(--danger); }
-.dw .dim[data-picked="yes"] .dim-line, .dw .dim[data-picked="yes"] .dim-tick { stroke: var(--app-strong); stroke-width: 2px; }
-.dw .dim.lost .dimt { pointer-events: auto; cursor: pointer; }
-.dw .dim-pick { pointer-events: none; }

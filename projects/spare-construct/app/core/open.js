@@ -42,7 +42,7 @@ function forgetTheOpenModel() {
   C.links = [];
   C.steps = { undo: null, redo: null };
   C.params = C.typeList = C.manage = C.wallTypes = null;
-  C.views = C.openView = C.drawn = null;
+  C.views = C.openView = C.drawn = C.templates = null;
   C.warnings = null;
   C.warnSeq += 1;
   clearTimeout(C.warnTimer);

@@ -831,6 +831,9 @@ version = "0.0.0"
 dependencies = [
  "construct-elements",
  "construct-model",
+ "construct-params",
+ "construct-regen",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -1112,6 +1115,9 @@ dependencies = [
  "construct-params",
  "construct-types",
  "kit-core",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
  "serde",
  "serde_json",
 ]
@@ -4482,6 +4488,7 @@ dependencies = [
  "construct-categories",
  "construct-drawing",
  "construct-families",
+ "construct-interop",
  "construct-materials",
  "construct-model",
  "construct-params",
