@@ -21,6 +21,9 @@
 //! openings' volume, each family's solids exactly theirs and inside their opening; the opening
 //! moving with its wall and resized with its type; and every refusal of a family that does not
 //! fit, in the builder's words, the same from `fits`.
+//!
+//! Stairs (job 6.7): a run's side profile lofted across its width and a landing's outline
+//! extruded up, each a closed solid of exactly its volume, named by its pieces' faces.
 
 #![allow(
     dead_code,
@@ -1504,7 +1507,8 @@ pub fn a_door_cuts_every_layer_of_a_layered_wall<E: Engine + Send + 'static>(mak
 /// A door is refused in a layered wall as in the old box, before the engine is asked, and
 /// `fits` says the same, word for word: an opening touching or crossing an end, as tall as the
 /// wall, two openings that overlap, an element that is not a door, one beside its wall. A wall at
-/// an angle hosts no door yet: a door is a box along an axis until doors are families.
+/// an angle refuses a door handed to it without its seat (piece A83): every element in such a
+/// wall is placed through its seat, never by a placement.
 pub fn a_door_in_a_layered_wall_is_refused_as_in_the_box<E: Engine + Send + 'static>(
     make: impl Fn() -> E,
 ) {
@@ -1558,10 +1562,10 @@ pub fn a_door_in_a_layered_wall_is_refused_as_in_the_box<E: Engine + Send + 'sta
             "OpeningNotInWall",
         ),
         (
-            "at an angle",
+            "at an angle, not seated",
             &angled,
             one("D-1", &door, mm(1000, 0)),
-            "NotAHost",
+            "NotSeated",
         ),
     ];
     let edition = k.edition();
@@ -2493,8 +2497,8 @@ pub fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening<E: Engine + S
 /// A family that does not fit is refused before the engine is asked, naming the family and why,
 /// and `fits` says the same word for word: one wider than its wall, one off its end, one touching
 /// it, one as tall as the wall, two whose openings overlap, one turned across its wall, one on
-/// the old box wall, one on a wall at an angle, one whose recipe is not loaded and one whose type
-/// its recipe does not name.
+/// the old box wall, one handed to a wall at an angle without its seat and one seated for another
+/// wall (piece A83), one whose recipe is not loaded and one whose type its recipe does not name.
 #[allow(
     clippy::too_many_lines,
     reason = "one case per refusal, each asked of the builder and of fits"
@@ -2521,6 +2525,10 @@ pub fn a_family_that_does_not_fit_is_refused_with_a_reason<E: Engine + Send + 's
         json!(format!("sha256:{}", "0".repeat(64))),
     );
     let unnamed = placed(DOOR_FAMILY, "d1x1", Turn::Half);
+    let elsewhere = construct_regen::hosting::with_seat(
+        &placed(DOOR_FAMILY, "d900x2100", Turn::None),
+        &construct_families::Seat::new([1, 0], [0, 0], [0, 0]).unwrap(),
+    );
     let mm = |x: i64, z: i64| at(&k, [x, 0, z]);
     let one = |key, recipe, at| vec![hosted(key, recipe, at)];
     let cases: Vec<Case<'_>> = vec![
@@ -2570,10 +2578,16 @@ pub fn a_family_that_does_not_fit_is_refused_with_a_reason<E: Engine + Send + 's
             "NotAHost",
         ),
         (
-            "on a wall at an angle",
+            "on a wall at an angle, not seated",
             &angled,
             one("F-1", &door, mm(1500, 0)),
-            "NotAHost",
+            "NotSeated",
+        ),
+        (
+            "seated for another wall",
+            &angled,
+            one("F-1", &elsewhere, mm(0, 0)),
+            "SeatMismatch",
         ),
         (
             "not loaded",
@@ -2782,12 +2796,12 @@ pub fn an_opening_in_a_wall_is_refused_by_name<E: Engine + Send + 'static>(make:
             "opening O-1: it does not run along its wall's axis",
         ),
         (
-            "at an angle",
+            "at an angle, not seated",
             &angled,
             one(&opening, mm(1000, 900)),
-            "NotAHost",
-            "opening O-1: a door or an opening is hosted only on a wall along x or y until doors \
-             are families; this wall runs at an angle",
+            "NotSeated",
+            "opening O-1: it is not seated in its wall, which runs at an angle; an element is \
+             placed in such a wall by its offsets along it and up it (hosted.move gives them)",
         ),
     ];
     let edition = k.edition();
@@ -3062,4 +3076,584 @@ pub fn a_room_is_its_loop_extruded<E: Engine + Send + 'static>(make: impl Fn() -
         body["holes"].as_array().map_or(0, Vec::len),
         usize::from(island)
     );
+}
+
+/// A filled stair recipe (construct-stairs' `filled` form), every point a whole millimetre: a run
+/// 1000 mm wide from the origin towards +x, two risers of 180 mm on a 300 mm going and an
+/// underside from 300 mm along at the floor up to 200 mm high at its end, 600 mm along; then a
+/// landing 900 mm long and 150 mm thick, its top 360 mm up. In the run's plane its profile is
+/// (0, 0), (0, 180), (300, 180), (300, 360), (600, 360), (600, 200), (300, 0): 300 x 180 mm before
+/// its middle and 300 x (360 - 100) mm after, 132,000 mm2.
+pub fn stair_of() -> Recipe {
+    let mm = |p: [i64; 3]| p.map(|c| c * 6400);
+    let profile = [
+        [0, 0],
+        [0, 180],
+        [300, 180],
+        [300, 360],
+        [600, 360],
+        [600, 200],
+        [300, 0],
+    ];
+    let side = |y: i64| -> Vec<[i64; 3]> { profile.iter().map(|&[a, z]| mm([a, y, z])).collect() };
+    let plan = |corners: [[i64; 2]; 4]| -> Vec<[i64; 2]> {
+        corners.iter().map(|&[x, y]| [x * 6400, y * 6400]).collect()
+    };
+    let landing = [
+        [600, 0, 210],
+        [1500, 0, 210],
+        [1500, 1000, 210],
+        [600, 1000, 210],
+    ]
+    .map(mm);
+    recipe(
+        "stair",
+        json!({
+            "material": "concrete-regular",
+            "pieces": [
+                {
+                    "id": "run.1",
+                    "treads": 1,
+                    "plan": plan([[0, 0], [600, 0], [600, 1000], [0, 1000]]),
+                    "loft": [side(0), side(1000)],
+                },
+                {
+                    "id": "landing.1",
+                    "plan": plan([[600, 0], [1500, 0], [1500, 1000], [600, 1000]]),
+                    "extrude": landing,
+                    "by": mm([0, 0, 150]),
+                },
+            ],
+        }),
+    )
+}
+
+/// A stair is one solid per piece: its run's profile lofted across its 1000 mm width, a closed
+/// mesh of exactly 132,000 mm2 by 1000 mm, and its landing's outline extruded up, exactly 900 by
+/// 1000 by 150 mm, each a part in the stair's material; its bounds the stand-in's box; its faces
+/// named by its pieces (a tread and a riser for each tread of a run, its sides, underside and end,
+/// and a landing's top, underside and edges), as `construct_regen::kernel::names` gives them
+/// without building; the body lists what each piece asked of the engine, exactly in steps.
+pub fn a_stair_is_its_pieces<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let stair = stair_of();
+    let b = built(&k, &stair);
+    assert_eq!(b.bounds.min, [0, 0, 0]);
+    assert_eq!(b.bounds.max, [1500, 1000, 360]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&stair).unwrap().bounds
+    );
+    assert_eq!(b.displays[0].deviation, 0);
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[0, 0], [600, 0], [600, 1000], [0, 1000]]
+    );
+    let parts = &b.displays[0].parts;
+    assert_eq!(parts.len(), 2);
+    assert!(parts.iter().all(|p| p.material == "concrete-regular"));
+    assert_eq!(
+        closed_mesh_six_volume(&part_mesh(&b.displays[0], 0)),
+        6 * 132_000 * 1000
+    );
+    assert_eq!(
+        closed_mesh_six_volume(&part_mesh(&b.displays[0], 1)),
+        6 * 900 * 1000 * 150
+    );
+    assert_eq!(b.displays[1].mesh, b.displays[0].mesh);
+    let names = by_role(&b);
+    let roles: BTreeSet<&str> = names.keys().map(String::as_str).collect();
+    assert_eq!(
+        roles,
+        BTreeSet::from([
+            "run.1.tread.1",
+            "run.1.riser.1",
+            "run.1.side.left",
+            "run.1.side.right",
+            "run.1.underside",
+            "run.1.end",
+            "landing.1.top",
+            "landing.1.underside",
+            "landing.1.edge.0",
+            "landing.1.edge.1",
+            "landing.1.edge.2",
+            "landing.1.edge.3",
+        ])
+    );
+    let mut sorted = b.names.clone();
+    sorted.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(construct_regen::kernel::names(&stair).unwrap(), sorted);
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let asked = body["pieces"].as_array().unwrap();
+    assert_eq!(asked.len(), 2);
+    assert_eq!(asked[0]["loft"], stair.args["pieces"][0]["loft"]);
+    assert_eq!(asked[1]["extrude"], stair.args["pieces"][1]["extrude"]);
+    assert_eq!(asked[1]["by"], json!([0, 0, 150 * 6400]));
+}
+
+/// A mullion profile of `width` by `depth` whole millimetres, centred on the wall's line, in its
+/// stored form.
+fn curtain_profile(width: i64, depth: i64) -> String {
+    format!(
+        r#"{{"shape":"rectangle","width":"length:q0:{}","depth":"length:q0:{}","offset":"length:q0:0","material":"timber-douglas-fir"}}"#,
+        width * 6400,
+        depth * 6400
+    )
+}
+
+/// A curtain wall type's grid and parts in its stored form (construct-curtain's FORMAT.md):
+/// vertical lines every `vertical` mm and horizontal lines every `horizontal` mm from the start
+/// (0 for none), 24 mm glazing, and 50 by 150 mm mullions on every line and border when
+/// `mullions`, the vertical ones running through.
+pub fn curtain_spec(vertical: i64, horizontal: i64, mullions: bool) -> String {
+    let layout = |every: i64| {
+        if every == 0 {
+            r#"{"layout":"none"}"#.to_owned()
+        } else {
+            format!(
+                r#"{{"layout":"spacing","spacing":"length:q0:{}","justify":"start"}}"#,
+                every * 6400
+            )
+        }
+    };
+    let slot = if mullions {
+        curtain_profile(50, 150)
+    } else {
+        "null".to_owned()
+    };
+    format!(
+        r#"{{"version":1,"vertical":{},"horizontal":{},"panel":{{"kind":"glazed","thickness":"length:q0:153600","offset":"length:q0:0","material":"glass-plate"}},"mullions":{{"interior-vertical":{slot},"interior-horizontal":{slot},"border-vertical":{slot},"border-horizontal":{slot}}},"crossing":"vertical"}}"#,
+        layout(vertical),
+        layout(horizontal)
+    )
+}
+
+/// A curtain wall's filled recipe, as the regenerator hands it to a builder: from the origin to
+/// `end` (mm), `height` mm high, of the grid and parts `spec`, with its own edits `grid`.
+pub fn curtain(end: [i64; 2], height: i64, spec: &str, grid: Option<Value>) -> Recipe {
+    let q0 = |mm: i64| format!("length:q0:{}", mm * 6400);
+    let mut args = json!({
+        "start": [q0(0), q0(0)],
+        "end": [q0(end[0]), q0(end[1])],
+        "height": q0(height),
+        "curtain": spec,
+    });
+    if let Some(grid) = grid {
+        args["grid"] = grid;
+    }
+    recipe("wall.curtain", args)
+}
+
+/// A curtain wall of 6 m by 3 m, vertical lines every 1.5 m and horizontal lines every 1 m, with
+/// 50 by 150 mm mullions on every line and border, is one solid per panel and per mullion: 12
+/// panels then 31 mullions, each a closed mesh holding exactly its box (the panels between the
+/// mullions' faces, 1425, 1450, 1450 and 1425 mm wide by 925, 950 and 925 mm high, 24 mm thick;
+/// the vertical mullions 1 m long, running through; the horizontal ones as long as the columns
+/// are wide), each with its material; the bounds the stand-in's; its faces the wall's six roles,
+/// as `construct_regen::kernel::names` gives them without building.
+pub fn a_curtain_wall_is_its_panels_and_mullions<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let wall = curtain([6000, 0], 3000, &curtain_spec(1500, 1000, true), None);
+    let b = built(&k, &wall);
+    let parts = &b.displays[0].parts;
+    assert_eq!(parts.len(), 12 + 31);
+    let (columns, rows) = ([1425_i128, 1450, 1450, 1425], [925_i128, 950, 925]);
+    let mut expected = Vec::new();
+    for w in columns {
+        for h in rows {
+            expected.push(("panel.glazed", "glass-plate", w * 24 * h));
+        }
+    }
+    for _ in 0..15 {
+        expected.push(("mullion", "timber-douglas-fir", 50 * 150 * 1000));
+    }
+    for _ in 0..4 {
+        for w in columns {
+            expected.push(("mullion", "timber-douglas-fir", 50 * 150 * w));
+        }
+    }
+    for (at, (function, material, volume)) in expected.iter().enumerate() {
+        assert_eq!(parts[at].function, *function, "part {at}");
+        assert_eq!(parts[at].material, *material, "part {at}");
+        let six = closed_mesh_six_volume(&part_mesh(&b.displays[0], at));
+        assert_eq!(six, 6 * volume, "part {at}");
+    }
+    assert_eq!(b.bounds.min, [0, -75, 0]);
+    assert_eq!(b.bounds.max, [6000, 75, 3000]);
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&wall).unwrap().bounds
+    );
+    assert_eq!(
+        b.displays[0].outline,
+        vec![[0, 75], [0, -75], [6000, -75], [6000, 75]]
+    );
+    assert_eq!(b.displays[0].deviation, 0);
+    assert_eq!(b.displays[1].mesh, b.displays[0].mesh);
+    let roles: BTreeSet<String> = by_role(&b).into_keys().collect();
+    let six: BTreeSet<String> = WALL_ROLES.iter().map(|r| (*r).to_owned()).collect();
+    assert_eq!(roles, six);
+    assert_eq!(construct_regen::kernel::names(&wall).unwrap(), b.names);
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["solids"].as_array().unwrap().len(), 43);
+    assert_eq!(body["solids"][0]["key"], "panel.0.0");
+    assert!(body.get("doors").is_none());
+    assert_eq!(
+        built(&k, &wall).body,
+        b.body,
+        "the same recipe, the same bytes"
+    );
+}
+
+/// A door panel is its family's solids, sized to its panel: in a 6 m by 3 m curtain wall of 1 m
+/// columns with a horizontal line added at 2.1 m and no mullions, the library's single-swing door
+/// in the cell from 1 m along stands inside that cell (1 to 2 m along), drawn as parts named for
+/// its family's steps, as the stand-in draws them; the other 11 panels are glazed. The body names
+/// the door, its size and where it stands.
+pub fn a_door_panel_is_its_familys_solids<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let (content, _) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.single-swing-door")
+        .unwrap();
+    let q0 = |mm: i64| format!("length:q0:{}", mm * 6400);
+    let grid = json!({
+        "added": { "vertical": [], "horizontal": [q0(2100)] },
+        "removed": { "vertical": [], "horizontal": [] },
+        "omitted": [],
+        "panels": [{ "at": [q0(1000), q0(0)],
+            "panel": { "kind": "door", "family": content.as_str(), "type": "d900x2100" } }],
+    });
+    let wall = curtain([6000, 0], 3000, &curtain_spec(1000, 0, false), Some(grid));
+    let b = built(&k, &wall);
+    let parts = &b.displays[0].parts;
+    let glazed = parts
+        .iter()
+        .filter(|p| p.function == "panel.glazed")
+        .count();
+    assert_eq!(glazed, 11);
+    let doors: Vec<_> = parts
+        .iter()
+        .filter(|p| p.function.starts_with("door."))
+        .collect();
+    assert_ne!(doors.len(), 0);
+    for door in &doors {
+        for [x, _] in &door.outline {
+            assert!((1000..=2000).contains(x), "{door:?}");
+        }
+    }
+    let stand_in = construct_regen::geometry().build(&wall).unwrap();
+    let functions = |parts: &[construct_model::geometry::Part]| -> Vec<String> {
+        parts.iter().map(|p| p.function.clone()).collect()
+    };
+    assert_eq!(functions(parts), functions(&stand_in.displays[0].parts));
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    let door = &body["doors"][0];
+    assert_eq!(door["family"], content.as_str());
+    assert_eq!(door["width"], json!(q0(1000)));
+    assert_eq!(door["height"], json!(q0(2100)));
+    assert_eq!(door["origin"], json!([1500 * 6400, 0, 0]));
+    assert!(b.bounds.max[2] <= 3000 && b.bounds.min[0] >= 0);
+}
+
+/// The walls at an angle the suite hosts in (piece A83): 5 m long from the origin, their ends in
+/// whole millimetres, at 30, 45 and 60 degrees (each end the nearest millimetre to it) and at a
+/// 3:4:5 slope.
+pub const ANGLES: [(&str, [i64; 2]); 4] = [
+    ("30 degrees", [4330, 2500]),
+    ("45 degrees", [3536, 3536]),
+    ("60 degrees", [2500, 4330]),
+    ("3:4:5", [3000, 4000]),
+];
+
+/// Whether `m` is the nearest whole number to `n / sqrt(dd)`, a half away from zero, asked of
+/// whole numbers by squaring: `(2|m| - 1)^2 dd <= (2n)^2 < (2|m| + 1)^2 dd`, `m` signed as `n`.
+pub fn is_nearest(m: i64, n: i128, dd: i128) -> bool {
+    let (m, n2) = (i128::from(m), (2 * n).pow(2));
+    let signed = m == 0 || (m > 0) == (n > 0);
+    let low = if m == 0 {
+        0
+    } else {
+        (2 * m.abs() - 1).pow(2) * dd
+    };
+    signed && low <= n2 && n2 < (2 * m.abs() + 1).pow(2) * dd
+}
+
+/// Whether the plan point `got` (grid steps from the wall's start) is, on each axis, the nearest
+/// grid step to the point `along` the wall's line (of direction `d`, in steps) and `left` to its
+/// left: one rounding from the exact point, as the builder promises.
+pub fn lands_at(d: [i64; 2], [along, left]: [i64; 2], got: [i64; 2]) -> bool {
+    let [dx, dy] = d.map(i128::from);
+    let (along, left) = (i128::from(along), i128::from(left));
+    let dd = dx * dx + dy * dy;
+    is_nearest(got[0], along * dx - left * dy, dd) && is_nearest(got[1], along * dy + left * dx, dd)
+}
+
+/// An element `key` of `recipe` hosted on the `role` side of the filled layered wall `wall`,
+/// `along` and `up` millimetres, seated as the regenerator seats it (construct-regen's
+/// `hosting::seat`): its place in the wall's frame and its recipe as the builder is handed it.
+pub fn seat_on(
+    edition: &construct_model::geometry::Edition,
+    wall: &Recipe,
+    (key, recipe): (&str, &Recipe),
+    (role, along, up): (&str, i32, i32),
+) -> (construct_model::element::Placement, Recipe) {
+    use construct_model::element::{Element, Placement};
+    use construct_regen::hosting;
+    let id = |text: &str| kit_core::Id::parse(text).unwrap();
+    let element = |key: &str, recipe: &Recipe| Element {
+        id: id(key),
+        document: id("doc"),
+        kind: "door".to_owned(),
+        name: key.to_owned(),
+        level: 0,
+        placement: Placement { x: 0, y: 0, z: 0 },
+        recipe: recipe.clone(),
+        props: BTreeMap::new(),
+        references: Vec::new(),
+    };
+    let host = element("W-1", wall);
+    let mut hosted = element(key, recipe);
+    let face = hosting::side_by_role(edition, wall, role).unwrap();
+    hosting::write(
+        &mut hosted,
+        &host.id,
+        &face,
+        construct_params::Length::from_mm(along),
+        construct_params::Length::from_mm(up),
+    );
+    let how = hosting::read(&hosted).unwrap().unwrap();
+    hosting::seat(edition, &host, wall, &hosted, &hosted.recipe, &how)
+        .unwrap_or_else(|e| panic!("{key} is seated: {e}"))
+}
+
+/// One element the any-angle case hosts: its key and recipe, its side, along and up, and its
+/// opening's along and up, in millimetres.
+type AtAngle<'a> = (&'a str, &'a Recipe, &'a str, i32, i32, [i64; 2], [i64; 2]);
+
+/// A door, a window, a plain opening and a placed door, each in a three-layer wall at 30, 45 and
+/// 60 degrees and at a 3:4:5 slope (piece A83), fit and cut it as along an axis: `fits` passes
+/// them; each opening lies in the wall's frame exactly where its offsets put it; each layer is
+/// made of its cells outside the openings (the wall cut at its ends and every jamb: five stretches
+/// beside the openings their whole height, a piece over each door and a piece under and over the
+/// window and the opening, eleven), every cell corner either the
+/// layer's own at the wall's ends or the nearest grid step to a frame point on one of its faces
+/// at a jamb (on the 3:4:5 wall, exactly that point), swept straight up; each layer holds a
+/// volume. Each element built alone builds on this engine and on the stand-in, placed at the
+/// nearest millimetre to the origin its seat puts it at; the box door's own corners are its
+/// seat's frame points, rounded once, and those on the exterior face are exactly the exterior
+/// layer's corners at its jambs: it stands in its hole on the same grid points; and each family's
+/// every point stands inside its opening, across the wall's thickness.
+#[allow(
+    clippy::too_many_lines,
+    reason = "four elements in four walls, each asked of the wall, of itself and of the stand-in"
+)]
+pub fn elements_at_any_angle_cut_their_wall_and_stand_in_it<E: Engine + Send + 'static>(
+    make: impl Fn() -> E,
+) {
+    use construct_families::Turn;
+    use construct_model::geometry::Hosted as HostedAt;
+    let k = kernel(make());
+    let edition = k.edition();
+    let door = recipe(
+        "door.single",
+        json!({ "width": 900, "thickness": 100, "height": 2100, "axis": "x" }),
+    );
+    let opening = plain_opening(600, 1200, "x");
+    let window = placed(WINDOW_FAMILY, "w1200x1200", Turn::None);
+    let leaf = placed(DOOR_FAMILY, "d900x2100", Turn::None);
+    let mm = 6400_i64;
+    let elements: [AtAngle<'_>; 4] = [
+        ("D-1", &door, "exterior", 300, 0, [300, 1200], [0, 2100]),
+        (
+            "F-1",
+            &window,
+            "exterior",
+            2000,
+            0,
+            [1400, 2600],
+            [900, 2100],
+        ),
+        (
+            "O-1",
+            &opening,
+            "interior",
+            2800,
+            900,
+            [2800, 3400],
+            [900, 2100],
+        ),
+        ("F-2", &leaf, "interior", 4000, 0, [3550, 4450], [0, 2100]),
+    ];
+    for (name, end) in ANGLES {
+        let wall = layered_wall([0, 0], end, 2700, &THREE);
+        let d = end.map(|c| c * mm);
+        let seated: Vec<_> = elements
+            .iter()
+            .map(|(key, recipe, role, along, up, ..)| {
+                seat_on(&edition, &wall, (key, recipe), (role, *along, *up))
+            })
+            .collect();
+        let list: Vec<HostedAt<'_>> = elements
+            .iter()
+            .zip(&seated)
+            .map(|(e, (at, recipe))| HostedAt {
+                key: e.0,
+                recipe,
+                at: *at,
+            })
+            .collect();
+        construct_regen::kernel::fits(&edition, &wall, &list)
+            .unwrap_or_else(|e| panic!("{name}: they fit: {e}"));
+        let built = Geometry::build_hosting(&k, &wall, &list)
+            .unwrap_or_else(|e| panic!("{name}: the wall builds with them: {e}"));
+        let body: Value = serde_json::from_slice(&built.body).unwrap();
+        assert!(
+            body.get("subtract").is_none(),
+            "{name}: nothing is subtracted"
+        );
+        for (key, .., [a0, a1], [foot, head]) in &elements {
+            let opening = body["openings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["key"] == *key)
+                .unwrap_or_else(|| panic!("{name}: {key} is cut"));
+            assert_eq!(opening["along"], json!([a0 * mm, a1 * mm]), "{name}: {key}");
+            assert_eq!(
+                opening["up"],
+                json!([foot * mm, head * mm]),
+                "{name}: {key}"
+            );
+        }
+        let jambs: Vec<i64> = elements
+            .iter()
+            .flat_map(|e| [e.5[0] * mm, e.5[1] * mm])
+            .collect();
+        let plan = construct_regen::wall_plan::Layered::of(&wall).unwrap();
+        let mut exterior_corners = Vec::new();
+        for (layer, asked) in plan.layers.iter().zip(body["layers"].as_array().unwrap()) {
+            let cells = asked["cells"].as_array().unwrap();
+            assert_eq!(cells.len(), 11, "{name}");
+            let faces = [layer.exterior, layer.interior];
+            let ends: Vec<[i64; 2]> = faces
+                .iter()
+                .flat_map(|&o| plan.plan.face(o).unwrap())
+                .collect();
+            for cell in cells {
+                let corners: Vec<[i64; 3]> =
+                    serde_json::from_value(cell["extrude"].clone()).unwrap();
+                let by: [i64; 3] = serde_json::from_value(cell["by"].clone()).unwrap();
+                assert_eq!(
+                    (by[0], by[1]),
+                    (0, 0),
+                    "{name}: a cell is swept straight up"
+                );
+                assert!(by[2] > 0, "{name}");
+                for c in &corners {
+                    let at = [c[0], c[1]];
+                    let on_a_jamb = jambs.iter().any(|&a| {
+                        faces.iter().any(|&o| {
+                            let landed = lands_at(d, [a, -o], at);
+                            if landed && name == "3:4:5" {
+                                // (3, 4) / 5 takes a multiple of five steps to a grid point.
+                                let l = 5000 * mm;
+                                assert_eq!(at[0] * l, a * d[0] + o * d[1]);
+                                assert_eq!(at[1] * l, a * d[1] - o * d[0]);
+                            }
+                            landed
+                        })
+                    });
+                    assert!(
+                        on_a_jamb || ends.contains(&at),
+                        "{name}: a cell corner {c:?} is neither a jamb's nor the layer's own"
+                    );
+                }
+                if layer.exterior == plan.outer().0 {
+                    exterior_corners.extend(corners.iter().map(|c| [c[0], c[1]]));
+                }
+            }
+        }
+        assert_eq!(built.displays[0].parts.len(), 3, "{name}");
+        for at in 0..3 {
+            let six = pieces_six_volume(&part_mesh(&built.displays[0], at));
+            assert!(six > 0, "{name}: layer {at} holds a volume");
+        }
+        for ((key, _, _, _, _, [a0, a1], [foot, head]), (at, recipe)) in
+            elements.iter().zip(&seated)
+        {
+            let own = k
+                .build(recipe)
+                .unwrap_or_else(|e| panic!("{name}: {key} builds: {e}"));
+            construct_regen::stand_in::Boxes
+                .build(recipe)
+                .unwrap_or_else(|e| panic!("{name}: {key} builds on the stand-in: {e}"));
+            let seat = construct_regen::hosting::seat_of(recipe).unwrap().unwrap();
+            let origin = seat.plan([0, 0]).unwrap();
+            let nearest = |steps: i64| construct_regen::wall_plan::nearest_mm(steps).0;
+            assert_eq!(
+                [
+                    nearest(origin[0] + at.x * mm),
+                    nearest(origin[1] + at.y * mm)
+                ],
+                [at.x, at.y],
+                "{name}: {key} is placed at the nearest millimetre to its origin"
+            );
+            if *key == "D-1" {
+                // Flush with the exterior face, 115 mm right of the line, 100 mm into the wall.
+                let own_body: Value = serde_json::from_slice(&own.body).unwrap();
+                let corners: Vec<[i64; 3]> =
+                    serde_json::from_value(own_body["extrude"].clone()).unwrap();
+                let (s0, s1) = (-115 * mm, -15 * mm);
+                let frame = [[a0 * mm, s0], [a1 * mm, s0], [a1 * mm, s1], [a0 * mm, s1]];
+                for (c, f) in corners.iter().zip(frame) {
+                    let got = [c[0] + at.x * mm, c[1] + at.y * mm];
+                    assert!(lands_at(d, f, got), "{name}: the door's corner {got:?}");
+                    if f[1] == s0 {
+                        assert!(
+                            exterior_corners.contains(&got),
+                            "{name}: the door's corner {got:?} is its hole's"
+                        );
+                    }
+                }
+            }
+            if key.starts_with('F') {
+                family_stands_in(name, key, end, *at, &own, [*a0, *a1], [*foot, *head]);
+            }
+        }
+    }
+}
+
+/// Every point of the family `key`'s mesh (whole millimetres from its placement `at`), in the
+/// frame of the wall along `end` from the origin, within a millimetre of its opening from `a0` to
+/// `a1` along and `foot` to `head` up, and of the wall's 230 mm thickness.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a test's bound in millimetres, from numbers far under 2^53"
+)]
+fn family_stands_in(
+    name: &str,
+    key: &str,
+    end: [i64; 2],
+    at: construct_model::element::Placement,
+    own: &Built,
+    [a0, a1]: [i64; 2],
+    [foot, head]: [i64; 2],
+) {
+    let (ex, ey) = (end[0] as f64, end[1] as f64);
+    let length = ex.hypot(ey);
+    let (a0, a1, foot, head) = (a0 as f64, a1 as f64, foot as f64, head as f64);
+    for p in own.displays[0].mesh.positions.as_chunks::<3>().0 {
+        let (x, y, z) = ((p[0] + at.x) as f64, (p[1] + at.y) as f64, p[2] as f64);
+        let along = (x * ex + y * ey) / length;
+        let right = (x * ey - y * ex) / length;
+        assert!(
+            along >= a0 - 1.0 && along <= a1 + 1.0,
+            "{name}: {key} at {along} along"
+        );
+        assert!(
+            z >= foot - 1.0 && z <= head + 1.0,
+            "{name}: {key} at {z} up"
+        );
+        assert!(right.abs() <= 116.0, "{name}: {key} at {right} across");
+    }
 }

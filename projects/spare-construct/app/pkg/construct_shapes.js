@@ -35,6 +35,46 @@ export function edition() {
         wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
+
+/**
+ * Where an element hosted on a wall at an angle sits and the recipe its builder is handed, as
+ * construct-regen's `seating::seat_json` works it out for the server's regenerator: `wall` is the
+ * wall's filled recipe, `recipe` the element's, `key` its ID, `role` the side it is on
+ * (`exterior` or `interior`), `along` and `up` its offsets as stored text. The answer is
+ * `{"seat": {"placement": {x, y, z}, "recipe": ...}}` in the wall's frame, or
+ * `{"failed": {code, message}}`.
+ * @param {string} wall
+ * @param {string} recipe
+ * @param {string} key
+ * @param {string} role
+ * @param {string} along
+ * @param {string} up
+ * @returns {string}
+ */
+export function seat(wall, recipe, key, role, along, up) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(wall, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(recipe, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(role, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(along, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(up, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.seat(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        deferred7_0 = ret[0];
+        deferred7_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,

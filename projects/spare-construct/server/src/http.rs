@@ -101,6 +101,10 @@ fn type_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/roof-types",
             get(roof_types),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/curtain-types",
+            get(curtain_types),
+        )
 }
 
 /// Every page and API route, each a handler over the app.
@@ -166,6 +170,7 @@ pub fn routes(app: Shared) -> Router {
             get(families),
         )
         .route("/api/projects/{project}/models/{model}/rooms", get(rooms))
+        .route("/api/projects/{project}/models/{model}/stairs", get(stairs))
         .route(
             "/api/projects/{project}/models/{model}/warnings",
             get(warnings),
@@ -206,7 +211,8 @@ pub fn routes(app: Shared) -> Router {
         .with_state(app)
 }
 
-/// A model's views: the list, what one shows, and its plan as the server draws it; and its sheets.
+/// A model's views: the list, what one shows, its plan as the server draws it, its graphics rules
+/// and its dimensions; and its sheets.
 fn view_routes() -> Router<Shared> {
     Router::new()
         .route("/api/projects/{project}/models/{model}/views", get(views))
@@ -221,6 +227,10 @@ fn view_routes() -> Router<Shared> {
         .route(
             "/api/projects/{project}/models/{model}/views/{view}/graphics",
             get(graphics),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/dimensions",
+            get(dimensions),
         )
         .route("/api/projects/{project}/models/{model}/sheets", get(sheets))
         .route(
@@ -686,6 +696,18 @@ async fn graphics(
     ))
 }
 
+async fn dimensions(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .dimensions(&person, &id(&project)?, &id(&model)?, &id(&view)?)
+            .await?,
+    ))
+}
+
 async fn sheets(
     State(app): State<Shared>,
     Me(person): Me,
@@ -742,6 +764,30 @@ async fn roof_types(
     Ok(Json(
         app.service
             .roof_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn stairs(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .stairs(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn curtain_types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .curtain_types(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

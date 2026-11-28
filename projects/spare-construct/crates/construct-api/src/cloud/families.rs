@@ -22,10 +22,16 @@
 //! category, `window` for the windows category, `family` for any other. Its category is its
 //! family's own (stored as `@category`, so what groups or counts by category reads it there); the
 //! generic models line of construct-categories stays only as the fallback for a family whose
-//! category the table lacks. The family comes from the library
-//! ([`families::Library::baked`], interim until job 7.6 stores families in the document); the
-//! record names the family recipe version by its content id, so a later version of the family
-//! changes nothing already placed.
+//! category the table lacks. The family is one the document holds (job 7.6,
+//! [`crate::cloud::loading`]); `family.place` of a library family the document does not hold yet
+//! loads it in the same entry, so every new copy names a family in the document. The record names
+//! the family by its permanent id and the recipe version by its content id, so only a reload
+//! (`family.reload`) moves a placed copy to a later version. A copy written before job 7.6 names
+//! no family in the document and is read from the library by its content id.
+//!
+//! The commands of the families a document holds (`family.load`, `family.reload`,
+//! `family.swap`, `family.generate`, `family.remove`) are [`crate::cloud::loading`]'s, run
+//! through [`apply`] here.
 //!
 //! Each is refused, as its result and in words, when the wall is missing or is not a wall, the
 //! side is not one of its sides, the family or type is not in the library, an offset or an
@@ -45,10 +51,12 @@
 //! is the orderer's.
 //!
 //! For the page, without the log: [`read_library`], the library's families with their types and
-//! the values each instance holds, which the page's family tool lists.
+//! the values each instance holds; the families route lists the document's own first
+//! ([`crate::cloud::loading::read_families`]).
 
 use crate::cloud::elements::write_record;
 use crate::cloud::hosting::{self, Host, Which, fit, length};
+use crate::cloud::loading;
 use construct_categories::{CategoryId, CategoryTable, DOORS, GENERIC_MODELS, WINDOWS};
 use construct_families::{ContentId, Key, Recipe as FamilyRecipe};
 use construct_model::element::Element;
@@ -56,6 +64,7 @@ use construct_model::geometry::Recipe;
 use construct_params::Units;
 use construct_regen::families::{self, Instance, Library};
 use construct_regen::hosting::{self as placing, Hosting};
+use construct_regen::parameters::At;
 use construct_regen::parameters::{self as records, CATEGORY_KEY};
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -80,10 +89,11 @@ pub const SET: &str = "family.set";
 /// Deletes a placed family.
 pub const DELETE: &str = "family.delete";
 
-/// Whether a command is one of these.
+/// Whether a command is one of these, or of the families a document holds
+/// ([`loading::COMMANDS`]).
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
-    COMMANDS.contains(&cmd)
+    COMMANDS.contains(&cmd) || loading::is_command(cmd)
 }
 
 /// The arguments of every command here; each uses some of them.
@@ -118,7 +128,7 @@ fn units() -> Units {
 }
 
 /// The kind a placed family of `category` has.
-fn kind_of(category: CategoryId) -> &'static str {
+pub(crate) fn kind_of(category: CategoryId) -> &'static str {
     if category == DOORS {
         "door"
     } else if category == WINDOWS {
@@ -130,7 +140,7 @@ fn kind_of(category: CategoryId) -> &'static str {
 
 /// The category of a placed family of `recipe`: its family's, or generic models where the family's
 /// is not one the table has.
-fn category_of(recipe: &FamilyRecipe) -> CategoryId {
+pub(crate) fn category_of(recipe: &FamilyRecipe) -> CategoryId {
     if CategoryTable::new().get(recipe.category).is_some() {
         recipe.category
     } else {
@@ -139,7 +149,7 @@ fn category_of(recipe: &FamilyRecipe) -> CategoryId {
 }
 
 /// The families of the library by name, for a refusal that says what there is.
-fn names_of(library: &Library) -> String {
+pub(crate) fn names_of(library: &Library) -> String {
     let names: Vec<String> = library
         .recipes()
         .map(|(_, recipe)| format!("{} ({})", recipe.name, recipe.id))
@@ -147,18 +157,8 @@ fn names_of(library: &Library) -> String {
     names.join(", ")
 }
 
-/// The family `family` of the library, found by its permanent id.
-fn family_in(library: &Library, family: &str) -> Result<(ContentId, Arc<FamilyRecipe>), String> {
-    library.family(family).ok_or_else(|| {
-        format!(
-            "There is no family {family} in the library; it has {}.",
-            names_of(library)
-        )
-    })
-}
-
 /// The type `ty` of `recipe`, checked: a key the family names.
-fn type_in(recipe: &FamilyRecipe, ty: &str) -> Result<Key, String> {
+pub(crate) fn type_in(recipe: &FamilyRecipe, ty: &str) -> Result<Key, String> {
     let names = || {
         let all: Vec<String> = recipe
             .named_types()
@@ -273,6 +273,9 @@ pub async fn apply<T: Txn>(
     edit: &Edit,
     claim_ms: u64,
 ) -> Answer {
+    if loading::is_command(&edit.cmd) {
+        return loading::apply(txn, project, context, edit).await;
+    }
     let args: Args = match serde_json::from_value(edit.args.clone()) {
         Ok(args) => args,
         Err(e) => return Ok(Err(format!("That edit isn't valid: {e}"))),
@@ -366,12 +369,14 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
                 .to_owned(),
         ));
     }
-    let library = Library::baked();
-    let (content, recipe) = match family_in(&library, &family) {
+    // The document's family, or the library's loaded with this entry (its record the first
+    // change, so it is regenerated before the copy that reads it).
+    let (stored, loaded) = match loading::family_for(txn, project, document, &family).await? {
         Ok(found) => found,
         Err(why) => return Ok(Err(why)),
     };
-    let key = match type_in(&recipe, &ty) {
+    let recipe = &stored.recipe;
+    let key = match type_in(recipe, &ty) {
         Ok(key) => key,
         Err(why) => return Ok(Err(why)),
     };
@@ -386,8 +391,8 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         Ok(length) => length,
         Err(why) => return Ok(Err(why)),
     };
-    let mut placed = families::recipe(&content, &key);
-    match values_in(&recipe, &args.values.unwrap_or_default()) {
+    let mut placed = families::of_family(&families::recipe(&stored.content, &key), &stored);
+    match values_in(recipe, &args.values.unwrap_or_default()) {
         Ok(values) => {
             for (key, stored) in values {
                 placed = families::with_value(&placed, &key, &stored);
@@ -408,7 +413,7 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         Ok(host) => host,
         Err(why) => return Ok(Err(why)),
     };
-    let category = category_of(&recipe);
+    let category = category_of(recipe);
     let mut props = BTreeMap::new();
     props.insert(CATEGORY_KEY.to_owned(), records::write_category(category));
     // On its wall's level: tied as the wall's base is, and on no level by number.
@@ -440,25 +445,40 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         piece: id.clone(),
     };
     txn.put(pointer.key(), to_row(&hash.as_str())?).await?;
+    let mut changes: Vec<Change> = loaded.into_iter().collect();
+    changes.push(Change {
+        piece: id,
+        before: None,
+        after: Some(hash),
+    });
     Ok(Ok(Applied {
-        changes: vec![Change {
-            piece: id,
-            before: None,
-            after: Some(hash),
-        }],
+        changes,
         ..Applied::default()
     }))
 }
 
-/// A placed family's instance and its family recipe, from the library.
-fn instance_of(element: &Element) -> Result<(Instance, Arc<FamilyRecipe>), String> {
-    let instance =
-        Instance::of(&element.recipe).map_err(|e| format!("{}: {}", element.name, e.message))?;
+/// A placed family's instance and its family recipe: the document's family it names, or for a
+/// copy written before families were held in documents, the library's version it names.
+async fn instance_of<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+) -> Result<Result<(Instance, Arc<FamilyRecipe>), String>, StoreError> {
+    let named =
+        |e: construct_model::geometry::GeometryError| format!("{}: {}", element.name, e.message);
+    let recipe = match records::recipe_at(txn, project, document, element, At::Now).await? {
+        Ok(recipe) => recipe,
+        Err(e) => return Ok(Err(named(e))),
+    };
+    let instance = match Instance::of(&recipe) {
+        Ok(instance) => instance,
+        Err(e) => return Ok(Err(named(e))),
+    };
     let library = Library::baked();
-    let recipe = families::resolve(&*library, &instance)
-        .map(|resolved| resolved.recipe)
-        .map_err(|e| e.message)?;
-    Ok((instance, recipe))
+    Ok(families::resolve(&*library, &instance)
+        .map(|resolved| (instance, resolved.recipe))
+        .map_err(|e| e.message))
 }
 
 /// How a placed family is hosted: on a face of a wall.
@@ -500,7 +520,7 @@ async fn retype<T: Txn>(
             "Which type? A family is changed to a type of its own.".to_owned()
         ));
     };
-    let (instance, recipe) = match instance_of(before) {
+    let (instance, recipe) = match instance_of(txn, project, document, before).await? {
         Ok(found) => found,
         Err(why) => return Ok(Err(why)),
     };
@@ -652,7 +672,7 @@ async fn set_values<T: Txn>(
             "Which values? Name each one by its key, with what it should be.".to_owned(),
         ));
     };
-    let (_, recipe) = match instance_of(before) {
+    let (_, recipe) = match instance_of(txn, project, document, before).await? {
         Ok(found) => found,
         Err(why) => return Ok(Err(why)),
     };
@@ -737,6 +757,9 @@ pub async fn generic_rules<T: Txn>(
     project: &Id,
     edit: &Edit,
 ) -> Result<Result<(), String>, StoreError> {
+    if let Err(refused) = loading::generic_rules(txn, project, edit).await? {
+        return Ok(Err(refused));
+    }
     let Ok(args) = serde_json::from_value::<GenericArgs>(edit.args.clone()) else {
         return Ok(Ok(()));
     };
@@ -791,6 +814,14 @@ pub struct FamilyView {
     pub types: Vec<TypeView>,
     /// The values each placed one holds, with their defaults.
     pub values: Vec<ValueView>,
+    /// Whether the document holds it; a library family it does not hold is loaded when one is
+    /// first placed.
+    pub in_document: bool,
+    /// Where the document's family came from (construct-families' `Source`, written:
+    /// `library:<id>`, `text` or `generated:<template>`); empty for one it does not hold.
+    pub source: String,
+    /// How many copies of it are placed in the document.
+    pub placed: u32,
 }
 
 /// A type of a family.
@@ -827,46 +858,53 @@ pub struct ChoiceView {
 }
 
 /// The library's families, with their types and the values each instance holds, in the order of
-/// their content ids: what the page's family tool offers. Interim as the library is (job 7.6).
+/// their content ids. Interim as the baked library is (construct-regen's `families`).
 #[must_use]
 pub fn read_library() -> Vec<FamilyView> {
     let library = Library::baked();
-    let table = CategoryTable::new();
     library
         .recipes()
-        .map(|(content, recipe)| {
-            let category = category_of(recipe);
-            FamilyView {
-                id: recipe.id.to_string(),
-                content: content.as_str().to_owned(),
-                name: recipe.name.clone(),
-                kind: kind_of(category).to_owned(),
-                category: category.0,
-                category_name: table.get(category).map(|c| c.name).unwrap_or_default(),
-                types: recipe
-                    .named_types()
-                    .iter()
-                    .map(|t| TypeView {
-                        key: t.key().to_string(),
-                        name: t.name().to_owned(),
-                    })
-                    .collect(),
-                values: recipe
-                    .instance_parameters(&units())
-                    .into_iter()
-                    .map(|p| ValueView {
-                        key: p.key.to_string(),
-                        name: p.name,
-                        kind: p.kind.tag().to_owned(),
-                        shown: p.shown,
-                        choices: p
-                            .choices
-                            .into_iter()
-                            .map(|(key, label)| ChoiceView { key, label })
-                            .collect(),
-                    })
-                    .collect(),
-            }
-        })
+        .map(|(content, recipe)| view_of(content, recipe))
         .collect()
+}
+
+/// The family `recipe`, of version `content`, as the page lists it: not in the document, none
+/// placed, until the caller says otherwise.
+pub(crate) fn view_of(content: &ContentId, recipe: &FamilyRecipe) -> FamilyView {
+    let table = CategoryTable::new();
+    let category = category_of(recipe);
+    FamilyView {
+        id: recipe.id.to_string(),
+        content: content.as_str().to_owned(),
+        name: recipe.name.clone(),
+        kind: kind_of(category).to_owned(),
+        category: category.0,
+        category_name: table.get(category).map(|c| c.name).unwrap_or_default(),
+        types: recipe
+            .named_types()
+            .iter()
+            .map(|t| TypeView {
+                key: t.key().to_string(),
+                name: t.name().to_owned(),
+            })
+            .collect(),
+        values: recipe
+            .instance_parameters(&units())
+            .into_iter()
+            .map(|p| ValueView {
+                key: p.key.to_string(),
+                name: p.name,
+                kind: p.kind.tag().to_owned(),
+                shown: p.shown,
+                choices: p
+                    .choices
+                    .into_iter()
+                    .map(|(key, label)| ChoiceView { key, label })
+                    .collect(),
+            })
+            .collect(),
+        in_document: false,
+        source: String::new(),
+        placed: 0,
+    }
 }

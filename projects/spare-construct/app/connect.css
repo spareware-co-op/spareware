@@ -57,6 +57,15 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .floor-slab-edge { fill: var(--ink-3); fill-opacity: .35; stroke: var(--ink-3); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .floor-edge-hit { stroke: var(--app-strong); stroke-opacity: .3; stroke-width: 9px; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
 .dw .floor-edge-hit:hover { stroke-opacity: .6; }
+/* A stair: its runs and landings as one body to pick it by, each tread's line (dashed where the stair is above the view's cut plane), the cut line, and the walking line with its arrow. */
+.dw .stair { fill: var(--sink); fill-opacity: .35; stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .stair.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+.dw .stair-tread { stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-above { stroke-dasharray: 6 4; }
+.dw .stair-landing { fill: none; stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-cut { stroke: var(--ink); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-walk { fill: none; stroke: var(--ink); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .stair-walk-start, .dw .stair-arrow { fill: var(--ink); stroke: none; pointer-events: none; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */
@@ -113,3 +122,14 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .sched-table thead th { position: sticky; top: 0; background: var(--page); font-weight: 600; }
 .sched-table tr.click { cursor: pointer; }
 .sched-table tr.sel td { background: var(--hover, rgba(127, 127, 127, 0.18)); }
+/* Linear dimensions: the open view's own are picked by a band along the offset line; the text is never picked. */
+.dw .dim.own { cursor: pointer; }
+.dw .dim-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
+.dw .dim-line, .dw .dim-tick { stroke: var(--ink); }
+.dw .dim-w { stroke: var(--ink-3); }
+.dw .dimt { fill: var(--ink); pointer-events: none; }
+.dw .dimt.bad { fill: var(--danger); }
+.dw .dim.bad .dim-line, .dw .dim.bad .dim-tick { stroke: var(--danger); }
+.dw .dim[data-picked="yes"] .dim-line, .dw .dim[data-picked="yes"] .dim-tick { stroke: var(--app-strong); stroke-width: 2px; }
+.dw .dim.lost .dimt { pointer-events: auto; cursor: pointer; }
+.dw .dim-pick { pointer-events: none; }

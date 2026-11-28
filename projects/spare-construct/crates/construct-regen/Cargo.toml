@@ -9,7 +9,8 @@ license.workspace = true
 # The regenerator that keeps a server's derived shapes up to date. The browser needs only the
 # geometry, so its build leaves this out.
 # It reads parameters, types, levels, wall types, floor types and roof types to fill the recipes
-# that name them, and the walls round a room to find its loop, so those crates come with it.
+# that name them, the walls round a room to find its loop, and lays a stair out from its levels,
+# so those crates come with it.
 server = [
     "dep:kit-store",
     "dep:kit-sync",
@@ -21,10 +22,12 @@ server = [
     "dep:construct-slabs",
     "dep:construct-roofs",
     "dep:construct-rooms",
+    "dep:construct-stairs",
     "dep:construct-materials",
     "dep:construct-views",
     "dep:construct-schedules",
     "dep:construct-sheets",
+    "dep:construct-dimensions",
 ]
 
 [dependencies]
@@ -56,6 +59,9 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 construct-roofs = { path = "../construct-roofs", optional = true }
 # A room's loop is found from the walls of its level (src/rooms.rs). Same workspace.
 construct-rooms = { path = "../construct-rooms", optional = true }
+# A stair is laid out from the rise its levels give it and filled with its pieces (src/stairs.rs).
+# Same workspace.
+construct-stairs = { path = "../construct-stairs", optional = true }
 # A floor's read-only mass is its layers' volumes of their materials, from the default library
 # (src/slabs.rs). Same workspace.
 construct-materials = { path = "../construct-materials", optional = true }
@@ -74,6 +80,11 @@ construct-schedules = { path = "../construct-schedules", optional = true }
 construct-openings = { path = "../construct-openings" }
 # A sheet and a viewport are records with no shape too (the viewport commands, A74).
 construct-sheets = { path = "../construct-sheets", optional = true }
+# A dimension is a record with no shape as well (the dimension commands, A81).
+construct-dimensions = { path = "../construct-dimensions", optional = true }
+# Curtain walls (job 14.1): their layout, solids and quantities, which both builders read
+# (src/curtain_plan.rs), so it is not optional. Same workspace.
+construct-curtain = { path = "../construct-curtain" }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

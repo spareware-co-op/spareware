@@ -13,7 +13,7 @@
 //! there for every category.
 
 use crate::error::ScheduleError;
-use construct_categories::{CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS};
+use construct_categories::{CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS, WALLS};
 use construct_params::{Definition, Holder, Kind, ProjectParams};
 use kit_core::Id;
 
@@ -104,12 +104,18 @@ const fn quantity(
 
 /// Every read-only quantity a schedule can list, by category. The names and kinds are those the
 /// server's own read-only rows carry (construct-slabs, construct-roofs and construct-regen's
-/// rooms), pinned by a test in construct-api that reads each element kind and compares.
+/// rooms and walls), pinned by a test in construct-api that reads each element kind and compares.
+///
+/// A wall's are its reference line's length, its one-face area and its volume, openings taken out
+/// and joints made (construct-regen's `wall_measure`).
 ///
 /// Not here: a roof's pitch (its kind is a slope or an angle by how the roof is set, which a
-/// field's kind cannot follow) and a floor's or roof's per-layer volumes and masses (their number
-/// follows the type's layers).
-pub const QUANTITIES: [Quantity; 15] = [
+/// field's kind cannot follow) and a floor's, roof's or wall's per-layer volumes and masses
+/// (their number follows the type's layers).
+pub const QUANTITIES: [Quantity; 18] = [
+    quantity(WALLS, "wall.length", "Length", Kind::Length),
+    quantity(WALLS, "wall.area", "Area", Kind::Area),
+    quantity(WALLS, "wall.volume", "Volume", Kind::Volume),
     quantity(FLOORS, "floor.area", "Area", Kind::Area),
     quantity(FLOORS, "floor.perimeter", "Perimeter", Kind::Length),
     quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length),

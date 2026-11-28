@@ -7,7 +7,9 @@
 //! through the commands and its quantities read back, a sloped floor and one with slab edges built
 //! one solid per layer (job 5.2), gable, mono-pitch and flat roofs built one
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
-//! cutting a three-layer wall (job 6.4), and a document of one edition reported,
+//! cutting a three-layer wall (job 6.4), a stair's run lofted and its landing extruded (job 6.7),
+//! a family the document holds and no library does built and reloaded (job 7.6), doors, windows
+//! and openings in walls at any angle (piece A83), and a document of one edition reported,
 //! not rebuilt, by a server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
@@ -150,6 +152,11 @@ fn a_flat_roof_is_its_layers() {
 }
 
 #[test]
+fn a_stair_is_its_pieces() {
+    kernel_suite::a_stair_is_its_pieces(engine);
+}
+
+#[test]
 fn a_room_with_an_island_wall_is_its_loop_extruded() {
     kernel_suite::a_room_is_its_loop_extruded(engine, false);
     kernel_suite::a_room_is_its_loop_extruded(engine, true);
@@ -223,6 +230,14 @@ fn joined_walls_meet_without_overlap_on_the_engine() {
 #[test]
 fn a_family_cuts_every_layer_and_stands_in_its_opening() {
     kernel_suite::a_family_cuts_every_layer_and_stands_in_its_opening(engine);
+}
+
+/// Piece A83: a door, a window, a plain opening and a placed door in walls at 30, 45 and 60
+/// degrees and at a 3:4:5 slope, every wall, opening and family solid made by solidcore's engine
+/// and passed by the kernel's checker.
+#[test]
+fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
+    kernel_suite::elements_at_any_angle_cut_their_wall_and_stand_in_it(engine);
 }
 
 #[test]
@@ -1103,6 +1118,72 @@ async fn the_server_draws_a_levels_plan_on_the_kernel() {
     assert_eq!(plan.svg, again.svg);
 }
 
+/// Piece A83: a plan draws a door hosted on a wall at an angle seated in its wall, as its shape is
+/// built: its cut edges run along the wall (a 3:4:5 slope, so neither along x nor along y), and
+/// nothing is left out of the plan.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_server_draws_a_door_in_a_wall_at_an_angle_seated_in_its_wall() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-A83", "type": "wall-partition", "start": ["50 m", "0"],
+                "end": ["53 m", "4 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await;
+    let (_, names, _) = layered(&s, &project, &model, "W-A83").await;
+    let exterior = names
+        .iter()
+        .find(|n| n.role == "exterior")
+        .unwrap()
+        .name
+        .clone();
+    edit(
+        "hosted.place",
+        json!({ "element": "D-A83", "host": "W-A83", "face": exterior, "along": "1200 mm",
+                "recipe": kernel_suite::door_of(900, 2100, "x") }),
+    )
+    .await;
+    s.regenerate(&project).await.unwrap();
+    let plan = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
+    let number = |line: &str, name: &str| -> f64 {
+        let at = line.find(&format!("{name}=\"")).unwrap() + name.len() + 2;
+        line[at..].split('"').next().unwrap().parse().unwrap()
+    };
+    let door: Vec<&str> = plan
+        .svg
+        .split("<line ")
+        .filter(|line| line.contains("data-element=\"D-A83\""))
+        .collect();
+    assert!(!door.is_empty(), "the door's cut edges are drawn");
+    for line in door {
+        let (dx, dy) = (
+            number(line, "x2") - number(line, "x1"),
+            number(line, "y2") - number(line, "y1"),
+        );
+        // The drawing's y runs up the sheet, so the wall runs along (3, -4) in it: an edge is along
+        // it or square to it (4, 3), each within the nearest-step rounding.
+        let (along, square) = (dx * 4.0 + dy * 3.0, dx * 3.0 - dy * 4.0);
+        assert!(
+            along.abs() < 0.1 || square.abs() < 0.1,
+            "an edge of the door runs ({dx}, {dy}), along neither the wall nor across it"
+        );
+    }
+}
+
 /// A view's graphics rules reach the drawing on the kernel: with no rule the plan is the bytes it
 /// was; a heavier pen, another fill and colour, and halftone for what walls cut change those lines
 /// and hatches and nothing else; a hidden category leaves its edges and hatches out (the walls', not
@@ -1221,6 +1302,71 @@ async fn a_roof_drawn_through_commands_is_built_one_solid_per_layer() {
         quantities(&s, &project, &model, "R-900").await["roof.ridge-height"],
         read["roof.ridge-height"]
     );
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
+}
+
+/// Through the server's commands on the kernel (job 6.7): a common stairway from level 1 to level 2
+/// (3000 mm) in two runs of 8 risers of 187.5 mm, an L on a 1000 mm landing, built one solid per
+/// piece (each run's profile lofted across its width, reaching under the landing; the landing
+/// extruded), each a part of the display, named by its pieces' faces; turned into a U and widened
+/// it is built again; its quantities read back as on the stand-in; and the whole model rebuilt
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stair_made_through_commands_is_built_one_solid_per_piece() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "stair.create",
+        json!({ "element": "S-900", "level": "1", "top": "2", "start": ["60 m", "0"],
+                "runs": [{}, {}], "landings": [{ "length": "1 m", "turn": "left" }] }),
+    )
+    .await;
+    let (shown, names, bounds) = layered(&s, &project, &model, "S-900").await;
+    // 7 treads of 280 mm, the landing to 2960 mm, the second run from 1000 mm to 2960 mm up +y;
+    // the second run's last inner corner is 3000 - 187.5 mm up.
+    assert_eq!(bounds, ([60_000, 0, 0], [62_960, 2960, 2813]));
+    let parts = &shown.display.as_ref().unwrap().parts;
+    assert_eq!(parts.len(), 3);
+    assert!(parts.iter().all(|p| p.material == "concrete-regular"));
+    for role in [
+        "run.1.tread.7",
+        "run.2.riser.1",
+        "landing.1.top",
+        "run.2.underside",
+    ] {
+        assert!(names.iter().any(|n| n.role == role), "{role}: {names:?}");
+    }
+    let read = quantities(&s, &project, &model, "S-900").await;
+    assert_eq!(read["stair.risers"].1.as_deref(), Some("16"));
+    assert_eq!(
+        read["stair.riser-height"].0.as_deref(),
+        Some("length:q0:1200000")
+    );
+
+    edit(
+        "stair.runs",
+        json!({ "element": "S-900", "runs": [{}, {}],
+                "landings": [{ "length": "1200 mm", "turn": "back-right" }] }),
+    )
+    .await;
+    edit(
+        "stair.width",
+        json!({ "element": "S-900", "width": "1100 mm" }),
+    )
+    .await;
+    let (_, _, bounds) = layered(&s, &project, &model, "S-900").await;
+    assert_eq!((bounds.0[1], bounds.1[1]), (-1100, 1100), "{bounds:?}");
 
     let before = derived(&store, &project).await;
     let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
@@ -1414,4 +1560,424 @@ async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
         }
     }
     assert_eq!(identities().await, base);
+}
+
+/// A plan's stored view range feeds the drawing's cut height: with the cut plane at 1200 mm the
+/// plan draws the walls and the doors (2100 mm high) they hold; raised to 2500 mm it draws the
+/// walls and no door; raised above the walls' tops (3000 mm) it has nothing cut to draw. The
+/// default range draws the bytes it always did, undo and redo each go there and back, and a
+/// crop stored on the view is the next test's.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_stored_range_sets_where_the_plan_is_cut() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let draw = || async {
+        s.plan(&anna, &project, &model, &i("VP-1"))
+            .await
+            .unwrap()
+            .svg
+    };
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let has = |svg: &str, element: &str| svg.contains(&format!("data-element=\"{element}\""));
+    let low = draw().await;
+    assert!(has(&low, "W-101") && has(&low, "D-101"));
+
+    // Cut at 2500 mm, the top raised with it so the range stays in order.
+    let range = json!({ "top": { "offset": "3.5 m" }, "cut": { "offset": "2.5 m" } });
+    edit("view.set", json!({ "view": "VP-1", "range": range })).await;
+    let high = draw().await;
+    assert_ne!(high, low);
+    assert!(has(&high, "W-101"), "a wall 3000 mm high is cut at 2500");
+    assert!(!has(&high, "D-101"), "a door 2100 mm high is not");
+    assert_eq!(high, draw().await, "the same range draws the same bytes");
+
+    // Above the walls' tops nothing is cut.
+    let range = json!({ "top": { "offset": "4.5 m" }, "cut": { "offset": "3.5 m" } });
+    edit("view.set", json!({ "view": "VP-1", "range": range })).await;
+    let above = draw().await;
+    assert!(!has(&above, "W-101") && !has(&above, "D-101"));
+
+    // The default range again.
+    edit(
+        "view.set",
+        json!({ "view": "VP-1", "range": { "top": { "offset": "2.3 m" },
+                "cut": { "offset": "1.2 m" } } }),
+    )
+    .await;
+    assert_eq!(
+        draw().await,
+        low,
+        "the default range draws what it always did"
+    );
+    // Undo and redo take the range there and back.
+    edit("edit.undo", json!({})).await;
+    assert_eq!(draw().await, above);
+    edit("edit.redo", json!({})).await;
+    assert_eq!(draw().await, low);
+}
+
+/// The x of every `x1` and `x2` of an SVG's lines and every point of its hatch paths, in
+/// millimetres.
+fn xs(svg: &str) -> Vec<f64> {
+    let mut out = Vec::new();
+    for key in ["x1=\"", "x2=\""] {
+        for part in svg.split(key).skip(1) {
+            out.push(part.split('"').next().unwrap().parse().unwrap());
+        }
+    }
+    for part in svg.split(" d=\"").skip(1) {
+        let d = part.split('"').next().unwrap();
+        let words: Vec<&str> = d.split_whitespace().collect();
+        for w in words.windows(2) {
+            if w[0] == "M" || w[0] == "L" {
+                out.push(w[1].parse().unwrap());
+            }
+        }
+    }
+    out
+}
+
+/// A view's crop clips its plan exactly: while it is on, no line or hatch line is drawn beyond its
+/// edge and the walls it crosses are cut at it; while it is shown, its outline is four strokes
+/// with the role `crop`, apart from the drawing's own; hidden, there is no outline; off, the
+/// whole plan is drawn again (with the outline if it is shown); cleared, the plan is the bytes it
+/// was; and undo and redo take it there and back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_views_crop_clips_the_plan_and_draws_its_outline() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let draw = || async {
+        s.plan(&anna, &project, &model, &i("VP-1"))
+            .await
+            .unwrap()
+            .svg
+    };
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let outline = |svg: &str| svg.matches("data-role=\"crop\"").count();
+    let low = draw().await;
+    assert_eq!(outline(&low), 0);
+    let widest = |svg: &str| xs(svg).into_iter().fold(f64::MIN, f64::max);
+    assert!(widest(&low) > 6000.0, "the whole plan runs past 6 m");
+
+    // A crop 0 to 6 m across and all the way up: its outline and nothing beyond its right edge.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "-500" }, "max": { "x": "6 m", "y": "8.5 m" } } } }),
+    )
+    .await;
+    let cropped = draw().await;
+    assert_eq!(outline(&cropped), 4, "a new crop is shown");
+    assert!(
+        widest(&cropped) <= 6000.0,
+        "nothing drawn past the crop's right edge: {}",
+        widest(&cropped)
+    );
+    assert!(
+        xs(&cropped).contains(&6000.0),
+        "a wall the crop's edge crosses is cut at the edge"
+    );
+    assert_eq!(cropped, draw().await, "the same crop draws the same bytes");
+    let elements: Vec<&str> = cropped
+        .split("data-element=\"")
+        .skip(1)
+        .filter_map(|part| part.split('"').next())
+        .collect();
+    assert!(
+        elements.contains(&"D-101"),
+        "the door inside the crop is drawn: {elements:?}"
+    );
+
+    // Hidden: the same clip with no outline. Off but shown: the whole plan with the outline.
+    edit("view.crop.show", json!({ "view": "VP-1", "shown": false })).await;
+    let hidden = draw().await;
+    assert_eq!(outline(&hidden), 0);
+    assert!(widest(&hidden) <= 6000.0);
+    assert_ne!(hidden, low);
+    assert!(
+        hidden.contains("data-element=\"D-101\""),
+        "hidden: the door is drawn"
+    );
+    edit("view.crop.show", json!({ "view": "VP-1", "shown": true })).await;
+    edit("view.crop.set", json!({ "view": "VP-1", "on": false })).await;
+    let off = draw().await;
+    assert_eq!(outline(&off), 4);
+    assert!(widest(&off) > 6000.0, "a crop that is off clips nothing");
+    assert!(
+        off.contains("data-element=\"D-101\""),
+        "off: the door is drawn"
+    );
+
+    // Moving the right edge in to 4 m keeps the door at 2500 mm and still cuts there.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "on": true, "region": { "rectangle": {
+            "min": { "x": "0", "y": "-500" }, "max": { "x": "4 m", "y": "8.5 m" } } } }),
+    )
+    .await;
+    let narrow = draw().await;
+    assert!(widest(&narrow) <= 4000.0, "{}", widest(&narrow));
+    assert!(
+        narrow.contains("data-element=\"D-101\""),
+        "the door is inside 4 m"
+    );
+    // A shaped crop (a triangle off the axes) cuts at fractions of a millimetre and still draws
+    // nothing outside it.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "on": true, "region": { "outline": [
+            { "x": "0", "y": "-500" }, { "x": "6 m", "y": "-500" }, { "x": "0", "y": "8.5 m" }] } }),
+    )
+    .await;
+    let triangle = draw().await;
+    assert_eq!(outline(&triangle), 3);
+    assert!(widest(&triangle) <= 6000.0);
+    assert_ne!(triangle, hidden);
+
+    // Cleared, the plan is what it was; undo brings the crop back, redo clears it.
+    edit("view.crop.clear", json!({ "view": "VP-1" })).await;
+    assert_eq!(draw().await, low);
+    edit("edit.undo", json!({})).await;
+    assert_eq!(draw().await, triangle);
+    edit("edit.redo", json!({})).await;
+    assert_eq!(draw().await, low);
+}
+
+#[test]
+fn a_curtain_wall_is_its_panels_and_mullions() {
+    kernel_suite::a_curtain_wall_is_its_panels_and_mullions(engine);
+}
+
+#[test]
+fn a_door_panel_is_its_familys_solids() {
+    kernel_suite::a_door_panel_is_its_familys_solids(engine);
+}
+
+/// Through the server's commands on the kernel: a curtain wall of the default 1.5 m by 1 m type,
+/// 4 m long and 2.4 m high, embedded 1 m along a 6 m partition 3 m high, cuts its own opening
+/// through every layer of the partition, named by the curtain wall as a plain opening's faces are
+/// named: the stud layer, whose faces are on whole millimetres, keeps exactly its volume less the
+/// opening's. The curtain wall itself stands on the partition's line there, one solid per panel and
+/// per mullion (12 and 31).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_curtain_wall_embedded_through_commands_cuts_its_wall() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-950", "type": "wall-partition", "start": ["70 m", "0"],
+                "end": ["76 m", "0"], "level": "1", "height": "3 m" }),
+    )
+    .await;
+    edit("curtain.defaults", json!({})).await;
+    edit(
+        "curtain.embed",
+        json!({ "element": "CW-950", "type": "curtain-1500x1000", "host": "W-950",
+                "along": "1 m", "length": "4 m", "height": "2.4 m" }),
+    )
+    .await;
+    let (shown, names, bounds) = layered(&s, &project, &model, "W-950").await;
+    assert_eq!(bounds, ([70_000, -58, 0], [76_000, 58, 3000]));
+    assert_eq!(
+        cut_roles(&names),
+        [
+            "tool(CW-950).head",
+            "tool(CW-950).jamb.end",
+            "tool(CW-950).jamb.start"
+        ]
+    );
+    let display = shown.display.as_ref().unwrap();
+    let stud = kernel_suite::closed_mesh_six_volume(&kernel_suite::part_mesh(display, 1));
+    assert_eq!(stud, 6 * (6000 * 90 * 3000 - 4000 * 90 * 2400));
+    let (curtain, _, bounds) = layered(&s, &project, &model, "CW-950").await;
+    assert_eq!(bounds, ([71_000, -75, 0], [75_000, 75, 2400]));
+    assert_eq!(curtain.display.as_ref().unwrap().parts.len(), 12 + 31);
+}
+
+/// Through the server's commands on the kernel: the plan cuts a curtain wall one part at a time
+/// (every panel and mullion its cut edges, glass hatched in its material), free and embedded alike,
+/// and leaves nothing out; and the page is told what it needs of each: the grid as it is laid out
+/// (12 panels and the lines between them), and for the one embedded in a partition where the
+/// server seats it (its recipe with its line written in, its place) and the opening it cuts.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_plan_cuts_a_curtain_wall_and_the_page_is_told_where_it_stands() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel).with_drawer(spare_server::geometry::drawer());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await;
+    edit(
+        "wall.draw",
+        json!({ "element": "W-960", "type": "wall-partition", "start": ["90 m", "0"],
+                "end": ["96 m", "0"], "level": "1", "height": "3 m" }),
+    )
+    .await;
+    edit("curtain.defaults", json!({})).await;
+    edit(
+        "curtain.draw",
+        json!({ "element": "CW-960", "type": "curtain-1500x1000", "level": "1",
+                "start": ["80 m", "-5 m"], "end": ["86 m", "-5 m"], "height": "3 m" }),
+    )
+    .await;
+    edit(
+        "curtain.embed",
+        json!({ "element": "CW-961", "type": "curtain-1500x1000", "host": "W-960",
+                "along": "1 m", "length": "4 m", "height": "2.4 m" }),
+    )
+    .await;
+    let plan = s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
+    for curtain in ["CW-960", "CW-961"] {
+        assert!(
+            plan.svg.contains(&format!("data-element=\"{curtain}\"")),
+            "{curtain} has cut edges"
+        );
+    }
+    assert!(plan.svg.contains("data-material=\"glass-plate\""));
+    let free = serde_json::to_value(
+        s.filled(&anna, &project, &model, &i("CW-960"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(free["curtain"]["panels"].as_array().unwrap().len(), 12);
+    // 5 vertical lines and 4 horizontal ones, borders included.
+    assert_eq!(free["curtain"]["lines"].as_array().unwrap().len(), 9);
+    assert!(free.get("placement").is_none() && free.get("cut").is_none());
+    let seated = serde_json::to_value(
+        s.filled(&anna, &project, &model, &i("CW-961"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(seated["curtain"]["panels"].as_array().unwrap().len(), 12);
+    assert_eq!(seated["placement"], json!({ "x": 0, "y": 0, "z": 0 }));
+    assert!(seated["recipe"]["args"]["start"].is_array());
+    assert_eq!(seated["cut"]["recipe"]["op"], "opening.wall");
+}
+
+/// The library's fixed window under the id `office.window` with its `w1200x1200` type `width`
+/// millimetres wide: a family no library holds, as recipe text.
+fn office_window(width: i64) -> String {
+    let (_, window) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.fixed-window")
+        .unwrap();
+    let mut recipe = (*window).clone();
+    recipe.id = i("office.window");
+    "Office window".clone_into(&mut recipe.name);
+    let table = recipe.type_table.as_mut().unwrap();
+    let at = table
+        .columns
+        .iter()
+        .position(|c| c.as_str() == "width")
+        .unwrap();
+    let row = table
+        .rows
+        .iter_mut()
+        .find(|r| r.key.as_str() == "w1200x1200")
+        .unwrap();
+    row.values[at] = format!("length:q0:{}", width * 6400);
+    recipe.to_json()
+}
+
+/// Through the server's commands on the kernel (job 7.6): a family the document holds and no
+/// library does is placed, cuts its wall and is built from the document's record; a reload at a
+/// wider version cuts a wider opening, its copy kept, and is undone and redone; the log replayed
+/// from empty gives the same bytes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_documents_own_family_is_built_and_reloaded_on_the_kernel() {
+    let (store, files) = (Memory::new(), MemoryFiles::default());
+    let kernel = geometry(Builder::Kernel).unwrap();
+    let s = support::build(&store, &files, kernel.clone());
+    seed(&store, &s).await.unwrap();
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: serde_json::Value| {
+        let (s, anna, project, model) = (&s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await }
+    };
+    edit(
+        "wall.type.create",
+        json!({ "type": "wall-partition", "name": "Partition", "assembly": partition("90 mm") }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "wall.draw",
+        json!({ "element": "W-960", "type": "wall-partition", "start": ["60 m", "20 m"],
+                "end": ["64 m", "20 m"], "level": "1", "height": "2.7 m" }),
+    )
+    .await
+    .unwrap();
+    edit("family.load", json!({ "recipe": office_window(1200) }))
+        .await
+        .unwrap();
+    let place = json!({ "element": "F-1", "family": "office.window", "type": "w1200x1200",
+                        "host": "W-960", "side": "exterior", "along": "1500 mm" });
+    edit("family.place", place).await.unwrap();
+    let (plain, names) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_eq!(cut_roles(&names).len(), 4, "the window cuts its opening");
+    let window = s
+        .shape(&anna, &project, &model, &i("F-1"), Some(0))
+        .await
+        .unwrap();
+    let BuiltResult::Shape { bounds, .. } = &window.built.result else {
+        panic!("F-1 builds from the document: {:?}", window.built.result);
+    };
+    assert_eq!(bounds.max[2] - bounds.min[2], 1200);
+
+    edit(
+        "family.reload",
+        json!({ "family": "office.window", "recipe": office_window(1500) }),
+    )
+    .await
+    .unwrap();
+    let (wide, _) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_ne!(
+        wide.built.result, plain.built.result,
+        "the opening widened with the new version"
+    );
+    edit("edit.undo", json!({})).await.unwrap();
+    let (back, _) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_eq!(back.built.result, plain.built.result);
+    edit("edit.redo", json!({})).await.unwrap();
+    let (again, _) = stored_wall(&s, &project, &model, "W-960").await;
+    assert_eq!(again.built.result, wide.built.result);
+
+    let before = derived(&store, &project).await;
+    let fresh = Regenerator::new(store.clone(), files.clone(), kernel.clone());
+    fresh.rebuild(&project).await.unwrap();
+    assert_eq!(derived(&store, &project).await, before);
 }
