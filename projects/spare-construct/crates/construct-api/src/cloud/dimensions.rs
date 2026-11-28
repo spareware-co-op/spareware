@@ -98,6 +98,11 @@ impl Tool for DimensionTool {
     const COMMANDS: &'static [&'static str] = &COMMANDS;
     const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
     const UNDO_ORDER: u16 = 70;
+    const RULES: &'static [construct_warnings::Rule] = &[
+        construct_warnings::DIMENSION_OUT_OF_RANGE,
+        construct_warnings::DIMENSION_REFERENCE_MISSING,
+        construct_warnings::DIMENSION_REFERENCE_PARALLEL,
+    ];
 
     async fn apply<T: Txn>(
         txn: &mut T,
