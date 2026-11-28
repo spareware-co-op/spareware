@@ -15,7 +15,7 @@
 //! gives an empty cell, and a filter on it lists nothing: [`crate::Schedule::check`] is what says
 //! so in words, and a reader of rows is not stopped by it.
 
-use crate::field::{Basis, Field};
+use crate::field::{Basis, Field, QUANTITIES, Quantity};
 use crate::filter::order;
 use crate::schedule::Schedule;
 use construct_categories::CategoryId;
@@ -101,11 +101,21 @@ pub struct Column {
 /// The columns of a schedule, in the order of its fields.
 #[must_use]
 pub fn columns(schedule: &Schedule, basis: &Basis<'_>) -> Vec<Column> {
+    columns_among(schedule, basis, &QUANTITIES)
+}
+
+/// [`columns`], a category's quantities being those among `quantities`.
+#[must_use]
+pub fn columns_among(
+    schedule: &Schedule,
+    basis: &Basis<'_>,
+    quantities: &[Quantity],
+) -> Vec<Column> {
     schedule
         .fields()
         .iter()
         .map(|field| {
-            let definition = basis.definition(schedule.lists(), field);
+            let definition = basis.definition_among(quantities, schedule.lists(), field);
             Column {
                 field: field.clone(),
                 name: definition
@@ -134,12 +144,25 @@ fn by_key(a: Option<&Reading>, b: Option<&Reading>, descending: bool) -> Orderin
 /// The rows of a schedule over these elements.
 #[must_use]
 pub fn rows(schedule: &Schedule, basis: &Basis<'_>, subjects: &[Subject]) -> Vec<Row> {
+    rows_among(schedule, basis, &QUANTITIES, subjects)
+}
+
+/// [`rows`], a category's quantities being those among `quantities`.
+#[must_use]
+pub fn rows_among(
+    schedule: &Schedule,
+    basis: &Basis<'_>,
+    quantities: &[Quantity],
+    subjects: &[Subject],
+) -> Vec<Row> {
     let mut listed: Vec<&Subject> = subjects
         .iter()
         .filter(|subject| basis.lists(schedule.lists(), subject.category))
         .filter(|subject| {
             schedule.filters().iter().all(|filter| {
-                basis.definition(schedule.lists(), &filter.field).is_some()
+                basis
+                    .definition_among(quantities, schedule.lists(), &filter.field)
+                    .is_some()
                     && subject
                         .reading(&filter.field)
                         .is_some_and(|reading| filter.holds(&reading.value))
@@ -168,7 +191,7 @@ pub fn rows(schedule: &Schedule, basis: &Basis<'_>, subjects: &[Subject]) -> Vec
                 .iter()
                 .map(|field| {
                     let reading = basis
-                        .definition(schedule.lists(), field)
+                        .definition_among(quantities, schedule.lists(), field)
                         .and_then(|_| subject.reading(field));
                     Cell {
                         value: reading.as_ref().map(|r| r.value.clone()),

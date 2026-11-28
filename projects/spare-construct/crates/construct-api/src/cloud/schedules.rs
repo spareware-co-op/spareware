@@ -36,7 +36,10 @@
 //! ([`crate::cloud::views::phases`]), as for views; the job that stores phases through the log
 //! replaces them in one place.
 
+use crate::cloud::Tools;
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use crate::cloud::views;
 use construct_categories::{CategoryId, SCHEDULES};
 use construct_model::element::Element;
@@ -45,8 +48,8 @@ use construct_params::{Units, Value};
 use construct_phases::ElementStaging;
 use construct_regen::parameters::{self as records, Context};
 use construct_schedules::{
-    Basis, Comparison, Field, Filter, QUANTITIES, Reading, SCHEDULE_KIND, Schedule, Schedules,
-    Sort, Subject, columns, rows,
+    Basis, Comparison, Field, Filter, Quantity, Reading, SCHEDULE_KIND, Schedule, Schedules, Sort,
+    Subject, columns_among, rows_among,
 };
 use construct_types::ElementType;
 use kit_core::Id;
@@ -73,6 +76,45 @@ pub const BY_SCHEDULE_COMMANDS: &str = "Schedules are made and changed by the sc
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The schedule tool ([`Tool`]): schedules and their fields, filters and sorting.
+pub struct ScheduleTool;
+
+impl Tool for ScheduleTool {
+    const NAME: &'static str = "schedule";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const UNDO_ORDER: u16 = 50;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        _deleted: &[Id],
+        _whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written).await
+    }
 }
 
 /// A filter as a person sends it.
@@ -119,11 +161,14 @@ fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
     value.ok_or_else(|| format!("This command needs {what}."))
 }
 
-/// A document as a schedule's rules read it: its categories, its parameters and its schedules.
+/// A document as a schedule's rules read it: its categories, its parameters, its schedules and
+/// the quantities its tools give their elements.
 pub struct World {
     context: Context,
     schedules: Schedules,
     records: Vec<Element>,
+    /// Every tool's schedule fields ([`Tools::fields`]).
+    fields: Vec<Quantity>,
 }
 
 impl World {
@@ -142,8 +187,16 @@ impl World {
         &self.schedules
     }
 
+    /// The quantities a schedule's fields are read against: every tool's.
+    #[must_use]
+    pub fn fields(&self) -> &[Quantity] {
+        &self.fields
+    }
+
     fn check(&self, schedule: &Schedule) -> Result<(), String> {
-        schedule.check(&self.basis()).map_err(|e| e.to_string())
+        schedule
+            .check_among(&self.basis(), &self.fields)
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -174,6 +227,7 @@ pub async fn read_world<R: Reader>(
         context,
         schedules,
         records: all,
+        fields: Tools::fields(),
     }))
 }
 
@@ -314,7 +368,10 @@ pub fn summary(schedule: &Schedule, world: &World) -> ScheduleSummary {
                 },
             })
             .collect(),
-        problem: schedule.check(&basis).err().map(|e| e.to_string()),
+        problem: schedule
+            .check_among(&basis, world.fields())
+            .err()
+            .map(|e| e.to_string()),
     }
 }
 
@@ -406,7 +463,8 @@ pub async fn subjects<R: Reader>(
                 continue;
             };
             let field = if row.from == construct_regen::slabs::READ_ONLY {
-                if !QUANTITIES
+                if !world
+                    .fields()
                     .iter()
                     .any(|q| q.name == row.name && q.id == row.id)
                 {
@@ -521,7 +579,7 @@ pub async fn read_table<R: Reader>(
     let table = ScheduleTable {
         schedule: summary(schedule, &world),
         offered: basis
-            .fields_of(schedule.lists())
+            .fields_of_among(world.fields(), schedule.lists())
             .into_iter()
             .map(|(field, definition)| OfferedView {
                 field: field.key(),
@@ -534,7 +592,7 @@ pub async fn read_table<R: Reader>(
                     .collect(),
             })
             .collect(),
-        columns: columns(schedule, &basis)
+        columns: columns_among(schedule, &basis, world.fields())
             .into_iter()
             .map(|column| ColumnView {
                 field: column.field.key(),
@@ -542,7 +600,7 @@ pub async fn read_table<R: Reader>(
                 kind: column.kind.map(construct_params::Kind::tag),
             })
             .collect(),
-        rows: rows(schedule, &basis, &facts)
+        rows: rows_among(schedule, &basis, world.fields(), &facts)
             .into_iter()
             .map(|row| RowView {
                 element: row.element.to_string(),
@@ -585,13 +643,16 @@ fn filters_of(
     given: &[FilterArgs],
     category: CategoryId,
     basis: &Basis<'_>,
+    fields: &[Quantity],
 ) -> Result<Vec<Filter>, String> {
     let units = Units::default();
     let mut filters = Vec::new();
     for one in given {
         let field = field_of(&one.field)?;
         let comparison = Comparison::parse(&one.is).map_err(|e| e.to_string())?;
-        let definition = basis.require(category, &field).map_err(|e| e.to_string())?;
+        let definition = basis
+            .require_among(fields, category, &field)
+            .map_err(|e| e.to_string())?;
         let value = definition.parse(&one.to, &units).map_err(|e| {
             format!(
                 "The filter on {} cannot compare it with {:?}: {e}",
@@ -767,7 +828,8 @@ fn make(args: &Args, world: &World) -> Result<Schedule, String> {
         schedule = schedule.with_fields(fields_of(keys)?);
     }
     if let Some(given) = &args.filters {
-        schedule = schedule.with_filters(filters_of(given, category, &world.basis())?);
+        schedule =
+            schedule.with_filters(filters_of(given, category, &world.basis(), world.fields())?);
     }
     if let Some(given) = &args.sorting {
         schedule = schedule.with_sorting(sorting_of(given)?);
@@ -819,7 +881,7 @@ fn changed_by(
         }
         Part::Filters => {
             let given = need(args.filters.as_deref(), "filters")?;
-            let filters = filters_of(given, schedule.lists(), &world.basis())?;
+            let filters = filters_of(given, schedule.lists(), &world.basis(), world.fields())?;
             Ok(schedule.with_filters(filters))
         }
         Part::Sorting => {

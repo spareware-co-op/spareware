@@ -58,7 +58,10 @@
 //! wall types and the seed sends for its models; and [`read_wall_types`], a document's wall types
 //! with their layers as these commands take them, and the materials the layers are drawn in.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::params::ParamTool;
+use crate::cloud::tool::Tool;
 use crate::cloud::{levels, params};
 use construct_categories::{CategoryId, WALLS};
 use construct_levels::{Length, Tie, parse_length, write_base, write_top};
@@ -100,6 +103,39 @@ const WALL_KIND: &str = "wall";
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The wall tool ([`Tool`]): wall types and layered walls.
+pub struct WallTool;
+
+impl Tool for WallTool {
+    const NAME: &'static str = "wall";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME, ParamTool::NAME];
+    const RULES: &'static [construct_warnings::Rule] = &[construct_warnings::WALL_OVERLAP];
+    const FIELDS: &'static [construct_schedules::Quantity] = &[
+        construct_schedules::WALL_LENGTH,
+        construct_schedules::WALL_AREA,
+        construct_schedules::WALL_VOLUME,
+    ];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.

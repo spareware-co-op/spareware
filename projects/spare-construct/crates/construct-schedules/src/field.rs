@@ -102,7 +102,8 @@ const fn quantity(
     }
 }
 
-/// Every read-only quantity a schedule can list, by category. The names and kinds are those the
+/// The read-only quantities of the built-in tools' elements, by category, each a constant. The
+/// names and kinds are those the
 /// server's own read-only rows carry (construct-slabs, construct-roofs and construct-regen's
 /// rooms and walls), pinned by a test in construct-api that reads each element kind and compares.
 ///
@@ -112,25 +113,68 @@ const fn quantity(
 /// Not here: a roof's pitch (its kind is a slope or an angle by how the roof is set, which a
 /// field's kind cannot follow) and a floor's, roof's or wall's per-layer volumes and masses
 /// (their number follows the type's layers).
+/// A wall's reference line's length.
+pub const WALL_LENGTH: Quantity = quantity(WALLS, "wall.length", "Length", Kind::Length);
+/// A wall's one-face area, openings taken out.
+pub const WALL_AREA: Quantity = quantity(WALLS, "wall.area", "Area", Kind::Area);
+/// A wall's volume, openings taken out and joints made.
+pub const WALL_VOLUME: Quantity = quantity(WALLS, "wall.volume", "Volume", Kind::Volume);
+/// A floor's area.
+pub const FLOOR_AREA: Quantity = quantity(FLOORS, "floor.area", "Area", Kind::Area);
+/// A floor's perimeter.
+pub const FLOOR_PERIMETER: Quantity =
+    quantity(FLOORS, "floor.perimeter", "Perimeter", Kind::Length);
+/// A floor's thickness.
+pub const FLOOR_THICKNESS: Quantity =
+    quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length);
+/// A floor's volume.
+pub const FLOOR_VOLUME: Quantity = quantity(FLOORS, "floor.volume", "Volume", Kind::Volume);
+/// A floor's mass in kilograms.
+pub const FLOOR_MASS: Quantity = quantity(FLOORS, "floor.mass", "Mass (kg)", Kind::Number);
+/// A roof's area.
+pub const ROOF_AREA: Quantity = quantity(ROOFS, "roof.area", "Area", Kind::Area);
+/// A roof's area along its slopes.
+pub const ROOF_SLOPE_AREA: Quantity = quantity(ROOFS, "roof.slope-area", "Slope area", Kind::Area);
+/// A roof's thickness.
+pub const ROOF_THICKNESS: Quantity = quantity(ROOFS, "roof.thickness", "Thickness", Kind::Length);
+/// A roof's volume.
+pub const ROOF_VOLUME: Quantity = quantity(ROOFS, "roof.volume", "Volume", Kind::Volume);
+/// A roof's mass in kilograms.
+pub const ROOF_MASS: Quantity = quantity(ROOFS, "roof.mass", "Mass (kg)", Kind::Number);
+/// A roof's ridge height.
+pub const ROOF_RIDGE_HEIGHT: Quantity =
+    quantity(ROOFS, "roof.ridge-height", "Ridge height", Kind::Length);
+/// What became of a room.
+pub const ROOM_STATE: Quantity = quantity(ROOMS, "room.state", "State", Kind::Text);
+/// A room's area.
+pub const ROOM_AREA: Quantity = quantity(ROOMS, "room.area", "Area", Kind::Area);
+/// A room's perimeter.
+pub const ROOM_PERIMETER: Quantity = quantity(ROOMS, "room.perimeter", "Perimeter", Kind::Length);
+/// A room's volume.
+pub const ROOM_VOLUME: Quantity = quantity(ROOMS, "room.volume", "Volume", Kind::Volume);
+
+/// Every quantity above, in this order. A tool registers the ones of its elements as its
+/// schedule fields (construct-api's tools, note A96), and a schedule is read against the ones it
+/// is handed ([`Basis::definition_among`]); this table is what the plain forms read.
 pub const QUANTITIES: [Quantity; 18] = [
-    quantity(WALLS, "wall.length", "Length", Kind::Length),
-    quantity(WALLS, "wall.area", "Area", Kind::Area),
-    quantity(WALLS, "wall.volume", "Volume", Kind::Volume),
-    quantity(FLOORS, "floor.area", "Area", Kind::Area),
-    quantity(FLOORS, "floor.perimeter", "Perimeter", Kind::Length),
-    quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length),
-    quantity(FLOORS, "floor.volume", "Volume", Kind::Volume),
-    quantity(FLOORS, "floor.mass", "Mass (kg)", Kind::Number),
-    quantity(ROOFS, "roof.area", "Area", Kind::Area),
-    quantity(ROOFS, "roof.slope-area", "Slope area", Kind::Area),
-    quantity(ROOFS, "roof.thickness", "Thickness", Kind::Length),
-    quantity(ROOFS, "roof.volume", "Volume", Kind::Volume),
-    quantity(ROOFS, "roof.mass", "Mass (kg)", Kind::Number),
-    quantity(ROOFS, "roof.ridge-height", "Ridge height", Kind::Length),
-    quantity(ROOMS, "room.state", "State", Kind::Text),
-    quantity(ROOMS, "room.area", "Area", Kind::Area),
-    quantity(ROOMS, "room.perimeter", "Perimeter", Kind::Length),
-    quantity(ROOMS, "room.volume", "Volume", Kind::Volume),
+    WALL_LENGTH,
+    WALL_AREA,
+    WALL_VOLUME,
+    FLOOR_AREA,
+    FLOOR_PERIMETER,
+    FLOOR_THICKNESS,
+    FLOOR_VOLUME,
+    FLOOR_MASS,
+    ROOF_AREA,
+    ROOF_SLOPE_AREA,
+    ROOF_THICKNESS,
+    ROOF_VOLUME,
+    ROOF_MASS,
+    ROOF_RIDGE_HEIGHT,
+    ROOM_STATE,
+    ROOM_AREA,
+    ROOM_PERIMETER,
+    ROOM_VOLUME,
 ];
 
 /// What a document gives a schedule to read its fields against: its categories and its
@@ -194,9 +238,20 @@ impl Basis<'_> {
     }
 
     /// The definition a category's field is read, filtered, typed and shown through, or `None`
-    /// when the category does not have it.
+    /// when the category does not have it, its quantities those of [`QUANTITIES`].
     #[must_use]
     pub fn definition(&self, category: CategoryId, field: &Field) -> Option<Definition> {
+        self.definition_among(&QUANTITIES, category, field)
+    }
+
+    /// [`Basis::definition`], a category's quantities being those among `quantities`.
+    #[must_use]
+    pub fn definition_among(
+        &self,
+        quantities: &[Quantity],
+        category: CategoryId,
+        field: &Field,
+    ) -> Option<Definition> {
         match field {
             Field::Name => builtin(NAME_ID, "Name"),
             Field::Type => builtin(TYPE_ID, "Type"),
@@ -208,7 +263,7 @@ impl Basis<'_> {
                 .map(|applicable| applicable.definition.clone()),
             Field::Quantity(name) => {
                 let top = self.top(category)?;
-                let found = QUANTITIES
+                let found = quantities
                     .iter()
                     .find(|q| q.category == top && q.name == name)?;
                 let id = Id::parse(found.id).ok()?;
@@ -226,7 +281,20 @@ impl Basis<'_> {
         category: CategoryId,
         field: &Field,
     ) -> Result<Definition, ScheduleError> {
-        self.definition(category, field)
+        self.require_among(&QUANTITIES, category, field)
+    }
+
+    /// [`Basis::require`], a category's quantities being those among `quantities`.
+    ///
+    /// # Errors
+    /// [`ScheduleError::NoSuchField`].
+    pub fn require_among(
+        &self,
+        quantities: &[Quantity],
+        category: CategoryId,
+        field: &Field,
+    ) -> Result<Definition, ScheduleError> {
+        self.definition_among(quantities, category, field)
             .ok_or_else(|| ScheduleError::NoSuchField {
                 category: self.category_name(category),
                 field: field.key(),
@@ -237,9 +305,23 @@ impl Basis<'_> {
     /// its quantities in the table's order.
     #[must_use]
     pub fn fields_of(&self, category: CategoryId) -> Vec<(Field, Definition)> {
+        self.fields_of_among(&QUANTITIES, category)
+    }
+
+    /// [`Basis::fields_of`], a category's quantities being those among `quantities`, in their
+    /// order.
+    #[must_use]
+    pub fn fields_of_among(
+        &self,
+        quantities: &[Quantity],
+        category: CategoryId,
+    ) -> Vec<(Field, Definition)> {
         let mut fields: Vec<(Field, Definition)> = [Field::Name, Field::Type]
             .into_iter()
-            .filter_map(|field| self.definition(category, &field).map(|def| (field, def)))
+            .filter_map(|field| {
+                self.definition_among(quantities, category, &field)
+                    .map(|def| (field, def))
+            })
             .collect();
         for applicable in self.params.parameters_of(self.categories, category) {
             fields.push((
@@ -248,9 +330,9 @@ impl Basis<'_> {
             ));
         }
         if let Some(top) = self.top(category) {
-            for q in QUANTITIES.iter().filter(|q| q.category == top) {
+            for q in quantities.iter().filter(|q| q.category == top) {
                 let field = Field::Quantity(q.name.to_owned());
-                if let Some(def) = self.definition(category, &field) {
+                if let Some(def) = self.definition_among(quantities, category, &field) {
                     fields.push((field, def));
                 }
             }

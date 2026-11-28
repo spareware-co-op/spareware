@@ -24,6 +24,7 @@
 //! by `element.create`'s `level` argument ([`tie_of_new`]).
 
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use construct_categories::WALLS;
 use construct_levels::{
     LEVEL_KIND, Length, Level, LevelError, Levels, Tie, base_of, implied_id, implied_number,
@@ -57,6 +58,36 @@ pub const BY_LEVEL_COMMANDS: &str = "Levels are made and changed by the level co
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The level tool ([`Tool`]): a document's levels, and tying elements and a wall's top to them.
+pub struct LevelTool;
+
+impl Tool for LevelTool {
+    const NAME: &'static str = "level";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const UNDO_ORDER: u16 = 30;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        _deleted: &[Id],
+        whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        ties_hold(txn, project, document, written, whole).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.
