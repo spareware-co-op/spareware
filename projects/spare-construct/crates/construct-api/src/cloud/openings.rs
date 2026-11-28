@@ -972,6 +972,8 @@ async fn cuts_hold<R: Reader>(
                     Some("a slope")
                 } else if !shape.edges().is_empty() {
                     Some("slab edges")
+                } else if shape.top().is_some() {
+                    Some("an edited shape")
                 } else {
                     None
                 }
@@ -984,10 +986,10 @@ async fn cuts_hold<R: Reader>(
                 "{}: it would be cut through floor {}, which has {shaped}, and a floor with {shaped} is not cut by openings and shafts yet: put it elsewhere, or take {} off the floor",
                 cutter.element,
                 floor.id,
-                if shaped == "a slope" {
-                    "the slope"
-                } else {
-                    "the slab edges"
+                match shaped {
+                    "a slope" => "the slope",
+                    "slab edges" => "the slab edges",
+                    _ => "the shape edits",
                 },
             )));
         }

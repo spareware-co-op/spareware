@@ -1232,6 +1232,74 @@ pub fn a_sloped_floor_is_its_layers<E: Engine + Send + 'static>(make: impl Fn() 
     assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * 44_000_000 * 200);
 }
 
+/// The 4 m by 3 m rectangle's top shape-edited (job 14.15): a waste at its middle 20 mm down, so
+/// four triangles round it, each sharing an edge with the one before, as construct-slabs' `Top`
+/// gives them; of a 50 mm and a 150 mm layer, the first marked variable when `variable`.
+pub fn edited_floor(variable: bool) -> Recipe {
+    let mut recipe = floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]);
+    recipe.op_version = 3;
+    let at = |x: i64, y: i64, z: i64| [x * 6400, y * 6400, z * 6400];
+    let waste = at(2000, 1500, -20);
+    let faces = json!([
+        [at(0, 0, 0), at(4000, 0, 0), waste],
+        [at(4000, 0, 0), at(4000, 3000, 0), waste],
+        [at(4000, 3000, 0), at(0, 3000, 0), waste],
+        [at(0, 3000, 0), at(0, 0, 0), waste],
+    ]);
+    recipe.args.insert("faces".to_owned(), faces);
+    if variable {
+        recipe.args.get_mut("layers").unwrap()[0]["variable"] = json!(true);
+    }
+    recipe
+}
+
+/// A shape-edited floor (job 14.15): each layer that follows the top is its triangles lofted down
+/// by the layer's depth and united, so with every layer following, the floor is 220 mm deep under
+/// the waste and holds its plan area times its thickness exactly, 12 m2 by 200 mm; with the screed
+/// variable, the bottom is flat 200 mm down, and the floor holds 12 m2 by 200 mm less the pyramid
+/// the waste takes, a third of 12 m2 by 20 mm. Either way its bounds are the stand-in's box, its
+/// faces keep a flat floor's names, and the body lists each layer's lofts.
+pub fn a_shape_edited_floor_is_its_triangles<E: Engine + Send + 'static>(make: impl Fn() -> E) {
+    let k = kernel(make());
+    let area = 12_000_000_i128;
+    let follows = edited_floor(false);
+    let b = built(&k, &follows);
+    assert_eq!(
+        (b.bounds.min, b.bounds.max),
+        ([0, 0, -220], [4000, 3000, 0])
+    );
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&follows).unwrap().bounds
+    );
+    assert_eq!(signed_six_volume(&b.displays[0].mesh), 6 * area * 200);
+    let flat = floor_of(&[&RECTANGLE], &[("finish", 50), ("structure", 150)]);
+    assert_eq!(by_role(&b), by_role(&built(&k, &flat)));
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["faces"].as_array().unwrap().len(), 4);
+    assert_eq!(body["layers"][1]["faces"].as_array().unwrap().len(), 4);
+
+    let fills = edited_floor(true);
+    let b = built(&k, &fills);
+    assert_eq!(
+        (b.bounds.min, b.bounds.max),
+        ([0, 0, -200], [4000, 3000, 0])
+    );
+    assert_eq!(
+        b.bounds,
+        construct_regen::geometry().build(&fills).unwrap().bounds
+    );
+    assert_eq!(
+        signed_six_volume(&b.displays[0].mesh),
+        6 * (area * 200 - 80_000_000)
+    );
+    // The concrete below the variable screed is the flat floor's own extrusion.
+    let body: Value = serde_json::from_slice(&b.body).unwrap();
+    assert_eq!(body["layers"][0]["faces"].as_array().unwrap().len(), 4);
+    assert!(body["layers"][1].get("faces").is_none());
+    assert_eq!(body["layers"][1]["extrude"][0], json!([0, 0, -200 * 6400]));
+}
+
 /// A rectangle floor 200 mm thick with a thickened edge all round, 400 mm wide at its underside
 /// tapering to 200 mm at its foot 300 mm down, mitred at each corner: one solid, the slab united
 /// with the four pieces (construct-slabs' volumes: 1.148 m3 of edges), its faces named

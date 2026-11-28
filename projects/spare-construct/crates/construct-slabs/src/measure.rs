@@ -29,6 +29,9 @@
 //!   thickness and volume above are the slab's: a sloped floor's layers are plumb, so its volume
 //!   is its plan area times its thickness exactly, and slab edges are counted apart. A flat floor
 //!   with no slab edges has none of these rows, so its parameters are as before.
+//! - **A shape-edited floor's** (job 14.15): its highest and lowest points, and its layers'
+//!   volumes with the variable layer's grown or shrunk by the top face's rise
+//!   ([`shape_layer_quantities`]).
 
 use crate::boundary::{Boundary, twice_signed_area};
 use crate::error::SlabError;
@@ -158,14 +161,57 @@ pub fn quantities(
     layers: &Layers,
     library: &Materials,
 ) -> Result<Quantities, SlabError> {
+    quantities_with(boundary, layers, library, None)
+}
+
+/// [`quantities`] of a floor of this shape: a shape-edited floor's variable layer (job 14.15,
+/// [`crate::top`]) holds its plan area times its thickness plus the integral of the top face's
+/// height over the floor (a sixth of [`crate::Top::sixfold_rise`], rounded once to the nearest
+/// cubic step, a half up), and every other layer its plan area times its thickness, exactly, as
+/// on a plain floor (they follow the top face, plumb, or stay flat below the variable one).
+///
+/// # Errors
+/// Those of [`quantities`].
+pub fn shape_layer_quantities(
+    shape: &Shape,
+    layers: &Layers,
+    library: &Materials,
+) -> Result<Quantities, SlabError> {
+    let extra = match (shape.top(), layers.variable()) {
+        (Some(top), Some(v)) => {
+            let six = top.sixfold_rise()?;
+            // The nearest whole number to six / 6, a half up: floor((six + 3) / 6).
+            let rise = six
+                .checked_add(3)
+                .and_then(|n| n.checked_div_euclid(6))
+                .ok_or(SlabError::OutOfRange)?;
+            Some((v, Volume::from_cubic_steps(rise)))
+        }
+        _ => None,
+    };
+    quantities_with(shape.boundary(), layers, library, extra)
+}
+
+/// [`quantities`], with `extra` added to one layer's volume.
+fn quantities_with(
+    boundary: &Boundary,
+    layers: &Layers,
+    library: &Materials,
+    extra: Option<(usize, Volume)>,
+) -> Result<Quantities, SlabError> {
     let area = area(boundary)?;
     let mut volume = Volume::from_cubic_steps(0);
     let mut mass = Some(0_u64);
     let mut each = Vec::with_capacity(layers.layers().len());
-    for layer in layers.layers() {
-        let share = area
+    for (at, layer) in layers.layers().iter().enumerate() {
+        let mut share = area
             .checked_mul(layer.thickness)
             .ok_or(SlabError::OutOfRange)?;
+        if let Some((v, more)) = extra
+            && v == at
+        {
+            share = share.checked_add(more).ok_or(SlabError::OutOfRange)?;
+        }
         volume = volume.checked_add(share).ok_or(SlabError::OutOfRange)?;
         let grams = match library.get(&layer.material) {
             Some(_) => Some(library.mass_grams(&layer.material, share)?),
@@ -261,6 +307,8 @@ pub struct EdgeQuantity {
 pub struct ShapeQuantities {
     /// Whether it slopes.
     pub sloped: bool,
+    /// Whether its top face is shape-edited (job 14.15).
+    pub edited: bool,
     /// Its top face's area.
     pub top_area: TopArea,
     /// Its lowest point, from its tied height.
@@ -279,6 +327,7 @@ pub fn shape_quantities(shape: &Shape, layers: &Layers) -> Result<ShapeQuantitie
     let (lowest, highest) = shape.lowest_and_highest(layers)?;
     Ok(ShapeQuantities {
         sloped: shape.slope().is_some(),
+        edited: shape.top().is_some(),
         top_area: shape.top_area()?,
         lowest,
         highest,
@@ -312,6 +361,8 @@ pub fn shape_read_only(q: &ShapeQuantities) -> Result<Vec<(Definition, Option<Va
             define(TOP_AREA, "Top face area", Kind::Area)?,
             Some(Value::Area(q.top_area.area)),
         ));
+    }
+    if q.sloped || q.edited {
         rows.push((
             define(HIGHEST, "Highest point", Kind::Length)?,
             Some(Value::Length(q.highest)),

@@ -17,6 +17,12 @@
 //! at the floor's underside and at its foot). construct-slabs' `Shape` worked both out and checked
 //! them (every corner on the grid, every piece inside its floor and apart from the others).
 //!
+//! A shape-edited floor (job 14.15) is op version [`EDITED_VERSION`], and its filled recipe also
+//! holds `faces` (each triangle of its top face as `[[x,y,z] x3]`, anticlockwise seen from above,
+//! each sharing an edge with one before it, `z` from the top face's tied height) and marks its
+//! type's variable layer, if it has one, with `"variable":true`. construct-slabs' `Top` made the
+//! triangles and checked them (they cover the floor exactly, every corner a grid point).
+//!
 //! What it promises: a recipe it reads has a loop of at least three corners first, every corner
 //! on the kernel's grid (within 2^40 - 1 steps of the origin), every edge ID once in the floor,
 //! at least one layer, no layer thinner than zero, and a total above zero and at most 10 m; a
@@ -41,6 +47,8 @@ pub const OP: &str = "floor";
 pub const OP_VERSION: u32 = 1;
 /// The version of a sloped floor's or one with slab edges (construct-slabs' `SHAPED_VERSION`).
 pub const SHAPED_VERSION: u32 = 2;
+/// The version of a shape-edited floor's recipe (construct-slabs' `EDITED_VERSION`, job 14.15).
+pub const EDITED_VERSION: u32 = 3;
 /// The owner of Spare Construct's own operations.
 const OWN: &str = "construct";
 /// The most a floor's layers may add up to: 10 m in steps (construct-slabs' `MOST_TOTAL`).
@@ -105,6 +113,10 @@ pub struct FloorPlan {
     pub tops: Vec<Vec<i64>>,
     /// Its slab edges, in order.
     pub edges: Vec<PlanEdge>,
+    /// A shape-edited floor's top face triangles, in order; empty for any other floor.
+    pub faces: Vec<[[i64; 3]; 3]>,
+    /// A shape-edited floor's variable layer, by its index from the top.
+    pub variable: Option<usize>,
 }
 
 /// A layer with a thickness, placed in the floor's frame: its index from the top, the layer, and
@@ -123,7 +135,7 @@ impl FloorPlan {
     /// than 10 m; `DuplicateEdge` for an edge ID used twice; `MissingArgument` for tops or slab
     /// edges not as the module header says.
     pub fn of(recipe: &Recipe) -> Result<FloorPlan, GeometryError> {
-        let known = recipe.op_version == OP_VERSION || recipe.op_version == SHAPED_VERSION;
+        let known = [OP_VERSION, SHAPED_VERSION, EDITED_VERSION].contains(&recipe.op_version);
         if !is_floor(recipe) || !known {
             return Err(fault(
                 "NotAFloor",
@@ -161,6 +173,18 @@ impl FloorPlan {
             .enumerate()
             .map(|(at, layer)| read_layer(layer, at))
             .collect::<Result<Vec<_>, _>>()?;
+        let variable = variable_of(layers)?;
+        let faces = match args.get("faces") {
+            Some(faces) if recipe.op_version == EDITED_VERSION => read_faces(faces)?,
+            Some(_) => {
+                return Err(fault(
+                    "MissingArgument",
+                    "only a shape-edited floor has faces",
+                ));
+            }
+            None if recipe.op_version == EDITED_VERSION => return Err(unfilled("faces")),
+            None => Vec::new(),
+        };
         let tops = match args.get("tops") {
             Some(tops) => read_tops(tops, &read_loops)?,
             None => Vec::new(),
@@ -174,6 +198,8 @@ impl FloorPlan {
             layers: read_layers,
             tops,
             edges,
+            faces,
+            variable,
         };
         if plan.layers.is_empty() {
             return Err(fault("EmptyShape", "a floor has at least one layer"));
@@ -250,9 +276,14 @@ impl FloorPlan {
 
     /// The top face's lowest and highest points, in grid steps: the outer loop's corners (a
     /// plane's highest and lowest over a polygon are corners, and every hole lies inside the
-    /// outer loop); both 0 on a flat floor.
+    /// outer loop), or a shape-edited top's lowest and highest corner; both 0 on a flat floor.
     #[must_use]
     pub fn top_range(&self) -> (i64, i64) {
+        if !self.faces.is_empty() {
+            let heights = self.faces.iter().flatten().map(|p| p[2]);
+            let low = heights.clone().min().unwrap_or(0);
+            return (low, heights.max().unwrap_or(0));
+        }
         let outer = self.tops.first().map_or(&[][..], Vec::as_slice);
         (
             outer.iter().copied().min().unwrap_or(0),
@@ -261,13 +292,16 @@ impl FloorPlan {
     }
 
     /// The floor's lowest point, in grid steps: the bottom face's lowest corner, or the deepest
-    /// slab edge's foot.
+    /// slab edge's foot. A shape-edited floor with a variable layer keeps its bottom face flat at
+    /// its plain place.
     #[must_use]
     pub fn lowest(&self) -> i64 {
-        let bottom = self
-            .top_range()
-            .0
-            .saturating_sub(self.total().unwrap_or_default());
+        let low_top = if self.variable.is_some() && !self.faces.is_empty() {
+            0
+        } else {
+            self.top_range().0
+        };
+        let bottom = low_top.saturating_sub(self.total().unwrap_or_default());
         self.edges
             .iter()
             .flat_map(|edge| edge.foot.iter().map(|p| p[2]))
@@ -279,7 +313,9 @@ impl FloorPlan {
     #[must_use]
     pub fn is_box(&self) -> bool {
         let outer = self.outer();
-        let flat = self.tops.iter().flatten().all(|&z| z == 0) && self.edges.is_empty();
+        let flat = self.tops.iter().flatten().all(|&z| z == 0)
+            && self.edges.is_empty()
+            && self.faces.is_empty();
         if !flat || !self.holes().is_empty() || outer.len() != 4 {
             return false;
         }
@@ -445,6 +481,58 @@ fn read_edges(edges: &Value, ids: &BTreeSet<String>) -> Result<Vec<PlanEdge>, Ge
     Ok(out)
 }
 
+/// A shape-edited floor's faces: each three grid points `[x, y, z]`, anticlockwise seen from above.
+fn read_faces(faces: &Value) -> Result<Vec<[[i64; 3]; 3]>, GeometryError> {
+    let bad = || {
+        fault(
+            "MissingArgument",
+            "faces must be triangles of three grid points [x,y,z], anticlockwise seen from above",
+        )
+    };
+    let list = faces.as_array().filter(|l| !l.is_empty()).ok_or_else(bad)?;
+    let mut out = Vec::with_capacity(list.len());
+    for face in list {
+        let corners = face.as_array().filter(|c| c.len() == 3).ok_or_else(bad)?;
+        let mut read = [[0_i64; 3]; 3];
+        for (slot, corner) in read.iter_mut().zip(corners) {
+            let point = corner.as_array().filter(|p| p.len() == 3).ok_or_else(bad)?;
+            for (c, v) in slot.iter_mut().zip(point) {
+                *c = v
+                    .as_i64()
+                    .filter(|v| v.unsigned_abs() <= GRID_LIMIT.unsigned_abs())
+                    .ok_or_else(bad)?;
+            }
+        }
+        let [a, b, c] = read.map(|p| [i128::from(p[0]), i128::from(p[1])]);
+        let twice = (b[0].saturating_sub(a[0]))
+            .saturating_mul(c[1].saturating_sub(a[1]))
+            .saturating_sub((b[1].saturating_sub(a[1])).saturating_mul(c[0].saturating_sub(a[0])));
+        if twice <= 0 {
+            return Err(bad());
+        }
+        out.push(read);
+    }
+    Ok(out)
+}
+
+/// The layer marked `"variable":true`, if one is; two are refused.
+fn variable_of(layers: &[Value]) -> Result<Option<usize>, GeometryError> {
+    let marked: Vec<usize> = layers
+        .iter()
+        .enumerate()
+        .filter(|(_, layer)| layer.get("variable").and_then(Value::as_bool) == Some(true))
+        .map(|(at, _)| at)
+        .collect();
+    match marked.as_slice() {
+        [] => Ok(None),
+        [one] => Ok(Some(*one)),
+        _ => Err(fault(
+            "MissingArgument",
+            "a floor has at most one variable layer",
+        )),
+    }
+}
+
 /// One layer of the recipe.
 fn read_layer(layer: &Value, at: usize) -> Result<PlanLayer, GeometryError> {
     let bad = || {
@@ -601,7 +689,7 @@ mod tests {
             "MissingArgument"
         );
         let mut other = floor(json!({ "loops": [square()], "layers": [layer(1)] }));
-        other.op_version = 3;
+        other.op_version = 4;
         assert_eq!(FloorPlan::of(&other).unwrap_err().code, "NotAFloor");
     }
 

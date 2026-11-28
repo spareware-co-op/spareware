@@ -132,6 +132,11 @@ fn a_sloped_floor_is_its_layers() {
 }
 
 #[test]
+fn a_shape_edited_floor_is_its_triangles() {
+    kernel_suite::a_shape_edited_floor_is_its_triangles(engine);
+}
+
+#[test]
 fn a_floor_with_slab_edges_is_one_solid() {
     kernel_suite::a_floor_with_slab_edges_is_one_solid(engine);
 }

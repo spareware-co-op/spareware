@@ -52,6 +52,10 @@
 //! **Refused together** ([`SlabError::SlopeWithEdges`]): a slope and slab edges on one floor (the
 //! pieces' tops would follow the sloped underside: not built yet).
 //!
+//! **Shape edits** (job 14.15, [`Shape::with_edits`]): a floor's top face divided by points and
+//! split lines ([`crate::top`]), kept apart from both: a shape-edited floor has no slope arrow
+//! and no slab edges, each refused in words.
+//!
 //! Depends on [`crate::boundary`], construct-params' lengths, areas, volumes and slope, and
 //! num-bigint (MIT OR Apache-2.0) for the sloped area's square root. Nothing here is interim.
 
@@ -60,6 +64,7 @@ use crate::error::SlabError;
 use crate::layers::Layers;
 use crate::measure::area;
 use crate::stored::{read_length, write_length};
+use crate::top::{EditError, Edits, Top};
 use construct_params::{Area, Length, Slope, Value as Param, Volume};
 use construct_solver::{COORD_LIMIT, Point};
 use kit_core::Id;
@@ -470,6 +475,8 @@ pub struct Shape {
     edges: Vec<SlabEdge>,
     tops: Vec<Vec<i64>>,
     pieces: Vec<EdgePiece>,
+    /// Its top face's shape edits and the surface they make (job 14.15, [`crate::top`]).
+    edited: Option<(Edits, Top)>,
 }
 
 /// The sloped top face's area: the nearest whole square step, and whether that is exact.
@@ -647,6 +654,7 @@ impl Shape {
             edges,
             tops,
             pieces,
+            edited: None,
         })
     }
 
@@ -659,7 +667,42 @@ impl Shape {
             edges: Vec::new(),
             tops: Vec::new(),
             pieces: Vec::new(),
+            edited: None,
         }
+    }
+
+    /// The same shape with its top face shape-edited by `edits` (job 14.15, [`crate::top`]), or
+    /// its edits taken away with `None` or edits with nothing in them (a reset shape).
+    ///
+    /// # Errors
+    /// [`EditError::WithSlope`] for a sloped floor and [`EditError::WithEdges`] for one with slab
+    /// edges, each as [`SlabError::Edit`]; any refusal of [`Top::of`].
+    pub fn with_edits(mut self, edits: Option<Edits>) -> Result<Self, SlabError> {
+        let Some(edits) = edits.filter(|e| !e.is_empty()) else {
+            self.edited = None;
+            return Ok(self);
+        };
+        if self.slope.is_some() {
+            return Err(SlabError::Edit(EditError::WithSlope));
+        }
+        if !self.edges.is_empty() {
+            return Err(SlabError::Edit(EditError::WithEdges));
+        }
+        let top = Top::of(&self.boundary, &edits)?;
+        self.edited = Some((edits, top));
+        Ok(self)
+    }
+
+    /// Its top face's shape edits, if it has any.
+    #[must_use]
+    pub fn edits(&self) -> Option<&Edits> {
+        self.edited.as_ref().map(|(edits, _)| edits)
+    }
+
+    /// Its shape-edited top face, if it has one.
+    #[must_use]
+    pub fn top(&self) -> Option<&Top> {
+        self.edited.as_ref().map(|(_, top)| top)
     }
 
     /// Its boundary.
@@ -680,10 +723,11 @@ impl Shape {
         &self.edges
     }
 
-    /// Whether it is a flat floor with no slab edges, as every floor was before job 5.2.
+    /// Whether it is a flat floor with no slab edges and no shape edits, as every floor was before
+    /// job 5.2.
     #[must_use]
     pub fn is_plain(&self) -> bool {
-        self.slope.is_none() && self.edges.is_empty()
+        self.slope.is_none() && self.edges.is_empty() && self.edited.is_none()
     }
 
     /// For a sloped floor, the top face's height at each corner of each loop of
@@ -700,9 +744,12 @@ impl Shape {
         &self.pieces
     }
 
-    /// The top face's highest and lowest points, in grid steps: both 0 on a flat floor.
+    /// The top face's lowest and highest points, in grid steps: both 0 on a flat floor.
     #[must_use]
     pub fn top_range(&self) -> (i64, i64) {
+        if let Some(top) = self.top() {
+            return top.range();
+        }
         match self.tops.first() {
             Some(outer) => (
                 outer.iter().copied().min().unwrap_or(0),
@@ -714,12 +761,16 @@ impl Shape {
 
     /// The floor's lowest and highest points for a type of `layers`, from its tied height: the
     /// highest is the top face's highest corner; the lowest the bottom face's lowest, or the
-    /// deepest slab edge's foot.
+    /// deepest slab edge's foot. A shape-edited floor of a type with a variable layer keeps its
+    /// bottom face flat, at its plain place.
     ///
     /// # Errors
     /// [`SlabError::OutOfRange`] when a height does not fit a length.
     pub fn lowest_and_highest(&self, layers: &Layers) -> Result<(Length, Length), SlabError> {
-        let (low, high) = self.top_range();
+        let (mut low, high) = self.top_range();
+        if self.top().is_some() && layers.variable().is_some() {
+            low = 0;
+        }
         let deepest = self
             .pieces
             .iter()
@@ -734,12 +785,20 @@ impl Shape {
     }
 
     /// The top face's area: the plan area on a flat floor, exactly; on a sloped one, the plan
-    /// area times `sqrt(1 + gradient^2)` to the nearest square step.
+    /// area times `sqrt(1 + gradient^2)` to the nearest square step. A shape-edited floor's is its
+    /// plan area, marked not exact (its triangles' true areas are not summed yet, and no page
+    /// lists it).
     ///
     /// # Errors
     /// [`SlabError::AreaNotExact`] for a plan area that is not whole; [`SlabError::OutOfRange`].
     pub fn top_area(&self) -> Result<TopArea, SlabError> {
         let plan = area(&self.boundary)?;
+        if self.top().is_some() {
+            return Ok(TopArea {
+                area: plan,
+                exact: false,
+            });
+        }
         let Some((over, under)) = self.slope.and_then(|s| s.stretch()) else {
             return Ok(TopArea {
                 area: plan,

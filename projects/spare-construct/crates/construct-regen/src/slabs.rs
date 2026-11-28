@@ -19,7 +19,9 @@
 //!   type each time it is read, never stored, each shown in the document's units and marked
 //!   `read-only`; then a sloped floor's top face area, highest and lowest points, and each slab
 //!   edge's length and volume (construct-slabs' `shape_read_only`, job 5.2), none of them for a
-//!   flat floor without slab edges. Masses come from construct-materials' default library, the
+//!   flat floor without slab edges; a shape-edited floor's highest and lowest points, its variable
+//!   layer's volume and mass with the top's rise in them (construct-slabs'
+//!   `shape_layer_quantities`, job 14.15). Masses come from construct-materials' default library, the
 //!   one a project reads
 //!   until it keeps its own; a layer of a material the library lacks has no mass, and then nor
 //!   has the floor. The openings and shafts that cut a floor (construct-openings, job 4.2) are more
@@ -37,7 +39,7 @@ use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::{Definition, Units, Value};
 use construct_slabs::{
     SlabError, filled as slabs_filled, is_floor, layer_read_only, layers_of, quantities, read_only,
-    reads_layers, shape_of, shape_quantities, shape_read_only,
+    reads_layers, shape_layer_quantities, shape_of, shape_quantities, shape_read_only,
 };
 use construct_types::ElementType;
 
@@ -114,7 +116,13 @@ pub fn read_only_view_cut(
             construct_openings::with_cuts(shape.boundary(), cuts)?
         };
         let layers = layers_of(ty.ok_or(SlabError::NotAFloor("it names no type".to_owned()))?)?;
-        let q = quantities(&boundary, &layers, &Materials::default_metric())?;
+        // A shape-edited floor's variable layer holds what the top's rise adds or takes (job
+        // 14.15); such a floor is never cut, so its uncut shape is read.
+        let q = if cuts.is_empty() {
+            shape_layer_quantities(&shape, &layers, &Materials::default_metric())?
+        } else {
+            quantities(&boundary, &layers, &Materials::default_metric())?
+        };
         let mut rows = read_only(&q)?;
         rows.extend(layer_read_only(&layers, &q)?);
         // A shaped floor that is cut is not built (the builders refuse it), so no number of its shape is

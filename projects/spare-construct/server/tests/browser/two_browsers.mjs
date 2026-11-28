@@ -4277,5 +4277,126 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+
+console.log('\n   Floors, shape-edited');
+// Anna draws a plain floor, 3 m by 1.8 m, of the screed over concrete type, picks it, types a height
+// of -20 mm and clicks the middle of the floor: a waste. Both plans draw the point with its height
+// and the creases the server's triangles make (four falls, so eight lines), and both browsers hold
+// the body as it was built, 220 mm deep under the waste (every layer follows the top). The server's
+// rows give its lowest and highest points. She makes the screed the type's variable layer: the
+// bottom is flat again, 200 mm down, and the screed's volume is 5.4 m2 x 50 mm less the 0.036 m3 the
+// waste takes, 0.234 m3 (shown to two places, 0.23 m3). A point off the floor is turned back in the
+// server's words. Her undo and redo of the variable layer are seen in both browsers; she takes the
+// variable layer off again, resets the shape and undoes that, each seen in both, and deletes the
+// floor, so the plan ends as it began. Ben only reads, so no claim of his is in her way.
+await floorHome(anna);
+await floorHome(ben);
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:floor"]');
+await anna.locator(floorTypeField).selectOption({ label: 'Concrete 150, 50 screed' });
+await anna.waitForSelector('#pv-side [data-floor-layers="floor-concrete-150-screed-50"]');
+const fsCorners = [[7000, -2300], [10000, -2300], [10000, -500], [7000, -500]];
+const fsKnown = await ben.evaluate(() => [...window.spare.elements.keys()]);
+await floorClicks(anna, [...fsCorners, fsCorners[0]]);
+await anna.waitForSelector('#pv-side [data-floor-sketch="closed"]');
+await anna.keyboard.press('Enter');
+await anna.waitForSelector('#pv-side [data-floor-sketch="empty"]');
+const fsOf = (known) => [...window.spare.elements.values()].find((p) => p.el.kind === 'floor' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(fsOf, fsKnown);
+const fsId = await ben.evaluate(fsOf, fsKnown);
+check(Boolean(fsId), 'Anna draws a plain floor, 3 m by 1.8 m, and Ben has it');
+await anna.keyboard.press('Escape');
+await slPick(anna, fsId, 7600, -1900);
+await anna.waitForSelector('#pv-side [data-floor-top-part]');
+check((await anna.locator('#pv-side [data-floor-top-now]').textContent()) === 'Plain', "Anna's palette says the floor's top is plain");
+await anna.locator('#pv-side input[data-key="floor-top-height"]').fill('-20 mm');
+await anna.locator('#pv-side input[data-key="floor-top-height"]').press('Enter');
+await anna.click('#pv-side [data-key="floor-top-point"]');
+await anna.waitForSelector('#pv-side [data-floor-pick="point"]');
+const fsWaste = await onPlan(anna, 8500, -1400);
+await anna.mouse.click(fsWaste.x, fsWaste.y);
+const fsPoint = (id) => `g.element[data-id="${id}"] [data-floor-top-point="p0"]`;
+const fsBody = ([id, low]) => window.spare.elements.get(id)?.shape?.bounds?.min?.[2] === low && window.spare.elements.get(id).shape.bounds.max[2] === 0;
+const fsCreases = (id) => document.querySelectorAll(`g.element[data-id="${id}"] line.floor-top-crease`).length === 8;
+for (const [who, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForSelector(fsPoint(fsId), { state: 'attached' });
+  await page.waitForFunction(fsBody, [fsId, -220]);
+  await page.waitForFunction(fsCreases, fsId);
+  const label = await page.locator(`${fsPoint(fsId)} text`).textContent();
+  check(label === '-20 mm', `${who}'s plan draws the waste with its height, ${label}, and its four falls, and holds the body 220 mm deep under it`);
+}
+pass("Anna's waste lowers the floor's top, and Ben sees the new top");
+const fsRows = await until(
+  () => slAsBen(`parameters/${fsId}`),
+  (view) => slRead(view, 'floor.lowest') === '-220 mm',
+  'the server works out the edited top',
+);
+check(
+  slRead(fsRows, 'floor.highest') === '0 mm' && slRead(fsRows, 'floor.layer-1.volume') === '0.27 m³',
+  `the server gives the floor's highest point, ${slRead(fsRows, 'floor.highest')}, and the screed following the top keeps its volume, ${slRead(fsRows, 'floor.layer-1.volume')}`,
+);
+await anna.waitForFunction(() => document.querySelector('#pv-side [data-read-only="floor.lowest"]')?.textContent === '-220 mm');
+check(
+  (await anna.locator('#pv-side [data-floor-top-now]').textContent()) === '1 point, 0 split lines',
+  "Anna's palette lists the point, read from the record",
+);
+await shot(ben, 'ben-floor-waste');
+
+// The screed made the type's variable layer: the bottom is flat, the screed thinner at the waste.
+await anna.locator('#pv-side select[data-key="floor-top-variable"]').selectOption('0');
+for (const page of [anna, ben]) await page.waitForFunction(fsBody, [fsId, -200]);
+const fsVariable = await until(
+  () => slAsBen(`parameters/${fsId}`),
+  (view) => slRead(view, 'floor.lowest') === '-200 mm',
+  'the server reads the variable screed',
+);
+check(
+  slRead(fsVariable, 'floor.layer-1.volume') === '0.23 m³' && slRead(fsVariable, 'floor.layer-2.volume') === '0.81 m³',
+  `with the screed variable the bottom stays flat and the screed fills to it, ${slRead(fsVariable, 'floor.layer-1.volume')}, over the concrete's ${slRead(fsVariable, 'floor.layer-2.volume')}`,
+);
+
+// A point off the floor: turned back in the server's words, nothing changed.
+await anna.click('#pv-side [data-key="floor-top-point"]');
+await anna.waitForSelector('#pv-side [data-floor-pick="point"]');
+const fsOff = await onPlan(anna, 12000, -1400);
+await anna.mouse.click(fsOff.x, fsOff.y);
+await anna.waitForSelector('#pv-side [data-problem="floor-top"]');
+const fsRefusal = await anna.locator('#pv-side [data-problem="floor-top"]').textContent();
+check(
+  fsRefusal === `${fsId}'s shape: point p1 is not on the floor: it is outside it or in a hole`,
+  `a point off the floor is turned back in the server's words: ${fsRefusal}`,
+);
+
+// Her undo and redo of the variable layer.
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.type.layers');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) await page.waitForFunction(fsBody, [fsId, -220]);
+await anna.click('#qat [data-act="stackredo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) await page.waitForFunction(fsBody, [fsId, -200]);
+pass("Anna's undo puts every layer back to following the top, and her redo makes the screed variable again, in both browsers");
+await anna.locator('#pv-side select[data-key="floor-top-variable"]').selectOption('');
+for (const page of [anna, ben]) await page.waitForFunction(fsBody, [fsId, -220]);
+
+// Reset shape, and its undo.
+await anna.click('#pv-side [data-key="floor-top-reset"]');
+for (const page of [anna, ben]) {
+  await page.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"] [data-floor-top]`) && !window.spare.elements.get(id)?.el.recipe.args.top, fsId);
+}
+pass("Anna's reset takes the shape off, in both browsers");
+await anna.waitForFunction(() => window.spare.steps.undo?.cmd === 'floor.shape.reset');
+await anna.click('#qat [data-act="stackundo"]:not([aria-disabled="true"])');
+for (const page of [anna, ben]) await page.waitForSelector(fsPoint(fsId), { state: 'attached' });
+pass('and her undo puts the waste back, in both browsers');
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(JSON.stringify(mismatched).slice(0, 3000));
+  check(mismatched.length === 0, `every body ${name}'s page built, the shape-edited floor included, matches the server's`);
+}
+
+// The floor deleted: the plan ends as it began.
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), fsId);
+pass('Anna deletes her floor, and it is gone from both plans');
 await browser.close();
 console.log('\nThe browser checks passed.');
