@@ -892,6 +892,7 @@ await until(
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the layered wall's included, matches the server's`);
 }
 await shot(anna, 'anna-layered-wall');
@@ -961,6 +962,7 @@ await bothTake(layeredId, freeEnd, 'the corner wall moved away: both pages put t
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the joined walls included, matches the server's`);
 }
 const freshWalls = await signIn('ben');
@@ -1074,6 +1076,7 @@ await bothTake(layeredId, switched, "both pages take the first wall as the switc
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built at the chosen joints matches the server's`);
 }
 const freshJoins = await signIn('anna');
@@ -1415,6 +1418,7 @@ pass("Ben deletes it, and it is gone from Anna's plan");
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the floor's included, matches the server's`);
 }
 
@@ -2223,6 +2227,7 @@ check(
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the roof's included, matches the server's`);
 }
 
@@ -2462,6 +2467,7 @@ pass("a fresh load of Ben's page draws the same stair, as an L of 20 risers");
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the stair's included, matches the server's`);
 }
 
@@ -2827,6 +2833,7 @@ await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   if (mismatched.length) console.log(`   built differently on ${name}'s page: ${mismatched.map((m) => m.id).join(', ')}`);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the generated door's included, matches the server's`);
 }
 
@@ -3008,6 +3015,7 @@ pass('at the turn Ben gave the desk');
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', cmpFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the desk's and the basin's included, matches the server's`);
 }
 
@@ -3235,6 +3243,7 @@ for (const id of [opId, opShaft]) {
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben], ['the fresh load', opFresh]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the opening's and the shaft's included, matches the server's`);
 }
 
@@ -3366,6 +3375,7 @@ await roomsFresh.context().close();
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the room's included, matches the server's`);
 }
 
@@ -3549,7 +3559,9 @@ for (const id of [angWall, angDoor, angWindow]) {
   );
 }
 await angFresh.waitForTimeout(1500);
-check((await angFresh.evaluate(() => window.spare.mismatches)).length === 0, "a fresh load's bodies, the angled wall's included, match the server's");
+const angFreshMismatched = await angFresh.evaluate(() => window.spare.mismatches);
+if (angFreshMismatched.length) console.log(`      bodies that differ on the fresh load's page: ${JSON.stringify(angFreshMismatched).slice(0, 4000)}`);
+check(angFreshMismatched.length === 0, "a fresh load's bodies, the angled wall's included, match the server's");
 pass('a fresh load builds the angled wall, its door and its window as the server does');
 
 
@@ -4330,6 +4342,7 @@ await anna.waitForFunction((name) => ![...document.querySelectorAll('#browser [d
 check((await asAnna('schedules')).length === 0, 'Ben deletes the schedule: Anna\'s list is empty again and the server holds none');
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, after the schedules, matches the server's`);
 }
 
@@ -4876,6 +4889,7 @@ await cwFresh.context().close();
 await ben.waitForTimeout(1500);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
 
@@ -5123,6 +5137,7 @@ check((await asAnna('view-templates')).length === 0, 'she deletes the template: 
 await vtClose(anna);
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
+  if (mismatched.length) console.log(`      bodies that differ on ${name}'s page: ${JSON.stringify(mismatched).slice(0, 4000)}`);
   check(mismatched.length === 0, `every body ${name}'s page built, after the view templates, matches the server's`);
 }
 

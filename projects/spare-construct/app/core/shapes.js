@@ -434,10 +434,26 @@ function compareCheckpoint(entry) {
         queueDraw();
       });
     } else {
-      C.mismatches.push({ id, here: piece.shape.body, server: body });
+      // What differed and how, so a miss reads itself: the element, the point of the log the
+      // checkpoint names and the entry and filling this page built it from, both bodies, and
+      // the box around each (the server's once its copy has come).
+      const differs = {
+        id,
+        name: piece.el.name,
+        kind: piece.el.kind,
+        op: piece.el.recipe?.op,
+        through,
+        seq: piece.seq,
+        filled: piece.fill?.head,
+        here: piece.shape.body,
+        server: body,
+        hereBounds: piece.shape.bounds,
+      };
+      C.mismatches.push(differs);
       console.error(`${id} built differently here and on the server.`);
       say(`${piece.el.name} built differently here, so this shows the server’s version.`);
       storedShape(entry.target, id).then((answer) => {
+        differs.serverBounds = answer.shape?.bounds ?? answer.failed;
         Object.assign(piece, answer);
         queueDraw();
       });
