@@ -1105,6 +1105,32 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .ok_or(Refusal::NotFound)
     }
 
+    /// The dimensions of one view, each with its value worked out now from the references it is
+    /// bound to (a layered wall's faces, a grid line, a door's or window's centre or edges), its
+    /// witness lines, its stored equalities and its warnings: a reference that was deleted is
+    /// named, and the segments it ends have no value. Read as of the log's head; nothing is
+    /// stored but the dimension's references and its line.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn dimensions(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::dimensions::DimensionListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        cloud::dimensions::listing(&mut snapshot, project, model, view)
+            .await?
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// A view's graphics rules: how each category or subcategory it says anything about looks in
     /// it, for what it cuts and what it sees beyond. A category it says nothing about looks as the
     /// project's object styles say. Read as of the log's head.

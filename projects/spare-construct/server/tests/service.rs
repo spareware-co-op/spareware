@@ -2579,3 +2579,104 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         Err(Refusal::NotFound)
     ));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_reads_a_views_dimensions_with_their_values_worked_out() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    let none = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(none.view_name, "Level 1 plan");
+    assert_eq!(none.dimensions.len(), 0);
+
+    // Across the first floor at mid height: the east wall's line, the partition's faces and line,
+    // and the west wall's line (the seed draws them at x = 100, 6100 and 11900 mm).
+    let wall = |id: &str, feature: &str| json!({ "element": id, "feature": feature });
+    edit(
+        "dimension.create",
+        json!({ "dimension": "DM-1", "view": "VP-1",
+                "layout": { "kind": "horizontal", "y": "4000" },
+                "references": [
+                    wall("W-103", "wall.line"),
+                    wall("W-105", "wall.face.interior"),
+                    wall("W-105", "wall.face.exterior"),
+                    wall("W-104", "wall.line"),
+                ] }),
+    )
+    .await
+    .unwrap();
+    let listed = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    let shown = serde_json::to_value(&listed).unwrap();
+    let dimension = &shown["dimensions"][0];
+    assert_eq!(dimension["id"], "DM-1");
+    assert_eq!(dimension["layout"]["kind"], "horizontal");
+    assert_eq!(dimension["layout"]["y"], "length:q0:25600000");
+    let segments = dimension["segments"].as_array().unwrap();
+    assert_eq!(segments.len(), 3);
+    // Its west face is 57.5 mm before 6100 and its east face 57.5 mm after: the distances run
+    // 5942.5, 115 and 5742.5 mm.
+    assert_eq!(segments[1]["text"], "115 mm");
+    assert_eq!(segments[1]["value"], "length:q0:736000");
+    assert_eq!(segments[1]["exact"], true);
+    let whole: i64 = [0, 2]
+        .iter()
+        .map(|at| {
+            let text = segments[*at]["value"].as_str().unwrap();
+            text.strip_prefix("length:q0:")
+                .unwrap()
+                .parse::<i64>()
+                .unwrap()
+        })
+        .sum::<i64>()
+        + 736_000;
+    assert_eq!(whole, 11_800 * 6400);
+    assert_eq!(dimension["overall_text"], "11800 mm");
+    assert_eq!(dimension["warnings"], json!([]));
+    assert_eq!(
+        dimension["references"][0]["words"],
+        "the reference line of W-103"
+    );
+
+    // A wall is deleted: the dimension is not touched, and names the reference that is gone.
+    edit("element.delete", json!({ "element": "W-105" }))
+        .await
+        .unwrap();
+    let after = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    let after = serde_json::to_value(&after).unwrap();
+    let dimension = &after["dimensions"][0];
+    assert_eq!(dimension["segments"][1]["value"], Value::Null);
+    assert_eq!(dimension["overall"], Value::Null);
+    assert_eq!(
+        dimension["warnings"][0]["identity"],
+        "dimension.reference_missing|DM-1|W-105"
+    );
+    assert_eq!(dimension["references"][1]["usable"], false);
+    // The undo gives the wall, and the numbers, back.
+    edit("edit.undo", json!({})).await.unwrap();
+    let back = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(serde_json::to_value(&back).unwrap(), shown);
+
+    assert!(refused(
+        s.dimensions(&dan, &project, &model, &i("VP-1")).await
+    ));
+    assert!(matches!(
+        s.dimensions(&anna, &project, &model, &i("VP-9")).await,
+        Err(Refusal::NotFound)
+    ));
+}
