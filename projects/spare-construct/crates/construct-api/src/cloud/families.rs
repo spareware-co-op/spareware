@@ -54,9 +54,12 @@
 //! the values each instance holds; the families route lists the document's own first
 //! ([`crate::cloud::loading::read_families`]).
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::hosting::HostingTool;
 use crate::cloud::hosting::{self, Host, Which, fit, length};
 use crate::cloud::loading;
+use crate::cloud::tool::Tool;
 use construct_categories::{CategoryId, CategoryTable, DOORS, GENERIC_MODELS, WINDOWS};
 use construct_families::{ContentId, Key, Recipe as FamilyRecipe};
 use construct_model::element::Element;
@@ -94,6 +97,34 @@ pub const DELETE: &str = "family.delete";
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd) || loading::is_command(cmd)
+}
+
+/// The family tool ([`Tool`]): placing a family of the library on a wall, and changing a placed
+/// one.
+pub struct FamilyTool;
+
+impl Tool for FamilyTool {
+    const NAME: &'static str = "family";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME, HostingTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.

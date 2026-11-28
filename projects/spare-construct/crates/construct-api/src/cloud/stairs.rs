@@ -42,8 +42,10 @@
 //! Typed text is read with construct-params' metric display settings until a project keeps its
 //! own.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
 use crate::cloud::levels;
+use crate::cloud::tool::Tool;
 use construct_levels::{Length, Tie, parse_length, show, write_top};
 use construct_model::element::Element;
 use construct_params::{Units, Value};
@@ -73,6 +75,33 @@ pub const COMMANDS: [&str; 7] = [
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The stair tool ([`Tool`]): stairs laid out by rules.
+pub struct StairTool;
+
+impl Tool for StairTool {
+    const NAME: &'static str = "stair";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The name a stair is given when none is.

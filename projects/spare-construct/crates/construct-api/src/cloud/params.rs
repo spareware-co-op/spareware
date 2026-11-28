@@ -53,6 +53,7 @@
 //! [`crate::cloud::undo`].
 
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use construct_categories::{CategoryId, CategoryTable};
 use construct_formulas::FormulaError;
 use construct_model::element::Element;
@@ -84,6 +85,24 @@ pub const COMMANDS: [&str; 10] = [
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The parameter tool ([`Tool`]): parameters, types, and an element's values and type.
+pub struct ParamTool;
+
+impl Tool for ParamTool {
+    const NAME: &'static str = "parameter";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.

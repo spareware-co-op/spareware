@@ -43,8 +43,10 @@
 //! own. Later, with their places: room separation lines and rooms bounded by floors and ceilings
 //! (job 6.3), and a sloped upper limit (the interim register).
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
 use crate::cloud::levels;
+use crate::cloud::tool::Tool;
 use construct_levels::{Length, Tie, parse_length, write_top};
 use construct_model::element::Element;
 use construct_params::Units;
@@ -73,6 +75,33 @@ pub const COMMANDS: [&str; 6] = [
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The room tool ([`Tool`]): placing and changing rooms.
+pub struct RoomTool;
+
+impl Tool for RoomTool {
+    const NAME: &'static str = "room";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The name a room is given when none is.

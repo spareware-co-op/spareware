@@ -76,8 +76,11 @@
 //! their places: a sketch with constraints for its boundary (job 5.2); arc edges, once the
 //! kernel's sweep takes them (the interim register).
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
 use crate::cloud::openings::floor_view;
+use crate::cloud::params::ParamTool;
+use crate::cloud::tool::Tool;
 use crate::cloud::walls::{MaterialView, materials_view};
 use crate::cloud::{levels, params};
 use construct_categories::{CategoryId, FLOORS};
@@ -122,6 +125,33 @@ pub const COMMANDS: [&str; 13] = [
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The floor tool ([`Tool`]): floor types and floors drawn from a boundary.
+pub struct FloorTool;
+
+impl Tool for FloorTool {
+    const NAME: &'static str = "floor";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME, ParamTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.

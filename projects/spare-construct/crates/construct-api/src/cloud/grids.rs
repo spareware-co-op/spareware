@@ -33,6 +33,7 @@
 //! command as an ordinary step ([`crate::cloud::undo`]) and re-check the names ([`check`]).
 
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use construct_grids::{
     Datums, Grid, GridError, PLANE_KIND, PlaneShape, ReferencePlane, Shape, datum_of_recipe,
     is_datum_kind,
@@ -68,6 +69,24 @@ pub const BY_COMMAND: &str =
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The grid tool ([`Tool`]): grid lines and reference planes.
+pub struct GridTool;
+
+impl Tool for GridTool {
+    const NAME: &'static str = "grid";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
 }
 
 /// Whether a record of this kind and recipe is a grid line or a reference plane.
