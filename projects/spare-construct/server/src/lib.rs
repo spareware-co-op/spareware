@@ -6,6 +6,7 @@ pub mod backup;
 pub mod directory;
 pub mod geometry;
 pub mod http;
+mod ifc_export;
 pub mod plan;
 pub mod seed;
 pub mod service;

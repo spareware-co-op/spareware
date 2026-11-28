@@ -24,6 +24,8 @@ construct-api = { path = "../crates/construct-api", features = ["cloud"] }
 # is the engine seam it cuts through. This repository's own, Apache-2.0.
 construct-categories = { path = "../crates/construct-categories" }
 construct-drawing = { path = "../crates/construct-drawing" }
+# The model as an IFC 4.3 file (`export/ifc`): construct-interop writes it. This repository's own, Apache-2.0.
+construct-interop = { path = "../crates/construct-interop" }
 construct-materials = { path = "../crates/construct-materials" }
 construct-params = { path = "../crates/construct-params" }
 construct-styles = { path = "../crates/construct-styles" }
