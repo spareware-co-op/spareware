@@ -8,7 +8,9 @@
 //! elements and sentence.
 //!
 //! A dimension's warnings (a reference that is gone or has no place) are measured the way the
-//! dimension listing measures them and handed over as they are ([`Model::dimensions`]).
+//! dimension listing measures them and handed over as they are ([`Model::dimensions`]); a
+//! railing's (a top rail too low, an opening a sphere passes, a handrail out of its heights) are
+//! worked out the way its own listing works them out ([`Model::railings`]).
 //!
 //! A wall that does not build (its type missing, its recipe not as written) is not there, as in
 //! every view; a wall with no level is not on one, so it overlaps nothing. A room the search
@@ -101,6 +103,7 @@ pub async fn read_warnings<R: Reader>(
     }
     model.dimensions =
         crate::cloud::dimensions::measured_warnings(reader, project, document).await?;
+    model.railings = crate::cloud::railings::measured_warnings(reader, project, document).await?;
     Ok(WarningsView {
         warnings: warnings(&model)
             .into_iter()

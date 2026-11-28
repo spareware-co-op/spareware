@@ -268,6 +268,9 @@ fn every_kind_is_one_entry_with_its_own_name() {
             "dimension.out_of_range",
             "dimension.reference_missing",
             "dimension.reference_parallel",
+            "railing.handrail",
+            "railing.low",
+            "railing.opening",
             "room.not_enclosed",
             "room.redundant",
             "wall.overlap",
@@ -529,4 +532,40 @@ fn an_insert_that_is_not_an_interval_on_the_grid_is_refused() {
         InsertError::TooBig
     );
     assert!(new(1, -5, 5).is_ok());
+}
+
+#[test]
+fn what_the_railings_found_is_listed_by_kind_and_a_kind_that_is_not_a_rule_is_not() {
+    let found = |kind: &'static str, railing: &str| Warning {
+        kind,
+        severity: Severity::Error,
+        elements: vec![i(railing)],
+        words: format!("{railing} breaks a limit"),
+    };
+    let model = Model {
+        railings: vec![
+            found("railing.opening", "RL-2"),
+            found("railing.low", "RL-2"),
+            found("railing.low", "RL-1"),
+            found("railing.handrail", "RL-1"),
+            found("railing.no_such_kind", "RL-1"),
+        ],
+        ..Model::default()
+    };
+    let identities: Vec<String> = warnings(&model).iter().map(Warning::identity).collect();
+    assert_eq!(
+        identities,
+        [
+            "railing.handrail|RL-1",
+            "railing.low|RL-1",
+            "railing.low|RL-2",
+            "railing.opening|RL-2"
+        ]
+    );
+    // The table's severity is the one listed, whatever the measurement carried.
+    assert!(
+        warnings(&model)
+            .iter()
+            .all(|w| w.severity == Severity::Warning)
+    );
 }

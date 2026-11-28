@@ -9,8 +9,8 @@ license.workspace = true
 # The regenerator that keeps a server's derived shapes up to date. The browser needs only the
 # geometry, so its build leaves this out.
 # It reads parameters, types, levels, wall types, floor types and roof types to fill the recipes
-# that name them, the walls round a room to find its loop, and lays a stair out from its levels,
-# so those crates come with it.
+# that name them, the walls round a room to find its loop, lays a stair out from its levels and a
+# railing along its path or its stair, so those crates come with it.
 server = [
     "dep:kit-store",
     "dep:kit-sync",
@@ -23,6 +23,7 @@ server = [
     "dep:construct-roofs",
     "dep:construct-rooms",
     "dep:construct-stairs",
+    "dep:construct-railings",
     "dep:construct-materials",
     "dep:construct-views",
     "dep:construct-schedules",
@@ -62,6 +63,9 @@ construct-rooms = { path = "../construct-rooms", optional = true }
 # A stair is laid out from the rise its levels give it and filled with its pieces (src/stairs.rs).
 # Same workspace.
 construct-stairs = { path = "../construct-stairs", optional = true }
+# A railing is laid out along its path or the stair it follows and filled with its pieces
+# (src/railings.rs). Same workspace.
+construct-railings = { path = "../construct-railings", optional = true }
 # A floor's read-only mass is its layers' volumes of their materials, from the default library
 # (src/slabs.rs). Same workspace.
 construct-materials = { path = "../construct-materials", optional = true }

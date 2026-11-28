@@ -27,6 +27,8 @@
 //!   same log.
 //! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
 //!   landings), through the same log.
+//! - [`railings`]: making and changing railings along a sketched path or on a stair (type, path,
+//!   side), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping, a
 //!   dimension's reference that is gone), read-only
@@ -56,6 +58,7 @@ pub mod levels;
 pub mod loading;
 pub mod openings;
 pub mod params;
+pub mod railings;
 pub mod roofs;
 pub mod rooms;
 pub mod schedules;

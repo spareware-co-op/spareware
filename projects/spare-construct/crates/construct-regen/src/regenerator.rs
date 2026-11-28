@@ -15,7 +15,9 @@
 //! Types, a document's parameter table and its levels have no shape: they are listed by kind and
 //! never built. A recipe that names a parameter is filled first ([`crate::parameters::filled`]),
 //! and one that reads its top tie next ([`crate::levels::filled`]), a stair laid out from it
-//! ([`crate::stairs::filled`]); an element's place is its base level's
+//! ([`crate::stairs::filled`]), a railing along its path or its stair
+//! ([`crate::railings::filled`]; its `reads` row lists its stair and the stair's levels, and a
+//! stair that changes builds its railings again); an element's place is its base level's
 //! ([`crate::levels::placed`]). Each element is listed under `reads` with every
 //! record it reads (the parameter table, its type, its levels), so a change to any of them, or
 //! its deletion, builds it again in the same pass. A shape is then the same however the log was
@@ -480,6 +482,8 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             }) => {
                 let fed = hosts.iter().chain(&hosted).chain(&joined);
                 self.dependents(txn, project, document, fed, built).await?;
+                self.railings_on(txn, project, document, &change.piece, built)
+                    .await?;
                 return self
                     .rooms_around(txn, project, document, &change.piece, &spaces, built)
                     .await;
@@ -551,6 +555,42 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             };
             let listed: Option<Reads> = read_row(txn, &reads.key()).await?;
             if on || listed.is_some_and(|r| r.reads(changed.as_str())) {
+                again.push(element);
+            }
+        }
+        self.dependents(txn, project, document, again.iter(), built)
+            .await
+    }
+
+    /// Builds again, one step deep, every railing whose `reads` row lists `changed` (the stair it
+    /// follows), in key order ([`crate::railings`]): a stair that changes, is made or is deleted
+    /// lays its railings out again.
+    async fn railings_on(
+        &self,
+        txn: &mut K::Txn,
+        project: &Id,
+        document: &Id,
+        changed: &Id,
+        built: &mut Vec<(Id, Id, Option<Id>)>,
+    ) -> Result<(), StoreError> {
+        let Ok(kind) = Id::parse(construct_railings::RAILING_KIND) else {
+            return Ok(());
+        };
+        let mut again = Vec::new();
+        for (key, _) in txn.scan(&list::kind(project, document, &kind)).await? {
+            let Some(Place::Kind { element, .. }) = Place::parse(&key) else {
+                continue;
+            };
+            if element == *changed {
+                continue;
+            }
+            let reads = Place::Reads {
+                project: project.clone(),
+                document: document.clone(),
+                element: element.clone(),
+            };
+            let listed: Option<Reads> = read_row(txn, &reads.key()).await?;
+            if listed.is_some_and(|r| r.reads(changed.as_str())) {
                 again.push(element);
             }
         }
@@ -726,6 +766,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         if let Ok(recipe) = &inputs.recipe {
             records.extend(rooms::walls_read(recipe));
         }
+        // A railing on a stair reads the stair and the stair's levels.
+        records.extend(
+            crate::railings::reads(txn, project, document, &element, At::Regenerated).await?,
+        );
         let row = Reads {
             records,
             host: new_host.as_ref().map(ToString::to_string),
@@ -1308,6 +1352,21 @@ async fn input_of<R: Reader>(
                 .and_then(|recipe| levels::filled(&recipe, &placed))
                 // A stair is laid out from the rise its levels give it.
                 .and_then(|recipe| crate::stairs::filled(&recipe));
+            // A railing is laid out along its path or the stair it follows.
+            let recipe = match recipe {
+                Ok(recipe) => {
+                    crate::railings::filled(
+                        reader,
+                        project,
+                        document,
+                        recipe,
+                        placed.elevation,
+                        At::Regenerated,
+                    )
+                    .await?
+                }
+                Err(e) => Err(e),
+            };
             // A room's loop is found from the walls of its level once its height is read.
             let recipe = match recipe {
                 Ok(recipe) => {

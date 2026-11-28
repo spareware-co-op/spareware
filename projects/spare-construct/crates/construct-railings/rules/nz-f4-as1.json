@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "nz-f4-as1",
+  "name": "New Zealand Building Code clause F4 Safety from falling, Acceptable Solution F4/AS1",
+  "edition": "F4/AS1 third edition, amendment 2, effective 1 January 2017; handrail heights from D1/AS1 second edition, amendment 6",
+  "source": "https://www.building.govt.nz/building-code-compliance/f-safety-of-users/f4-safety-from-falling/",
+  "categories": [
+    {
+      "id": "household-stair",
+      "name": "Stairs and ramps and their intermediate landings, in a detached dwelling or within a household unit",
+      "flight_least": { "length": "900 mm", "clause": "F4/AS1 1.1.1, Table 1 and its Note 1" },
+      "level_least": { "length": "900 mm", "clause": "F4/AS1 1.1.1 and Table 1" },
+      "openings": ["children"]
+    },
+    {
+      "id": "household-edge",
+      "name": "Balconies and decks, and edges of internal floors or mezzanine floors, in a detached dwelling or within a household unit",
+      "level_least": { "length": "1000 mm", "clause": "F4/AS1 1.1.1 and Table 1" },
+      "openings": ["children"]
+    },
+    {
+      "id": "stair",
+      "name": "Stairs or ramps, in all other buildings and the common areas of multi-unit dwellings",
+      "flight_least": { "length": "900 mm", "clause": "F4/AS1 1.1.1, Table 1 and its Note 1" },
+      "level_least": { "length": "1100 mm", "clause": "F4/AS1 1.1.1, Table 1 (all other locations) and its Note 5" },
+      "openings": ["children", "no-children"]
+    },
+    {
+      "id": "seating",
+      "name": "Barriers within 530 mm of the front of fixed seating, in all other buildings",
+      "level_least": { "length": "800 mm", "clause": "F4/AS1 1.1.1 and Table 1" },
+      "openings": ["children", "no-children"]
+    },
+    {
+      "id": "other",
+      "name": "All other locations, in all other buildings and the common areas of multi-unit dwellings",
+      "level_least": { "length": "1100 mm", "clause": "F4/AS1 1.1.1 and Table 1" },
+      "openings": ["children", "no-children"]
+    }
+  ],
+  "openings": [
+    {
+      "id": "children",
+      "name": "Housing, and other areas likely to be frequented by children under 6 years of age",
+      "sphere": { "length": "100 mm", "clause": "F4/AS1 1.2.1 b)" },
+      "stair_sphere": { "length": "150 mm", "clause": "F4/AS1 1.2.1 c) and Figure 4" }
+    },
+    {
+      "id": "no-children",
+      "name": "Areas used only for emergency or maintenance, and other buildings not frequented by children",
+      "between_verticals": { "length": "300 mm", "clause": "F4/AS1 1.2.2 a)" },
+      "between_rails": { "length": "460 mm", "clause": "F4/AS1 1.2.2 b)" }
+    }
+  ],
+  "handrail": {
+    "least": { "length": "900 mm", "clause": "D1/AS1 6.0.6" },
+    "most": { "length": "1000 mm", "clause": "D1/AS1 6.0.6" }
+  }
+}

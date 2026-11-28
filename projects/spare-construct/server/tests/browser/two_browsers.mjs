@@ -4277,5 +4277,230 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+console.log('\n   Railings, on a stair and along a path');
+// Ben makes a level 3.1 m above Level 1 and Anna makes a main private stair up to it. She picks the
+// railing tool and picks the stair: a railing is made on it, and Ben sees its top rail, its posts and
+// every baluster the server laid out, and its shape built for 3D. Ben moves the level up and the
+// railing is laid out again with the stair, with more balusters, in both browsers. Anna sketches a
+// railing of two segments by clicking its points and pressing Enter: a post at each end and the
+// corner, balusters by the type's spacing. She changes the path from her palette, and the balusters
+// are laid out again in both browsers; a point that leaves a segment no length is refused in the
+// server's words; a top rail lower than the code's least is the server's warning, with its clause,
+// in her palette and in the model's list, and her undo takes it away. A fresh load draws the same,
+// and she deletes the railings and the stair, and Ben the level.
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await stairLevelDialog();
+await makeLevel('Rail top', `${stairBase + 3100} mm`);
+await levelSection('Rail top').waitFor();
+await stairLevelClose();
+const rlTop = (await stairLevels()).find((l) => l.name === 'Rail top');
+check(rlTop.shown === `${stairBase + 3100} mm`, 'Ben makes a level 3100 mm above Level 1');
+
+// Anna's stair, as in the stairs section: two clicks, its top the new level.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:stair"]');
+const rlStairField = (key) => `#pv-side [data-key="stair-${key}"]`;
+await anna.waitForSelector(`${rlStairField('top')} option[value="${rlTop.id}"]`, { state: 'attached' });
+await anna.locator(rlStairField('top')).selectOption(rlTop.id);
+await anna.locator(rlStairField('category')).selectOption('main-private');
+await anna.waitForFunction((id) => document.querySelector('#pv-side [data-key="stair-top"]')?.value === id, rlTop.id);
+const rlKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+for (const [x, y] of [[13300, 6000], [13300, 5000]]) {
+  const at = await onPlan(anna, x, y);
+  await anna.mouse.click(at.x, at.y);
+}
+const rlStairOf = (known) => [...window.spare.elements.values()].find((p) => p.el.kind === 'stair' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(rlStairOf, rlKnown);
+const rlStair = await ben.evaluate(rlStairOf, rlKnown);
+await anna.keyboard.press('Escape');
+// The middle of a stair's first run, as the server filled it (grid steps, 6400 to the millimetre).
+const rlStairMiddle = (id) => {
+  const quad = window.spare.elements.get(id)?.fill?.recipe?.args?.pieces?.[0]?.plan;
+  return quad && [0, 1].map((axis) => quad.reduce((sum, corner) => sum + corner[axis], 0) / quad.length / 6400);
+};
+await anna.waitForFunction(rlStairMiddle, rlStair);
+
+// The railing tool: the stair is picked, and a railing is made on it.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:railing"]');
+await anna.waitForSelector('#pv-side [data-railing-rules]');
+const rlRules = await asAnna('railings');
+check(
+  (await anna.locator('#pv-side select[data-key="railing-category"] option').count()) === rlRules.categories.length + 1 &&
+    (await anna.locator('#pv-side [data-railing-rules]').textContent()).includes('F4/AS1'),
+  "the railing tool offers the rule set's categories as the server lists them, and names the code",
+);
+const rlMiddle = await anna.evaluate(rlStairMiddle, rlStair);
+const rlKnownNow = await anna.evaluate(() => [...window.spare.elements.keys()]);
+const rlStairAt = await onPlan(anna, rlMiddle[0], rlMiddle[1]);
+await anna.mouse.click(rlStairAt.x, rlStairAt.y);
+const rlRailingOf = (known) => [...window.spare.elements.values()].find((p) => p.el.kind === 'railing' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(rlRailingOf, rlKnownNow);
+const rlOnStair = await ben.evaluate(rlRailingOf, rlKnownNow);
+await anna.keyboard.press('Escape');
+const rlViews = async () => (await asAnna('railings')).railings;
+const rlView = async (id) => (await rlViews()).find((r) => r.id === id);
+const rlParts = ([id, part, count]) => document.querySelectorAll(`g.element[data-id="${id}"] [data-railing-piece^="${part}."]`).length === count;
+const rlLaid = await until(() => rlView(rlOnStair), (r) => r?.laid?.balusters > 0, 'the server lays the railing on the stair out');
+check(
+  rlLaid.stair === rlStair && rlLaid.refusal === null && rlLaid.side === 'both' && rlLaid.laid.posts >= 4,
+  'the server holds a railing on the stair, on both sides, laid out from the stair: balusters and posts counted',
+);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(rlParts, [rlOnStair, 'baluster', rlLaid.laid.balusters]);
+  await page.waitForFunction(rlParts, [rlOnStair, 'post', rlLaid.laid.posts]);
+  check(
+    (await page.locator(`g.element[data-id="${rlOnStair}"] [data-railing-piece^="rail."]`).count()) > 0,
+    `${name}'s plan draws the railing's top rail, its ${rlLaid.laid.posts} posts and its ${rlLaid.laid.balusters} balusters, as the server laid them out`,
+  );
+}
+const rlTall = await ben.evaluate((id) => {
+  const shape = window.spare.elements.get(id)?.shape;
+  return shape ? shape.bounds.max[2] - shape.bounds.min[2] : 0;
+}, rlOnStair);
+check(rlTall > 3000, `Ben's page builds the railing's shape for 3D, as tall as the flight it follows (${rlTall} mm)`);
+await shot(ben, 'ben-railing-on-stair');
+
+// Ben moves the stair's top level up: the stair is laid out again and the railing with it.
+const rlMoveTop = async (typed) => {
+  const want = `${Math.round(Number.parseFloat(typed) * 1000)} mm`;
+  const topAt = async () => (await stairLevels()).find((l) => l.id === rlTop.id);
+  const key = `${manager} [data-key="level-elevation:${rlTop.id}"]`;
+  await stairLevelDialog();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const now = (await topAt()).shown;
+    await ben.waitForFunction(([selector, shown]) => document.querySelector(selector)?.value === shown, [key, now]);
+    await ben.locator(key).fill(typed);
+    await ben.locator(key).press('Enter');
+    for (let tries = 0; tries < 30; tries += 1) {
+      if ((await topAt()).shown === want) {
+        await stairLevelClose();
+        return;
+      }
+      await ben.waitForTimeout(100);
+    }
+  }
+  throw new Error(`FAILED: the railing's stair's top level moves to ${typed}`);
+};
+await rlMoveTop(`${(stairBase + 3500) / 1000} m`);
+const rlLonger = await until(() => rlView(rlOnStair), (r) => r?.laid?.balusters > rlLaid.laid.balusters, "the server lays the railing out again with its stair's new height");
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(rlParts, [rlOnStair, 'baluster', rlLonger.laid.balusters]);
+  pass(`${name}'s plan draws the railing laid out again with its stair: ${rlLonger.laid.balusters} balusters`);
+}
+
+// Anna sketches a railing: three points and Enter.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:railing"]');
+await anna.waitForSelector('#pv-side [data-railing-sketch="empty"]');
+const rlSketchKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+const rlPoints = [[10000, 6000], [11500, 6000], [11500, 7200]];
+for (const [x, y] of rlPoints) {
+  const at = await onPlan(anna, x, y);
+  await anna.mouse.click(at.x, at.y);
+}
+await anna.waitForSelector('#pv-side [data-railing-sketch="ready"]');
+await anna.keyboard.press('Enter');
+await ben.waitForFunction(rlRailingOf, rlSketchKnown);
+const rlSketched = await ben.evaluate(rlRailingOf, rlSketchKnown);
+await anna.keyboard.press('Escape');
+const rlFirst = await until(() => rlView(rlSketched), (r) => r?.laid?.balusters > 0, 'the server lays the sketched railing out');
+check(rlFirst.stair === null && rlFirst.laid.posts === 3, 'the server lays out the path of two segments: a post at each end and the corner');
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(rlParts, [rlSketched, 'baluster', rlFirst.laid.balusters]);
+  await page.waitForFunction(rlParts, [rlSketched, 'post', 3]);
+  pass(`${name}'s plan draws its 3 posts and ${rlFirst.laid.balusters} balusters`);
+}
+const rlPoint = async (id) =>
+  ben.evaluate((element) => window.spare.elements.get(element).el.recipe.args.path.points.map(([x, y]) => [x, y].map((v) => Number(v.split(':').pop()) / 6400)), id);
+check(JSON.stringify(await rlPoint(rlSketched)) === JSON.stringify(rlPoints), "the railing in Ben's browser follows the points Anna clicked");
+
+// She picks it by its rail and edits the path from the palette: the last point goes up to 8200.
+const rlRailMiddle = (id) => {
+  const piece = window.spare.elements.get(id)?.fill?.recipe?.args?.pieces?.find((p) => p.part === 'top-rail');
+  if (!piece) return null;
+  const mid = (axis) => piece.extrude.reduce((sum, c) => sum + c[axis], 0) / piece.extrude.length / 6400 + piece.by[axis] / 2 / 6400;
+  return [mid(0), mid(1)];
+};
+const rlPick = async (page, id) => {
+  await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  const middle = await page.evaluate(rlRailMiddle, id);
+  const at = await onPlan(page, middle[0], middle[1]);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector('#pv-side [data-railing-element]');
+};
+await rlPick(anna, rlSketched);
+await anna.waitForSelector('#pv-side [data-key="railing-point-2-y"]');
+const rlLast = anna.locator('#pv-side [data-key="railing-point-2-y"]');
+await rlLast.fill('8200 mm');
+await rlLast.press('Enter');
+const rlEdited = await until(() => rlView(rlSketched), (r) => r?.laid?.balusters > rlFirst.laid.balusters, 'the longer path takes more balusters');
+check(rlEdited.laid.posts === 3, 'the path edited, the server lays it out again: more balusters on the longer segment, still 3 posts');
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  await page.waitForFunction(rlParts, [rlSketched, 'baluster', rlEdited.laid.balusters]);
+  pass(`${name}'s plan draws the balusters laid out again for the new path`);
+}
+check(JSON.stringify((await rlPoint(rlSketched)).at(-1)) === JSON.stringify([11500, 8200]), "the new point is in Ben's browser");
+
+// A point that leaves a segment no length is refused in the server's words, beside the path.
+await rlLast.fill('6000 mm');
+await rlLast.press('Enter');
+await anna.waitForSelector('#pv-side [data-problem="railing-edit"]');
+check(
+  (await anna.locator('#pv-side [data-problem="railing-edit"]').textContent()).length > 10 && JSON.stringify((await rlPoint(rlSketched)).at(-1)) === JSON.stringify([11500, 8200]),
+  "a point that leaves a segment no length is turned back in the server's words, and the path keeps its point",
+);
+
+// A top rail lower than the code's least is a warning with its clause, never a refusal.
+const rlHeight = anna.locator('#pv-side [data-key="railing-own-height"]');
+await rlHeight.fill('800 mm');
+await rlHeight.press('Enter');
+await anna.waitForSelector('#pv-side [data-railing-warning="railing.low"]');
+check(
+  /F4\/AS1/.test(await anna.locator('#pv-side [data-railing-warning="railing.low"]').textContent()) &&
+    (await asAnna('warnings')).warnings.some((w) => w.identity === `railing.low|${rlSketched}`),
+  "a top rail of 800 mm is the server's warning in Anna's palette, with the clause, and in the model's list",
+);
+await anna.click('#qat [data-act="stackundo"]');
+await until(async () => (await asAnna('warnings')).warnings.some((w) => w.identity === `railing.low|${rlSketched}`), (still) => !still, 'her undo takes the warning away');
+await anna.waitForFunction(() => !document.querySelector('#pv-side [data-railing-warning="railing.low"]'));
+pass('her undo puts the top rail back and the warning goes, from her palette and the list');
+await shot(anna, 'anna-railings');
+
+// A fresh load draws the same railings, and every body built matches the server's.
+await ben.reload();
+await ben.waitForSelector('html[data-stack="ready"]');
+await roofHome(ben);
+await ben.waitForFunction(rlParts, [rlOnStair, 'baluster', rlLonger.laid.balusters]);
+await ben.waitForFunction(rlParts, [rlSketched, 'baluster', rlEdited.laid.balusters]);
+pass("a fresh load of Ben's page draws both railings as the open pages do");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the railings' included, matches the server's`);
+}
+
+// Anna deletes both railings and the stair; Ben removes the level.
+await rlPick(anna, rlSketched);
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), rlSketched);
+await rlPick(anna, rlOnStair);
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), rlOnStair);
+check((await rlViews()).length === 0, 'Anna deletes both railings and they are gone from both plans and the server');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const rlStairAgain = await anna.evaluate(rlStairMiddle, rlStair);
+const rlStairPick = await onPlan(anna, rlStairAgain[0], rlStairAgain[1]);
+await anna.mouse.click(rlStairPick.x, rlStairPick.y);
+await anna.waitForSelector('#pv-side [data-stair-element]');
+await anna.keyboard.press('Delete');
+await ben.waitForFunction((id) => !document.querySelector(`g.element[data-id="${id}"]`), rlStair);
+await stairLevelDialog();
+await ben.locator(`${manager} [data-key="level-delete:${rlTop.id}"]`).click();
+await until(
+  async () => (await stairLevels()).some((l) => l.id === rlTop.id),
+  (still) => !still,
+  "the railings' stair's top level is deleted",
+);
+await stairLevelClose();
+pass("Anna deletes the stair and Ben the level, and the plan is as it was before the railings");
 await browser.close();
 console.log('\nThe browser checks passed.');

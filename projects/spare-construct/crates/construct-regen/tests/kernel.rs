@@ -902,6 +902,13 @@ fn a_stair_is_its_pieces() {
     kernel_suite::a_stair_is_its_pieces(|| Lofts);
 }
 
+/// A railing's post is extruded up and its rails lofted along their pieces on the test engine
+/// that keeps each loft.
+#[test]
+fn a_railing_is_its_pieces() {
+    kernel_suite::a_railing_is_its_pieces(|| Lofts);
+}
+
 #[test]
 fn a_solved_roof_unites_its_pieces_on_the_engine() {
     use construct_model::geometry::Geometry;

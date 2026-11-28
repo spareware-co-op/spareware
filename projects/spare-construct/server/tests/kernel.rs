@@ -9,8 +9,9 @@
 //! solid per layer (each sloped layer lofted), a door and a window placed from the family library
 //! cutting a three-layer wall (job 6.4), a stair's run lofted and its landing extruded (job 6.7),
 //! a family the document holds and no library does built and reloaded (job 7.6), doors, windows
-//! and openings in walls at any angle (piece A83), and a document of one edition reported,
-//! not rebuilt, by a server of another. Built and run only with `--features kernel`.
+//! and openings in walls at any angle (piece A83), a railing's posts extruded up and its rails
+//! lofted along their pieces (job 14.2), and a document of one edition reported, not rebuilt, by a
+//! server of another. Built and run only with `--features kernel`.
 
 #![cfg(feature = "kernel")]
 // The server denies these outside tests (Cargo.toml). Tests may use them, as the geometry kernel's
@@ -154,6 +155,11 @@ fn a_flat_roof_is_its_layers() {
 #[test]
 fn a_stair_is_its_pieces() {
     kernel_suite::a_stair_is_its_pieces(engine);
+}
+
+#[test]
+fn a_railing_is_its_pieces() {
+    kernel_suite::a_railing_is_its_pieces(engine);
 }
 
 #[test]

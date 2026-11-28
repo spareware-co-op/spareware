@@ -506,6 +506,50 @@
     },
     {
       "program": "spare-construct",
+      "place": "construct-regen's stand_in::Boxes, a railing",
+      "operation": "railing (a filled railing recipe: each post's, baluster's and piece of rail's profile and vector)",
+      "answered_by": "one box around every piece, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw each piece as the prism it is, its profile and the same swept, every point the nearest millimetre",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-regen/tests/railings.rs",
+        "test": "a_sketched_railing_is_built_as_its_pieces"
+      },
+      "known_faults": [
+        "a railing's pieces are not solids on the stand-in's edition, and its displays stray by 1 mm where a corner is not on a whole millimetre"
+      ],
+      "replaced_by": "construct_regen::kernel::Kernel's railing builder, as the stand-in's own row says, once the browser's build can link the engine"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-regen's kernel::railing, a railing's pieces",
+      "operation": "railing (Kernel: one Engine::extrude of each post's or baluster's profile in plan up, one Engine::loft of each piece of rail's upright section in the plane x = const or y = const to the same moved along its piece of line, level or sloped)",
+      "answered_by": "the engine behind the Engine trait, each piece a solid of its own: on the server's kernel setting solidcore's engine, an extrusion by the kernel's make.prism and a loft by the engine's own exact rows (each wall a flat face through the sections' grid corners); the pieces' meshes put one after another in whole millimetres, each point the nearest millimetre, the railing's names written from its recipe",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_railing_is_its_pieces"
+      },
+      "known_faults": [
+        "a corner not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
+        "the pieces touch or overlap where a rail meets a post or a baluster and are not united into one body",
+        "a rail is lofted, not extruded: solidcore's extrusion along a vector that is not upright gives a spline surface the kernel has no kind for"
+      ],
+      "replaced_by": "the kernel's own exact extrusion and ruled loft (geom-sweep, chapters 13.4 and 13.6) behind the same trait, display meshes on the kernel's grid, and a union of the pieces once the trait's boolean takes touching solids"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-railings' shape, a round profile",
+      "operation": "a round top rail, handrail, baluster or post (its profile before it is extruded)",
+      "answered_by": "a twelve-sided polygon whose corners are on its circle, every 30 degrees, each worked out exactly and rounded once to the grid by Spare Construct's own code, so the engine's extrusion takes it",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-railings/tests/shape.rs",
+        "test": "a_round_rail_is_twelve_corners"
+      },
+      "known_faults": [
+        "a round part is a twelve-sided prism, its section's area 3/pi of its circle's (about 95.5%), its faces flat"
+      ],
+      "replaced_by": "the kernel's own swept circle (geom-sweep, chapter 13.6) behind the same pieces, once the engine trait takes a curved profile"
+    },
+    {
+      "program": "spare-construct",
       "place": "construct-regen's stand_in::Boxes, a curtain wall",
       "operation": "wall.curtain (a filled curtain wall recipe: its panels, mullions and door panels, construct-curtain's layout)",
       "answered_by": "one box round everything it holds, rounded outward to whole millimetres, by Spare Construct's own code with no engine; its displays draw each glazed or solid panel and each mullion as the prism on its quadrilateral, every point the nearest millimetre, and each door panel as its family's boxes (construct_families::extents) at its panel's size, moved to where it stands",

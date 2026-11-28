@@ -26,6 +26,7 @@ cloud = [
     "dep:construct-rooms",
     "dep:construct-warnings",
     "dep:construct-stairs",
+    "dep:construct-railings",
     "dep:construct-phases",
     "dep:construct-doorgen",
     "dep:construct-schedules",
@@ -70,6 +71,8 @@ construct-rooms = { path = "../construct-rooms", optional = true }
 construct-warnings = { path = "../construct-warnings", optional = true }
 # The stair commands: construct-stairs checks every stair and lays it out by its rule set.
 construct-stairs = { path = "../construct-stairs", optional = true }
+# The railing commands: construct-railings checks every railing and its type.
+construct-railings = { path = "../construct-railings", optional = true }
 # The curtain wall commands: construct-curtain checks every grid, panel and mullion.
 construct-curtain = { path = "../construct-curtain", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.

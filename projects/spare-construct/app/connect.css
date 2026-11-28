@@ -66,6 +66,13 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .stair-cut { stroke: var(--ink); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .stair-walk { fill: none; stroke: var(--ink); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .stair-walk-start, .dw .stair-arrow { fill: var(--ink); stroke: none; pointer-events: none; }
+/* A railing: one wide clear body to pick it by along its top rail, the top rail and the handrail as lines (the handrail dashed), each post and baluster as the profile it is swept from. */
+.dw .railing { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }
+.dw .railing-rail { stroke: var(--ink); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .railing-hand { stroke: var(--ink-2); stroke-width: 1px; stroke-dasharray: 6 4; }
+.dw .railing-rail.sel, .dw .railing-post.sel, .dw .railing-baluster.sel { stroke: var(--app-strong); }
+.dw .railing-post { fill: var(--ink); stroke: var(--ink); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .railing-baluster { fill: var(--ink-2); stroke: none; pointer-events: none; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */
