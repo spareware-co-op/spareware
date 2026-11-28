@@ -300,6 +300,46 @@ impl Engine for Recording {
     }
 }
 
+/// A drawing's solids for a layered wall with a door hosted in it (job 8.1) have the door's opening
+/// cut from each layer: the engine is asked for one subtraction a layer, all by the door's one
+/// cutter, where the wall alone is asked for none; the layers keep their materials and their six
+/// named faces and add the opening's three; a wall with nothing hosted in it is as [`Kernel::layers`] gives it.
+#[test]
+fn a_layered_walls_drawing_solids_have_a_doors_opening_cut_from_each_layer() {
+    use construct_model::element::Placement;
+    use construct_model::geometry::Hosted;
+    use construct_regen::kernel::Kernel;
+    let engine = Recording::default();
+    let tools = engine.tools.clone();
+    let k = Kernel::new(engine).unwrap();
+    let wall = kernel_suite::partition("x");
+    let door = kernel_suite::door_of(900, 2100, "x");
+    let whole = k.layers(&wall).unwrap();
+    assert!(tools.lock().unwrap().is_empty());
+    let none = k.layers_hosting(&wall, &[]).unwrap();
+    assert!(tools.lock().unwrap().is_empty());
+    assert_eq!(none.len(), whole.len());
+    let hosted = [Hosted {
+        key: "D-1",
+        recipe: &door,
+        at: Placement {
+            x: 1000,
+            y: -150,
+            z: 0,
+        },
+    }];
+    let cut = k.layers_hosting(&wall, &hosted).unwrap();
+    let asked = tools.lock().unwrap().clone();
+    assert_eq!(asked.len(), 3, "one subtraction a layer");
+    assert!(asked.windows(2).all(|pair| pair[0] == pair[1]), "{asked:?}");
+    assert_eq!(cut.len(), 3);
+    for (with, without) in cut.iter().zip(&whole) {
+        assert_eq!(with.material, without.material);
+        // The wall's six, and the opening's two jambs and its head.
+        assert_eq!(with.solid.faces.len(), 6 + 3);
+    }
+}
+
 #[test]
 fn the_walls_names_survive_its_openings() {
     kernel_suite::the_walls_names_survive_its_openings(Recording::default);

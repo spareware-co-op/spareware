@@ -64,6 +64,8 @@ use engine_geometry::value::engine::Engine;
 use kit_core::Id;
 use serde::Serialize;
 
+pub use crate::section::SectionAsk;
+
 /// One element a plan cuts, as the model holds it.
 #[derive(Clone, Debug)]
 pub struct ToDraw {
@@ -78,6 +80,29 @@ pub struct ToDraw {
     /// The wall it is hosted on, if it is hosted on a face of one: a plan draws it seated there
     /// (piece A83), as the regenerator builds it.
     pub hosted_on: Option<HostedOn>,
+    /// For a wall, what is hosted in it that cuts it; a section cuts those openings in its layers
+    /// (job 8.1). `None` for anything else, and a plan does not read it.
+    pub opened: Option<Opened>,
+}
+
+/// A wall and the elements hosted in it, as the regenerator builds the wall with them.
+#[derive(Clone, Debug)]
+pub struct Opened {
+    /// The wall's record.
+    pub host: Element,
+    /// What is hosted in it, by the hosted element's ID.
+    pub held: Vec<Held>,
+}
+
+/// One element hosted in a wall: a door or a placed family.
+#[derive(Clone, Debug)]
+pub struct Held {
+    /// The hosted element's record.
+    pub record: Element,
+    /// Its recipe as the regenerator fills it.
+    pub recipe: Recipe,
+    /// How its record says it is hosted.
+    pub hosting: Hosting,
 }
 
 /// An element hosted on a face of its host, with what seats it there ([`hosting::seat`]).
@@ -148,6 +173,14 @@ pub trait Drawer: Send + Sync {
         looks: Option<&dyn Looks>,
         crop: Option<PlanCrop<'_>>,
     ) -> Result<Drawn, String>;
+
+    /// The section or elevation `ask` describes ([`crate::section`]).
+    ///
+    /// # Errors
+    ///
+    /// In words, when the drawing as a whole cannot be made or printed (a line not along a grid
+    /// axis among them); an element that cannot be drawn is in [`Drawn::skipped`] instead.
+    fn section(&self, ask: &SectionAsk<'_>) -> Result<Drawn, String>;
 }
 
 /// How a view's rules make each category look: every answer is `resolve`'s, through the document
@@ -199,16 +232,16 @@ impl Looks for ViewLooks<'_> {
 }
 
 /// The default metric styles a plan is penned with, until a project keeps its own.
-struct Defaults {
+pub(crate) struct Defaults {
     categories: CategoryTable,
     lines: LineStyles,
     objects: ObjectStyles,
-    materials: Materials,
+    pub(crate) materials: Materials,
     fills: FillPatterns,
 }
 
 impl Defaults {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             categories: CategoryTable::new(),
             lines: LineStyles::default_metric(),
@@ -218,7 +251,7 @@ impl Defaults {
         }
     }
 
-    fn styles<'a>(&'a self, looks: Option<&'a dyn Looks>) -> Styles<'a> {
+    pub(crate) fn styles<'a>(&'a self, looks: Option<&'a dyn Looks>) -> Styles<'a> {
         Styles {
             looks,
             categories: &self.categories,
@@ -322,34 +355,52 @@ impl<E: Engine + Send + 'static> Drawer for Kernel<E> {
                 pic = clip(&pic, &outline).map_err(|e| e.to_string())?;
             }
             if crop.is_shown() {
-                let width = defaults
-                    .lines
-                    .model_pens
-                    .width(CROP_PEN, scale)
-                    .map_err(|e| format!("{e:?}"))?;
-                for (i, start) in outline.iter().enumerate() {
-                    let end = outline
-                        .get(i.saturating_add(1))
-                        .or_else(|| outline.first())
-                        .copied()
-                        .unwrap_or(*start);
-                    pic.strokes.push(Stroke {
-                        shape: Shape::Segment { start: *start, end },
-                        kind: LineKind::Projected,
-                        width,
-                        colour: CROP_COLOUR,
-                        pattern: SOLID,
-                        opacity: 100,
-                        element: view.clone(),
-                        role: CROP_ROLE.to_owned(),
-                    });
-                }
+                pic.strokes
+                    .extend(crop_strokes(&defaults, scale, view, &outline)?);
             }
         }
         let bytes = Svg.write(&pic).map_err(|e| e.to_string())?;
         let svg = String::from_utf8(bytes).map_err(|e| e.to_string())?;
         Ok(Drawn { svg, skipped })
     }
+
+    fn section(&self, ask: &SectionAsk<'_>) -> Result<Drawn, String> {
+        crate::section::draw(self, ask)
+    }
+}
+
+/// The strokes of a shown crop's `outline` (the drawing's points, in order) at `scale`: model pen
+/// 2 in grey, with the role `crop` and the view's ID as their element.
+pub(crate) fn crop_strokes(
+    defaults: &Defaults,
+    scale: Scale,
+    view: &Id,
+    outline: &[ViewPoint],
+) -> Result<Vec<Stroke>, String> {
+    let width = defaults
+        .lines
+        .model_pens
+        .width(CROP_PEN, scale)
+        .map_err(|e| format!("{e:?}"))?;
+    let mut strokes = Vec::with_capacity(outline.len());
+    for (i, start) in outline.iter().enumerate() {
+        let end = outline
+            .get(i.saturating_add(1))
+            .or_else(|| outline.first())
+            .copied()
+            .unwrap_or(*start);
+        strokes.push(Stroke {
+            shape: Shape::Segment { start: *start, end },
+            kind: LineKind::Projected,
+            width,
+            colour: CROP_COLOUR,
+            pattern: SOLID,
+            opacity: 100,
+            element: view.clone(),
+            role: CROP_ROLE.to_owned(),
+        });
+    }
+    Ok(strokes)
 }
 
 /// A crop's corners as the drawing's points: the project's x and y in grid steps, y up the sheet.

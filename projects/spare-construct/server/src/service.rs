@@ -4,7 +4,9 @@
 //! in-memory in `tests/service.rs`.
 
 use crate::directory::DirectoryCommands;
-use crate::plan::{Drawer, HostedOn, PlanCrop, Skipped, ToDraw, ViewLooks};
+use crate::plan::{
+    Drawer, Held, HostedOn, Opened, PlanCrop, SectionAsk, Skipped, ToDraw, ViewLooks,
+};
 use crate::shapes::{self, fresh_client};
 use construct_api::cloud::spaces::folders;
 use construct_api::cloud::{self, ProjectCommands, Target};
@@ -139,6 +141,9 @@ pub struct FilledCut {
 const NO_DRAWER: &str =
     "This server was built without the geometry kernel, so it cannot draw plans.";
 
+const NO_SECTION_DRAWER: &str = "This server was built without the geometry kernel, so it cannot \
+                                 draw sections or elevations.";
+
 /// A floor plan as the server draws it from the stored model.
 #[derive(Serialize, Debug)]
 pub struct PlanDrawing {
@@ -191,6 +196,7 @@ async fn to_draw<R: Reader>(
     model: &Id,
     one: &cloud::views::Shaped,
     shaped: &[cloud::views::Shaped],
+    with_openings: bool,
 ) -> Result<Result<ToDraw, String>, StoreError> {
     let record = &one.record;
     let Some(category) =
@@ -243,13 +249,61 @@ async fn to_draw<R: Reader>(
             Err(why) => return Ok(Err(why)),
         }
     };
+    // Only a section cuts a wall's openings in its layers; a plan does not read them.
+    let opened = if with_openings {
+        match opened_in(reader, project, model, record, &recipe, shaped).await? {
+            Ok(opened) => opened,
+            Err(why) => return Ok(Err(why)),
+        }
+    } else {
+        None
+    };
     Ok(Ok(ToDraw {
         id: record.id.clone(),
         category,
         placement,
         recipe,
         hosted_on,
+        opened,
     }))
+}
+
+/// What is hosted in `record`, a layered wall of the filled recipe `recipe`, as the regenerator
+/// builds the wall with it, in the order of their IDs: each hosted element's record, filled recipe
+/// and hosting. `None` for any other element, or a wall nothing is hosted in.
+async fn opened_in<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    model: &Id,
+    record: &Element,
+    recipe: &construct_model::geometry::Recipe,
+    shaped: &[cloud::views::Shaped],
+) -> Result<Result<Option<Opened>, String>, StoreError> {
+    if !construct_regen::wall_plan::is_layered(recipe) {
+        return Ok(Ok(None));
+    }
+    let mut held = Vec::new();
+    for one in shaped {
+        let hosting = match hosting::read(&one.record) {
+            Ok(Some(hosting)) if *hosting.host() == record.id => hosting,
+            _ => continue,
+        };
+        let filled =
+            match levels::recipe_at(reader, project, model, &one.record, records::At::Now).await? {
+                Ok(filled) => filled,
+                Err(failed) => return Ok(Err(format!("{}: {}", one.record.id, failed.message))),
+            };
+        held.push(Held {
+            record: one.record.clone(),
+            recipe: filled,
+            hosting,
+        });
+    }
+    held.sort_by(|a, b| a.record.id.as_str().cmp(b.record.id.as_str()));
+    Ok(Ok((!held.is_empty()).then(|| Opened {
+        host: record.clone(),
+        held,
+    })))
 }
 
 /// A curtain wall's part of its filled view: its grid as it is laid out, and, embedded in a wall,
@@ -1412,7 +1466,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             if !listing.cut.contains(&one.record.id.to_string()) {
                 continue;
             }
-            match to_draw(&mut snapshot, project, model, one, &shaped).await? {
+            match to_draw(&mut snapshot, project, model, one, &shaped, false).await? {
                 Ok(element) => elements.push(element),
                 Err(why) => left_out.push(Skipped {
                     element: one.record.id.to_string(),
@@ -1430,6 +1484,81 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 Some(&looks),
                 crop.map(|crop| PlanCrop { view, crop }),
             )
+            .map_err(Refusal::Bad)?;
+        left_out.extend(drawn.skipped);
+        let cursor = Place::Regenerated {
+            project: project.clone(),
+        };
+        let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
+        Ok(PlanDrawing {
+            view: listing.view,
+            through,
+            svg: drawn.svg,
+            skipped: left_out,
+        })
+    }
+
+    /// A section or an elevation drawn from the stored model as of the log's head
+    /// ([`crate::section`]): what its plane cuts, the outlines of what it sees beyond to its depth,
+    /// kept to its width and its crop, and the levels and grids that cross it with their names.
+    /// The page asks for it as it asks for a plan, with the same answer's shape.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when this server has no drawer, when the view is not a section or an
+    /// elevation, or when the drawing cannot be made (a line not along a grid axis among them),
+    /// saying why.
+    pub async fn section(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<PlanDrawing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let cut = cloud::views::section_cut(&world, view)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)?;
+        let Some(drawer) = &self.drawer else {
+            return Err(Refusal::Bad(NO_SECTION_DRAWER.to_owned()));
+        };
+        let shaped = shaped_of(&mut snapshot, project, model).await?;
+        let listing = cloud::views::listing_of(&world, view, &shaped)
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)?;
+        let mut elements = Vec::new();
+        let mut left_out = Vec::new();
+        for one in &shaped {
+            let id = one.record.id.to_string();
+            if !listing.cut.contains(&id) && !listing.seen.contains(&id) {
+                continue;
+            }
+            match to_draw(&mut snapshot, project, model, one, &shaped, true).await? {
+                Ok(element) => elements.push(element),
+                Err(why) => left_out.push(Skipped { element: id, why }),
+            }
+        }
+        let datums = cloud::views::datums_of(&mut snapshot, project, model, &world)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let looks = ViewLooks::new(&world, view);
+        let crop = world.views().get(view).and_then(|v| v.crop());
+        let drawn = drawer
+            .section(&SectionAsk {
+                line: &cut.line,
+                cuts: cut.cuts,
+                scale: cut.scale,
+                elements: &elements,
+                datums: &datums,
+                looks: Some(&looks),
+                crop: crop.map(|crop| PlanCrop { view, crop }),
+            })
             .map_err(Refusal::Bad)?;
         left_out.extend(drawn.skipped);
         let cursor = Place::Regenerated {

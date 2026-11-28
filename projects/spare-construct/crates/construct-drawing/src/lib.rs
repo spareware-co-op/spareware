@@ -1,8 +1,9 @@
-//! Spare Construct: drawings as plain values, the cut of a plan, and its regions merged by
-//! material and hatched (CON-A8-F2-P1, first steps; note A12's build order, steps 2 to 4).
+//! Spare Construct: drawings as plain values, the cut of a plan, sections and elevations, and their
+//! regions merged by material and hatched (CON-A8-F2-P1; note A12's build order, steps 2 to 5).
 //!
 //! What it is: the 2D drawing of a view, as exact values a person, a script or an AI can read, the
-//! first drawing made from a model, the cut of a plan, and that drawing made ready to print.
+//! drawings made from a model (the cut of a plan, a section, an elevation), and a drawing made
+//! ready to print.
 //!
 //! - [`view`]: [`view::View`], a view along a grid axis (a plan looking down, sections and
 //!   elevations looking north, south, east or west), the plane that cuts it, and the exact map from
@@ -17,6 +18,16 @@
 //! - [`plan`]: [`plan::plan`], a plan from built elements: what the view's plane cuts, each
 //!   element's cut loops as cut lines named by face and its cut region with its material. Nothing
 //!   seen below the plane yet, and no hidden lines.
+//! - [`section`]: [`section::SectionView`], a section or an elevation on a line along a grid axis,
+//!   its depth, and the map from its own frame (along the line, and up) to the drawing;
+//!   [`section::part`], what one element gives it (its cut, where the view cuts, and the outline
+//!   of what of it lies beyond the plane, to the depth); [`section::section`], the drawing of the
+//!   parts, each outline less what a cut region or an element wholly nearer hides;
+//!   [`section::draw`], both. Interim: outlines only, not the edges inside them (job 8.2), and
+//!   elements whose depths overlap do not hide each other (job 9.1).
+//! - [`datum`]: [`datum::marks`], the levels and grids a section or an elevation shows, as lines
+//!   with their names ([`datum::Label`]) and a grid's bubble, inside the view's frame
+//!   ([`datum::frame`]).
 //! - [`merge`]: [`merge::merge`], cut regions of one category and material that touch joined into
 //!   one [`merge::MergedRegion`], with no line between them; each outline edge keeps its source.
 //! - [`hatch`]: [`hatch::hatch`], a region filled with a [`hatch::FillPattern`] (families of
@@ -31,7 +42,8 @@
 //!   server asks construct-views' `resolve`); with none the drawing is as it was.
 //! - [`crop`]: [`crop::clip`], a picture cut exactly to a view's crop outline: every stroke and hatch
 //!   line keeps the pieces inside it.
-//! - [`svg`]: [`svg::Svg`], the SVG output, and [`svg::to_svg`], so a person can see a drawing.
+//! - [`svg`]: [`svg::Svg`], the SVG output, and [`svg::to_svg`], so a person can see a drawing;
+//!   [`svg::Svg::labelled`] writes a section's datum names with it.
 //!
 //! Promises: everything is exact (whole grid steps of the kernel, `Q0`, and exact fractions of
 //! them where a cut crosses a sloped edge, where edges of merged regions cross, and where hatch
@@ -52,12 +64,17 @@
 //! (its carrier), the name the seam gives a cut edge, until the seam carries the kernel's
 //! persistent names (chapter 20). The union of merged regions and the clipping of hatch lines are
 //! the crate's own exact 2D overlay, in one private module (`overlay`), which the kernel's 2D
-//! booleans and hatches (`geom-2d`, pieces G196, G199, G200, G202 and G210) replace. The method and
+//! booleans and hatches (`geom-2d`, pieces G196, G199, G200, G202 and G210) replace. What a
+//! section or an elevation sees beyond its plane is the shadow of each solid, made in one private
+//! module (`sweep`) from the seam's exact cuts between the depths of the solid's corners, since the
+//! seam has no projection; the kernel's view predicates, sections and hidden lines (G388, G389 and
+//! G394) replace it. The method and
 //! the order of the steps are note A12's (`projects/spare-construct/notes/A12-hidden-lines.md`);
 //! the decisions of this crate are note CON-A8-F2-P1
 //! (`projects/spare-construct/notes/CON-A8-F2-P1-drawing-types.md`).
 
 pub mod crop;
+pub mod datum;
 pub mod drawing;
 pub mod error;
 pub mod hatch;
@@ -67,7 +84,9 @@ mod overlay;
 pub mod pens;
 pub mod picture;
 pub mod plan;
+pub mod section;
 pub mod svg;
+mod sweep;
 pub mod view;
 
 pub use error::DrawingError;

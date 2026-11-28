@@ -39,6 +39,10 @@
 //!   its circle is clear of the outline, by exact distances squared, and not answered otherwise.
 //! - **Clip.** A straight line's pieces inside an area are where the winding number is above zero
 //!   just to both sides of the line, so a line along an edge, or touching a corner, gives nothing.
+//! - **Cover.** What hides a section's line work (`Cover`, for `crate::section`): a segment is cut
+//!   at every crossing with the covering areas' edges and each piece is kept when the winding
+//!   number of all the areas together is zero just to both sides of its middle, so a piece inside
+//!   an area or along its outline goes.
 //!
 //! Cost: the split and the winding counts compare every edge with every other, so time grows with
 //! the square of the edges of one group; enough for a plan's walls of one material, and the
@@ -61,8 +65,9 @@ use crate::DrawingError;
 use crate::drawing::ViewPoint;
 
 /// An exact fraction of any size. Its arithmetic cannot overflow; division checks its divisor.
+/// Crate-visible so that the section's sweep (`crate::sweep`) works in the same exact numbers.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Q(BigRational);
+pub(crate) struct Q(BigRational);
 
 #[allow(
     clippy::arithmetic_side_effects,
@@ -70,37 +75,37 @@ struct Q(BigRational);
               beside it"
 )]
 impl Q {
-    fn whole(v: i128) -> Self {
+    pub(crate) fn whole(v: i128) -> Self {
         Self(BigRational::from_integer(BigInt::from(v)))
     }
 
-    fn fraction(num: i128, den: i128) -> Result<Self, DrawingError> {
+    pub(crate) fn fraction(num: i128, den: i128) -> Result<Self, DrawingError> {
         if den == 0 {
             return Err(DrawingError::BadPoint);
         }
         Ok(Self(BigRational::new(BigInt::from(num), BigInt::from(den))))
     }
 
-    fn plus(&self, other: &Self) -> Self {
+    pub(crate) fn plus(&self, other: &Self) -> Self {
         Self(&self.0 + &other.0)
     }
 
-    fn minus(&self, other: &Self) -> Self {
+    pub(crate) fn minus(&self, other: &Self) -> Self {
         Self(&self.0 - &other.0)
     }
 
-    fn times(&self, other: &Self) -> Self {
+    pub(crate) fn times(&self, other: &Self) -> Self {
         Self(&self.0 * &other.0)
     }
 
-    fn over(&self, other: &Self) -> Result<Self, DrawingError> {
+    pub(crate) fn over(&self, other: &Self) -> Result<Self, DrawingError> {
         if other.0.is_zero() {
             return Err(DrawingError::Overlay("a division by zero".to_owned()));
         }
         Ok(Self(&self.0 / &other.0))
     }
 
-    fn sign(&self) -> Ordering {
+    pub(crate) fn sign(&self) -> Ordering {
         if self.0.is_positive() {
             Ordering::Greater
         } else if self.0.is_negative() {
@@ -110,7 +115,7 @@ impl Q {
         }
     }
 
-    fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.0.is_zero()
     }
 
@@ -119,12 +124,18 @@ impl Q {
         i128::try_from(self.0.ceil().to_integer()).map_err(|_| DrawingError::TooBig)
     }
 
-    fn floor(&self) -> Result<i128, DrawingError> {
+    pub(crate) fn floor(&self) -> Result<i128, DrawingError> {
         i128::try_from(self.0.floor().to_integer()).map_err(|_| DrawingError::TooBig)
     }
 
+    /// Its numerator and its denominator, in lowest terms, the denominator positive.
+    pub(crate) fn parts(&self) -> Result<(i128, i128), DrawingError> {
+        let whole = |v: &BigInt| i128::try_from(v.clone()).map_err(|_| DrawingError::TooBig);
+        Ok((whole(self.0.numer())?, whole(self.0.denom())?))
+    }
+
     /// `x` and `y` over their least common denominator, as a view point.
-    fn point(x: &Self, y: &Self) -> Result<ViewPoint, DrawingError> {
+    pub(crate) fn point(x: &Self, y: &Self) -> Result<ViewPoint, DrawingError> {
         let den = x.0.denom().lcm(y.0.denom());
         let num = |v: &Self| v.0.numer() * (&den / v.0.denom());
         let whole = |v: BigInt| i128::try_from(v).map_err(|_| DrawingError::TooBig);
@@ -731,6 +742,86 @@ impl Window {
         }
         let along_x = Pt { x: one, y: zero };
         Ok(Some(winding(&self.edges, &s, &along_x)? > 0))
+    }
+}
+
+/// What hides line work: the areas bounded by loops (outlines counter-clockwise, holes clockwise),
+/// any number of them, overlapping or not. A section's cut regions, and the outlines of what lies
+/// wholly nearer the viewer, hide what lies beyond them (`crate::section`). Each area's winding
+/// number is one inside it and none outside, so the sum of them all is above zero exactly where
+/// some area is.
+pub(crate) struct Cover {
+    edges: Vec<Edge>,
+}
+
+impl Cover {
+    /// The cover of `loops`.
+    pub(crate) fn new<'a>(
+        loops: impl IntoIterator<Item = &'a [ViewPoint]>,
+    ) -> Result<Self, DrawingError> {
+        let mut edges = Vec::new();
+        for ring in loops {
+            let pts: Vec<Pt> = ring.iter().map(|p| Pt::of(*p)).collect::<Result<_, _>>()?;
+            for (i, a) in pts.iter().enumerate() {
+                if let Some(b) = pts.get(after(i, pts.len()))
+                    && a != b
+                {
+                    edges.push(Edge {
+                        a: a.clone(),
+                        b: b.clone(),
+                        label: 0,
+                    });
+                }
+            }
+        }
+        Ok(Self { edges })
+    }
+
+    /// The pieces of the segment from `a` to `b` that no area covers, in order along it,
+    /// neighbouring pieces joined. A piece inside an area, or along an area's outline (where the
+    /// area's own line is drawn), is hidden.
+    pub(crate) fn outside(
+        &self,
+        a: ViewPoint,
+        b: ViewPoint,
+    ) -> Result<Vec<[ViewPoint; 2]>, DrawingError> {
+        let e = Edge {
+            a: Pt::of(a)?,
+            b: Pt::of(b)?,
+            label: 0,
+        };
+        let r = e.b.minus(&e.a);
+        let rr = r.dot(&r);
+        if rr.is_zero() {
+            return Err(zero_division());
+        }
+        let mut cuts = cuts_of(&e, &r, &rr, self.edges.iter())?;
+        cuts.sort();
+        cuts.dedup();
+        let mut stops = vec![Q::whole(0)];
+        stops.extend(cuts);
+        stops.push(Q::whole(1));
+        let half = Q::fraction(1, 2)?;
+        let v = r.left();
+        let mut out: Vec<[Pt; 2]> = Vec::new();
+        for pair in stops.windows(2) {
+            let (Some(t0), Some(t1)) = (pair.first(), pair.get(1)) else {
+                continue;
+            };
+            let p0 = e.a.plus(&r.scaled(t0));
+            let p1 = e.a.plus(&r.scaled(t1));
+            let m = p0.plus(&p1).scaled(&half);
+            // Clear to both sides: a piece along an outline has the area on one side.
+            if winding(&self.edges, &m, &v)? == 0 && winding(&self.edges, &m, &v.negated())? == 0 {
+                match out.last_mut() {
+                    Some(last) if last[1] == p0 => last[1] = p1,
+                    _ => out.push([p0, p1]),
+                }
+            }
+        }
+        out.into_iter()
+            .map(|[p0, p1]| Ok([p0.view()?, p1.view()?]))
+            .collect()
     }
 }
 

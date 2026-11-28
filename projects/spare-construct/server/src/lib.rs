@@ -7,6 +7,7 @@ pub mod directory;
 pub mod geometry;
 pub mod http;
 pub mod plan;
+pub mod section;
 pub mod seed;
 pub mod service;
 pub mod settings;
