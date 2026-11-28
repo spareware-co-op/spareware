@@ -1715,6 +1715,8 @@
     C.problems.set(ask.where, reason);
     dimsRefused(ask.where);
     showProblems();
+    // A schedule's box ticked ahead of the server's answer goes back to what the server holds.
+    if (ask.where.startsWith('sched-')) loadScheduleTable();
   }
 
   /** An edit of the page's own was applied. */
@@ -3033,12 +3035,27 @@
   ACT.stackschedsortflip = (button) =>
     sortingSet(sortingList().map((sort, at) => (at === Number(button.dataset.a) ? { ...sort, order: sort.order === 'descending' ? 'ascending' : 'descending' } : sort)));
   // A header or a footer on a key makes each group of its values one group of the table.
-  CHG.stackschedsortheader = (box) => sortingSet(sortingList().map((sort, at) => (at === Number(box.dataset.a) ? { ...sort, header: box.checked } : sort)));
-  CHG.stackschedsortfooter = (box) => sortingSet(sortingList().map((sort, at) => (at === Number(box.dataset.a) ? { ...sort, footer: box.checked } : sort)));
+  // A box ticked is held as ticked while the server answers (the dialog is drawn again at once from
+  // the table it last read, which would put the box back); a refusal reads the table again.
+  const tickSort = (box, part) => {
+    const at = Number(box.dataset.a);
+    const list = sortingList().map((sort, i) => (i === at ? { ...sort, [part]: box.checked } : sort));
+    const held = scheduleOf().sorting[at];
+    if (held) held[part] = box.checked;
+    sortingSet(list);
+  };
+  CHG.stackschedsortheader = (box) => tickSort(box, 'header');
+  CHG.stackschedsortfooter = (box) => tickSort(box, 'footer');
 
   // Totals: every instance on or off, the grand total, and each column's totals.
-  CHG.stackscheditemize = (box) => manage('schedule.itemize', { schedule: C.sched.id, itemize: box.checked }, `sched-totals:${C.sched.id}`);
-  CHG.stackschedgrand = (box) => manage('schedule.totals', { schedule: C.sched.id, grand: box.checked }, `sched-totals:${C.sched.id}`);
+  CHG.stackscheditemize = (box) => {
+    scheduleOf().itemize = box.checked;
+    manage('schedule.itemize', { schedule: C.sched.id, itemize: box.checked }, `sched-totals:${C.sched.id}`);
+  };
+  CHG.stackschedgrand = (box) => {
+    scheduleOf().grand_totals = box.checked;
+    manage('schedule.totals', { schedule: C.sched.id, grand: box.checked }, `sched-totals:${C.sched.id}`);
+  };
   CHG.stackschedtotalfield = (select) => {
     C.sched.draft.totalField = select.value;
   };
