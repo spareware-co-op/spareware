@@ -1,5 +1,7 @@
 // The core's state: the connection's shared state (C), constants and small helpers, and the calls to the server's API.
 
+import { entries } from './registry.js';
+
 const SNAP_MM = 50;
 const SEND_EVERY_MS = 40;
 const NOT_YET = 'That isn’t connected to the server yet.';
@@ -100,10 +102,15 @@ async function api(path, options) {
   const asked = Date.now();
   const response = await fetch(path, options);
   const body = await response.json().catch(() => ({}));
-  C.asking.push({ path: String(path).split('/').slice(-2).join('/'), at: asked, ms: Date.now() - asked });
+  // The server's ID of the request, which its own lines for it carry (a report asks for them).
+  const request = response.headers.get('x-request-id') || undefined;
+  C.asking.push({ path: String(path).split('/').slice(-2).join('/'), at: asked, ms: Date.now() - asked, request, status: response.status });
   if (!response.ok) {
     const error = new Error(body.error || response.statusText);
     error.status = response.status;
+    error.request = request;
+    // "Something went wrong": every failures entry is told (register.failures).
+    if (response.status >= 500) for (const hook of entries('failures')) hook.failure({ code: 'server.failed', words: error.message, request });
     throw error;
   }
   return body;

@@ -1,6 +1,7 @@
 // Shapes: what the page builds with the geometry compiled for the browser, and its checks against the server's checkpoints.
 
 import { late } from './late.js';
+import { entries } from './registry.js';
 import { C, api, fileUrl, levelIdOf, levelOf, modelUrl, say } from './state.js';
 import { showPackage } from './open.js';
 import { letGo, send, watchSince } from './channel.js';
@@ -436,7 +437,9 @@ function compareCheckpoint(entry) {
     } else {
       C.mismatches.push({ id, here: piece.shape.body, server: body });
       console.error(`${id} built differently here and on the server.`);
-      say(`${piece.el.name} built differently here, so this shows the server’s version.`);
+      const words = `${piece.el.name} built differently here, so this shows the server’s version.`;
+      say(words);
+      for (const hook of entries('failures')) hook.failure({ code: 'mismatch.body', words, element: id });
       storedShape(entry.target, id).then((answer) => {
         Object.assign(piece, answer);
         queueDraw();

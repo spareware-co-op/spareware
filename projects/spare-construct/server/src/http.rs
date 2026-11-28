@@ -83,7 +83,10 @@ impl FromRequestParts<Shared> for Me {
         let jar = CookieJar::from_headers(&parts.headers);
         let cookie = jar.get(COOKIE).ok_or(ApiError(Refusal::SignIn))?;
         let person = app.service.accounts.session(cookie.value()).await?;
-        person.map(Me).ok_or(ApiError(Refusal::SignIn))
+        let me = person.map(Me).ok_or(ApiError(Refusal::SignIn))?;
+        // The request's lines carry the account, so a person's report finds only their own.
+        tracing::Span::current().record("person", me.0.as_str());
+        Ok(me)
     }
 }
 
@@ -108,9 +111,14 @@ fn type_routes() -> Router<Shared> {
         )
 }
 
-/// Every page and API route, each a handler over the app.
-#[allow(clippy::too_many_lines, reason = "one entry per route")]
+/// Every page and API route, each a handler over the app, each request with its ID
+/// ([`crate::recent`]).
 pub fn routes(app: Shared) -> Router {
+    crate::recent::with_request_ids(all_routes(app))
+}
+
+#[allow(clippy::too_many_lines, reason = "one entry per route")]
+fn all_routes(app: Shared) -> Router {
     Router::new()
         .route("/", get(page))
         .route("/connect.js", get(connect_script))
@@ -211,6 +219,7 @@ pub fn routes(app: Shared) -> Router {
             get(package_file),
         )
         .route("/ws/{project}", get(ws::upgrade))
+        .merge(crate::report::routes())
         .with_state(app)
 }
 

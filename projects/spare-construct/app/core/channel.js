@@ -55,6 +55,7 @@ function connect() {
 function receive(message, got) {
   switch (message.t) {
     case 'welcome':
+      C.liveRequest = message.request; // the connection's request ID, which its lines on the server carry
       for (const edit of C.pending) C.socket.send(JSON.stringify(edit));
       break;
     case 'caught_up':
@@ -90,6 +91,8 @@ async function turnBack(counter, reason) {
   C.pending = C.pending.filter((e) => e.counter !== counter);
   say(reason);
   refused(counter, reason);
+  // The first time this page's own edit is turned back, every failures entry is told (register.failures).
+  if (edit) for (const hook of entries('failures')) hook.failure({ code: `refused.${edit.cmd}`, words: reason, element: edit.args?.element, edit });
   if (edit && (late.WS.elements.has(edit.args.element) || late.isWorkshop(edit.args))) {
     await late.workshopTurnBack(edit, reason);
     return;

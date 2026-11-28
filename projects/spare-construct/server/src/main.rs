@@ -16,11 +16,15 @@ use kit_store_tikv::{Files, Tikv};
 use kit_sync::{Clock, Orderers, SystemClock, verify_log};
 use spare_server::directory::DirectoryCommands;
 use spare_server::http::{self, App, Shared};
+use spare_server::report::Reports;
 use spare_server::service::{Access, Service};
 use spare_server::settings::Settings;
 use spare_server::{backup, seed};
 use std::sync::Arc;
 use std::time::Duration;
+use tracing_subscriber::Layer as _;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::util::SubscriberInitExt as _;
 
 /// How long TiKV keeps old versions of a key, and how often it is told so.
 const KEEP_VERSIONS_MS: u64 = 15 * 60 * 1000;
@@ -53,6 +57,29 @@ enum Command {
     Digest,
     /// Clears old versions of rewritten keys out of TiKV now, as a running server does by itself.
     Collect,
+    /// The co-op's side of the reports people send (piece A100): read, replay, mark and group them.
+    Report {
+        #[command(subcommand)]
+        action: ReportAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReportAction {
+    /// The one line a fixer reads first, then the replay's edits that ended otherwise.
+    Line { number: u64 },
+    /// The whole report, as JSON (its screenshot is kept apart).
+    Show { number: u64 },
+    /// Replays the report again into an empty project, and keeps what it found.
+    Replay { number: u64 },
+    /// The generic public issue a reproduced fault becomes: its title, a blank line, its body.
+    Issue { number: u64 },
+    /// Records the public issue the report became, by its address.
+    Linked { number: u64, issue: String },
+    /// Marks the report fixed in a version of the program.
+    Fixed { number: u64, version: String },
+    /// Every piece of feedback, grouped by its topic.
+    Feedback,
 }
 
 fn plain(error: impl std::fmt::Display) -> String {
@@ -194,13 +221,83 @@ async fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
         Command::Collect => kv.collect_garbage(0).await.map_err(plain),
+        Command::Report { action } => {
+            let app = build(settings, kv, files, geometry).map_err(plain)?;
+            report(&app.service.reports, action).await
+        }
     }
+}
+
+/// The operators' report commands. They read and write the reports store only.
+async fn report(reports: &Reports<Tikv>, action: ReportAction) -> Result<(), String> {
+    match action {
+        ReportAction::Line { number } => {
+            let stored = reports
+                .get(number)
+                .await
+                .map_err(plain)?
+                .ok_or_else(|| format!("There is no report {number}."))?;
+            println!("{}", stored.line());
+            if let Some(replay) = &stored.replay {
+                for step in replay.differing() {
+                    let then = step.then.as_deref().unwrap_or("applied");
+                    let now = step.now.as_deref().unwrap_or("applied");
+                    println!(
+                        "  edit {} {}: then {then}; in the replay {now}",
+                        step.seq, step.cmd
+                    );
+                }
+                if let Some(note) = &replay.note {
+                    println!("  {note}");
+                }
+            }
+        }
+        ReportAction::Show { number } => {
+            let stored = reports
+                .get(number)
+                .await
+                .map_err(plain)?
+                .ok_or_else(|| format!("There is no report {number}."))?;
+            println!("{}", serde_json::to_string_pretty(&stored).map_err(plain)?);
+        }
+        ReportAction::Replay { number } => {
+            println!("{}", reports.replay_again(number).await?.line());
+        }
+        ReportAction::Issue { number } => {
+            let issue = reports.issue(number).await?;
+            println!(
+                "{}
+
+{}",
+                issue.title, issue.body
+            );
+        }
+        ReportAction::Linked { number, issue } => {
+            println!("{}", reports.linked(number, &issue).await?.line());
+        }
+        ReportAction::Fixed { number, version } => {
+            println!("{}", reports.fixed(number, &version).await?.line());
+        }
+        ReportAction::Feedback => {
+            for (topic, numbers) in reports.feedback().await.map_err(plain)? {
+                let numbers: Vec<String> = numbers.iter().map(u64::to_string).collect();
+                println!("{}: {}", topic.label(), numbers.join(" "));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    // The printed log, as RUST_LOG says; beside it, the lines of each request kept a little while
+    // for the person's own reports (spare_server::recent).
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_filter(tracing_subscriber::EnvFilter::from_default_env()),
+        )
+        .with(spare_server::recent::layer())
         .init();
     run(Cli::parse()).await
 }

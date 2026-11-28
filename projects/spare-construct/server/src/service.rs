@@ -345,6 +345,8 @@ pub struct Service<K: Kv, F: FileStore> {
     regenerating: Mutex<HashSet<Id>>,
     /// What draws a view's plan; none on a server built without the geometry kernel.
     drawer: Option<Arc<dyn Drawer>>,
+    /// Reports of problems and feedback, kept apart from every project (piece A100).
+    pub reports: crate::report::Reports<K>,
 }
 
 impl<K: Kv, F: FileStore> Service<K, F> {
@@ -358,6 +360,12 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         files: F,
         geometry: Arc<dyn Geometry>,
     ) -> Self {
+        let reports = crate::report::Reports::new(
+            kv.clone(),
+            access.clone(),
+            geometry.clone(),
+            clock.clone(),
+        );
         let regen = Regenerator::new(kv.clone(), files.clone(), geometry);
         Self {
             kv,
@@ -369,6 +377,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             regen: Arc::new(regen),
             regenerating: Mutex::new(HashSet::new()),
             drawer: None,
+            reports,
         }
     }
 

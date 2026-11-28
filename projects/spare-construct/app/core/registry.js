@@ -53,6 +53,10 @@ const KINDS = {
   // panel sends (by the `where` they are sent with): a control the person changed keeps their value
   // until the server answers and the tool has read its data again (core/problems.js, held values).
   holds: { req: { id: 's', where: 'a', reread: 'f' }, opt: { order: 'n' } },
+  // A failure the person was just shown: an edit of this page's the server turned back, a request
+  // it answered with "Something went wrong", a body built here that differs from the server's.
+  // Every entry is told, in order: `failure({ code, words, element, request, edit })` (piece A100).
+  failures: { req: { id: 's', failure: 'f' }, opt: { order: 'n' } },
 };
 
 const TYPE_OK = {

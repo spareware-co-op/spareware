@@ -4277,5 +4277,61 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+console.log('\n   Report a problem, with a replay');
+// Anna types a weight where Ben's length parameter goes, as Ben did earlier; the page offers a report
+// beside the server's refusal, on the spot. She sees every part before it is sent, leaves her
+// browser's name out, and sends it; the server keeps it under its own number and replays its edits
+// into an empty project, which turns the same edit back in the same words. Ben cannot read it.
+// Escape leaves any tool, then lets go of any selection.
+await anna.keyboard.press('Escape');
+await anna.keyboard.press('Escape');
+await anna.click('#browser [data-act="view"][data-a="l1"]');
+await anna.waitForSelector('g.element[data-id="D-103"]');
+const reportDoor = await box(anna, 'D-103');
+await anna.mouse.click(reportDoor.x + reportDoor.width / 2, reportDoor.y + reportDoor.height / 2);
+const reportSill = '#pv-side input[data-chg="stackparam"][data-a="P-sill"]';
+await anna.waitForSelector(reportSill);
+await anna.locator(reportSill).fill('3 kg');
+await anna.locator(reportSill).press('Enter');
+await anna.waitForSelector('#toast [data-act="stackreport"]');
+check(
+  (await anna.locator('#toast-m').textContent()).includes('Sill height'),
+  "the server's refusal is shown with Send a report beside it",
+);
+await anna.click('#toast [data-act="stackreport"]');
+await anna.waitForSelector('#dlg input[data-report-part="edits"]');
+const reportDraft = await anna.evaluate(() => window.spare.reportDraft);
+check(
+  reportDraft.failure.code === 'refused.element.param' &&
+    reportDraft.elements.some((part) => part.id === 'D-103') &&
+    reportDraft.edits.at(-1).cmd === 'element.param' &&
+    reportDraft.edits.every((step) => step.by === 'sender' || /^other-\d+$/.test(step.by)),
+  'every part is shown first: what went wrong, the door, and the edits that touched it by stand-ins, the turned-back one last',
+);
+await anna.locator('#dlg input[data-report-part="browser"]').uncheck();
+await anna.click('#dlg [data-act="stackreportsend"]');
+await anna.waitForSelector('#dlg [data-report-number]');
+const reportNumber = Number(await anna.locator('#dlg [data-report-number]').getAttribute('data-report-number'));
+const reportKept = await anna.evaluate((n) => fetch(`/api/reports/${n}`).then((r) => r.json()), reportNumber);
+check(
+  reportKept.state === 'reproduced' &&
+    reportKept.replay.reproduced &&
+    reportKept.replay.code === 'refused.element.param' &&
+    reportKept.replay.words === reportKept.report.failure.words,
+  "the server's replay of its edits, in an empty project, turns the same edit back in the same words",
+);
+check(
+  reportKept.report.browser === undefined && reportKept.report.failure.code === 'refused.element.param',
+  'the part Anna left out was not sent',
+);
+check(
+  (await anna.locator('#dlg [data-report-state]').textContent()) === 'Reproduced',
+  'and Anna sees it reproduced',
+);
+const reportForBen = await ben.evaluate((n) => fetch(`/api/reports/${n}`).then((r) => r.status), reportNumber);
+check(reportForBen === 404, "Ben cannot read Anna's report");
+await shot(anna, 'anna-report');
+await anna.click('#dlg [data-act="dgclose"]');
+await anna.keyboard.press('Escape');
 await browser.close();
 console.log('\nThe browser checks passed.');

@@ -940,6 +940,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-report"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "kit-core",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-roofs"
 version = "0.0.0"
 dependencies = [
@@ -4486,6 +4497,7 @@ dependencies = [
  "construct-model",
  "construct-params",
  "construct-regen",
+ "construct-report",
  "construct-styles",
  "construct-views",
  "engine-geometry",
@@ -4511,6 +4523,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-tungstenite",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -4967,7 +4980,9 @@ dependencies = [
  "tower 0.5.3",
  "tower-layer",
  "tower-service",
+ "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -5172,6 +5187,11 @@ name = "uuid"
 version = "1.29.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64"
+dependencies = [
+ "getrandom 0.4.3",
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "valuable"

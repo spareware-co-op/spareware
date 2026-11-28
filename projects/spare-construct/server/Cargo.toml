@@ -31,6 +31,9 @@ construct-views = { path = "../crates/construct-views" }
 engine-geometry = { path = "../../engines/crates/engine-geometry" }
 construct-model = { path = "../crates/construct-model" }
 construct-regen = { path = "../crates/construct-regen", features = ["server"] }
+# Reports of problems and feedback (piece A100): their shape, checks, states and public issue.
+# This repository's own, Apache-2.0.
+construct-report = { path = "../crates/construct-report" }
 kit-accounts = { path = "../../kit/services/accounts" }
 kit-core = { path = "../../kit/crates/kit-core" }
 kit-ops = { path = "../../kit/crates/kit-ops" }
@@ -57,6 +60,9 @@ sha2 = "=0.11.0"                   # MIT OR Apache-2.0
 thiserror = "=2.0.21"              # MIT OR Apache-2.0
 time = "=0.3.55"                   # MIT OR Apache-2.0
 tokio = { version = "=1.54.1", features = ["full"] }  # MIT
+# Every request's ID, answered in x-request-id, and a span and a line for each request
+# (src/recent.rs).
+tower-http = { version = "=0.6.11", features = ["request-id", "trace"] }  # MIT
 tracing = "=0.1.41"                # MIT
 tracing-subscriber = { version = "=0.3.20", features = ["env-filter"] }  # MIT
 
