@@ -4324,10 +4324,10 @@ const colDrawGrid = async (from, to) => {
   await anna.keyboard.press('Escape');
 };
 const colLines = [
-  [[13000, -5500], [13000, -2500]],
-  [[16000, -5500], [16000, -2500]],
-  [[12500, -5000], [16500, -5000]],
-  [[12500, -3500], [16500, -3500]],
+  [[12700, 2500], [12700, 7500]],
+  [[13700, 2500], [13700, 7500]],
+  [[12400, 3500], [14000, 3500]],
+  [[12400, 6000], [14000, 6000]],
 ];
 for (const [at, [from, to]] of colLines.entries()) {
   await colDrawGrid(from, to);
@@ -4359,7 +4359,7 @@ const colPick = async ([from, to], along) => {
   const at = from[0] === to[0] ? [from[0], along] : [along, from[1]];
   await colClick(anna, ...at);
 };
-const colPicks = [[colLines[0], -2800, [1, 0]], [colLines[2], 14500, [2, 1]], [colLines[1], -2800, [3, 2]], [colLines[3], 14500, [4, 4]]];
+const colPicks = [[colLines[0], 7000, [1, 0]], [colLines[2], 13200, [2, 1]], [colLines[1], 7000, [3, 2]], [colLines[3], 13200, [4, 4]]];
 for (const [line, along, want] of colPicks) {
   await colPick(line, along);
   await anna.waitForFunction(
@@ -4380,7 +4380,7 @@ await anna.keyboard.press('Escape');
 const colView = async () => (await asAnna('columns')).columns.filter((c) => colIds.includes(c.id));
 await until(colView, (cols) => cols.length === 4 && cols.every((c) => c.state === 'built'), 'the server builds the four columns');
 const colRows = await colView();
-const crossingsWanted = ['13000,-5000', '13000,-3500', '16000,-5000', '16000,-3500'];
+const crossingsWanted = ['12700,3500', '12700,6000', '13700,3500', '13700,6000'];
 const colCentre = (page, id) =>
   page.evaluate((one) => {
     const { min, max } = window.spare.elements.get(one).shape.bounds;
@@ -4438,7 +4438,7 @@ await anna.locator(colField('mode')).selectOption('point');
 await anna.locator(colField('turn')).fill('30');
 await anna.locator(colField('turn')).press('Enter');
 const colKnownAgain = await anna.evaluate(() => [...window.spare.elements.keys()]);
-await colClick(anna, 14500, -4250);
+await colClick(anna, 13200, 4750);
 await ben.waitForFunction((known) => [...window.spare.elements.values()].some((p) => p.el.kind === 'column' && !known.includes(p.el.id)), colKnownAgain);
 const colTurned = (await ben.evaluate(colsOf, colKnownAgain))[0];
 const colTurnedRow = async () => (await asAnna('columns')).columns.find((c) => c.id === colTurned);
@@ -4457,7 +4457,7 @@ await anna.locator(colField('turn')).press('Enter');
 await anna.locator(colField('height')).fill('500 mm');
 await anna.locator(colField('height')).press('Enter');
 const colKnownLow = await anna.evaluate(() => [...window.spare.elements.keys()]);
-await colClick(anna, 14500, -2900);
+await colClick(anna, 13200, 7200);
 await ben.waitForFunction((known) => [...window.spare.elements.values()].some((p) => p.el.kind === 'column' && !known.includes(p.el.id)), colKnownLow);
 const colLow = (await ben.evaluate(colsOf, colKnownLow))[0];
 for (const page of [anna, ben]) await page.waitForSelector(`g.element[data-id="${colLow}"] .body.column.column-below`);

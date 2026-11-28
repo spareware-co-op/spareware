@@ -113,7 +113,7 @@ function columnToolHtml() {
   const view = columnsView();
   if (!view) return `${html}<p class="pad small faint">Loading the column types.</p>`;
   if (!view.types.length) {
-    return `${html}<p class="pad small muted">This model has no column types yet.</p><div class="pad"><button class="btn sm" data-act="columndefaults" data-key="column-defaults">Add the default column types</button></div>${problem('column-draw')}`;
+    return `${html}<p class="pad small muted">This model has no column types yet.</p><div class="pad"><button class="btn sm" data-act="stackcolumndefaults" data-key="column-defaults">Add the default column types</button></div>${problem('column-draw')}`;
   }
   const levels = modelLevels() || [];
   const here = levelOf();
@@ -147,7 +147,7 @@ function columnToolHtml() {
   } else if (tool.mode === 'pick') {
     const count = pickedCrossings(view).length;
     html += `<p class="pad small muted" data-column-picked>${plural(tool.picked.length, 'grid line')} picked, ${plural(count, 'crossing')}. Click grid lines to pick or let go of them.</p>`;
-    html += `<div class="pad"><button class="btn sm" data-act="columnplace" data-key="column-place"${count ? '' : ' disabled'}>Place ${plural(count, 'column')}</button></div>`;
+    html += `<div class="pad"><button class="btn sm" data-act="stackcolumnplace" data-key="column-place"${count ? '' : ' disabled'}>Place ${plural(count, 'column')}</button></div>`;
   } else {
     html += '<p class="pad small muted">Drag a box over the grid intersections to put a column on each.</p>';
   }
@@ -182,8 +182,8 @@ CHG.columntoolturn = (input) => {
 CHG.columntoolwithgrid = (input) => {
   C.columnTool.withGrid = input.checked;
 };
-ACT.columndefaults = () => manage('column.defaults', {}, 'column-draw');
-ACT.columnplace = () => placePicked();
+ACT.stackcolumndefaults = () => manage('column.defaults', {}, 'column-draw');
+ACT.stackcolumnplace = () => placePicked();
 
 function columnHint() {
   if (C.columnTool.mode === 'pick') return '<b>Column:</b> click grid lines, then Enter or the button in the properties palette. Esc lets them go.';
