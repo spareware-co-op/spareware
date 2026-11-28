@@ -22,7 +22,20 @@ A layered wall's joints were found by reading every wall of the document from th
 
 ## Measured
 
-The generated plan, debug build, each entry regenerated as the server keeps up after it. 960 walls on two storeys: 1,669 s before, 240 s after; the regeneration of a wall entry read 5,894 rows before (1.68 s), 190 after (most for one entry 369, the same at 288 walls). 288 walls with a room in each of the 128 cells: the regeneration of a room entry read 19,116 rows (10.5 s) with the walls found through the grid but every room of the level found again whole, 8 after (0.09 s).
+The generated plan, debug build, each entry regenerated after it as the server keeps up, on one machine; rows are the store's reads (each row got, and each row a scan gave).
+
+| Plan | What | Before | After |
+| --- | --- | --- | --- |
+| 960 walls, two storeys, three rooms a storey | whole replay | 518 s | 33 s |
+| | regenerating a wall entry | 0.51 s, 10,761 rows (most 31,953) | 0.026 s, 130 rows (most 233) |
+| | regenerating a room entry | 2.7 s, 11,561 rows | 0.019 s, 9 rows |
+| | a room command | 1.5 s, 9,882 rows | 0.9 s, 5,862 rows |
+| 288 walls on two storeys, a room in each of the 128 cells | whole replay | 1,223 s | 46 s |
+| | regenerating a wall entry | 0.21 s, 3,579 rows (most 10,897) | 0.023 s, 120 rows (most 233) |
+| | regenerating a room entry | 8.8 s, 61,487 rows (most 127,871) | 0.028 s, 9 rows |
+| | a room command | 0.32 s, 3,442 rows (most 3,824) | 0.27 s, 1,926 rows (most 2,052) |
+
+Before, the rows a wall entry read grew with the walls (1,225 gets at 120 walls, 2,230 at 288, 5,894 at 960); after, the most any wall entry reads is 233 at 288 walls and at 960.
 
 ## Not done here
 
