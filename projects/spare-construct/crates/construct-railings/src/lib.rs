@@ -27,7 +27,7 @@
 //! - [`shape`]: [`shape`] gives every [`Piece`] ([`Part`]), each a flat profile swept along a
 //!   vector.
 //! - [`warning`]: [`warnings`], each a [`Warning`] by name ([`LOW`], [`OPENING`],
-//!   [`HANDRAIL`]), in construct-warnings' shape behind our own type.
+//!   [`HANDRAIL`]), construct-warnings' own type; its `RULES` lists the same three kinds.
 //! - [`measure`]: [`read_only`]: rail and handrail lengths, balusters, posts and height as
 //!   read-only parameters.
 //! - [`record`]: the element record and its recipe ([`railing_record`], [`railing_recipe`],
@@ -40,7 +40,8 @@
 //! [`exact`]); a limit broken is a warning, never a refusal; the same data gives the same bytes;
 //! reading refuses anything writing would not give; nothing panics. No float is stored or
 //! computed here. Depends on construct-categories, construct-levels, construct-materials,
-//! construct-model, construct-params, construct-stairs, construct-types, kit-core and num-bigint.
+//! construct-model, construct-params, construct-stairs, construct-types, construct-warnings, kit-core and
+//! num-bigint.
 //!
 //! Not here, each refused in words or left for its job: arcs in a path (the sketch solver has
 //! them, but the engine's extrusion takes polygons: curved railings come after curved walls, job
@@ -48,7 +49,7 @@
 //! type stored once as a type record shared by many railings; railings on ramps (job 14.3). The
 //! commands that make railings are construct-api's `cloud::railings`, the regenerator fills and
 //! builds them (construct-regen's `railings`, `railing_plan` and the kernel's `railing`), and the
-//! page's railing tool is the next lane's. Interim: a round profile is a twelve-sided polygon
+//! page's railing tool is `app/tools/architecture/railing.js`. Interim: a round profile is a twelve-sided polygon
 //! ([`kind`], [`shape`]), until the kernel's own swept circle answers behind the same pieces.
 
 pub mod error;

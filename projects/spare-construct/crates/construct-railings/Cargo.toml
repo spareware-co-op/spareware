@@ -22,6 +22,9 @@ construct-params = { path = "../construct-params" }
 construct-stairs = { path = "../construct-stairs" }
 # The category key a record names its category under. Same workspace.
 construct-types = { path = "../construct-types" }
+# A railing's warning is construct-warnings' own Warning, with its Severity (CON-A2-F7-P1). Same
+# workspace.
+construct-warnings = { path = "../construct-warnings" }
 kit-core = { path = "../../../kit/crates/kit-core" }
 # Whole numbers of any size, so every point along a path at any angle is worked out exactly from
 # square roots before it is rounded once (src/exact.rs). MIT OR Apache-2.0; 0.4.8, as the

@@ -18,6 +18,7 @@
 
 use construct_api::cloud::railings::read_railings;
 use construct_api::cloud::undo::{self, State};
+use construct_api::cloud::warnings::read_warnings;
 use construct_api::cloud::{Access, ProjectCommands};
 use construct_model::element::Element;
 use construct_model::geometry::Geometry;
@@ -534,6 +535,47 @@ async fn every_railing_command_is_undone_and_redone() {
 }
 
 /// The page's view lists the rule set's categories and openings rules, and each railing.
+/// A railing whose top rail is lower than its category's least height is in the model's warnings
+/// view, by its kind and its railing, and is gone from it when the type is made tall enough.
+#[tokio::test]
+async fn a_railing_that_breaks_a_limit_is_in_the_warnings_view() {
+    let stack = Stack::new().await;
+    stack
+        .edit(
+            "railing.create",
+            create("R-1", &json!({ "category": "other" })),
+        )
+        .await
+        .unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let listed = read_warnings(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap();
+    let found: Vec<(&str, &str)> = listed
+        .warnings
+        .iter()
+        .map(|w| (w.identity.as_str(), w.severity))
+        .collect();
+    assert_eq!(found, vec![("railing.low|R-1", "warning")]);
+    assert!(
+        listed.warnings[0].words.contains("F4/AS1"),
+        "{}",
+        listed.warnings[0].words
+    );
+    stack
+        .edit(
+            "railing.type",
+            json!({ "element": "R-1", "type": { "top_rail": { "height": "1100 mm" } } }),
+        )
+        .await
+        .unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let listed = read_warnings(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap();
+    assert!(listed.warnings.is_empty(), "{:?}", listed.warnings);
+}
+
 #[tokio::test]
 async fn the_view_lists_the_categories_and_every_railing() {
     let stack = Stack::new().await;

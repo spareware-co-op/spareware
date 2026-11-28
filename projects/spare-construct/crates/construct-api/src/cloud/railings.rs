@@ -644,6 +644,29 @@ pub async fn generic_rules<T: Txn>(
     )
 }
 
+/// What every railing of a document reports now: each is laid out as the document stands and its
+/// warnings are gathered, for the warnings view
+/// ([`construct_warnings::Model::railings`]). A railing that cannot be laid out has none here (its
+/// own listing says why).
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn measured_warnings<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+) -> Result<Vec<construct_railings::Warning>, StoreError> {
+    let all = records::read_document(reader, project, document).await?;
+    let mut found = Vec::new();
+    for (_, record) in all.into_values().filter(|(_, record)| is_railing(record)) {
+        found.extend(
+            construct_regen::railings::warnings_at(reader, project, document, &record, At::Now)
+                .await?,
+        );
+    }
+    Ok(found)
+}
+
 /// A length as the page reads it: its stored text and the same shown in units.
 #[derive(Serialize, Debug, PartialEq, Eq)]
 pub struct LengthView {

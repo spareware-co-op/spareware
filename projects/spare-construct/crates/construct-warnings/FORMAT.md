@@ -20,6 +20,9 @@ A published format under [EXTENDING.md](../../../../EXTENDING.md), section 3: th
 | `dimension.reference_missing` | The dimension, then the element it references | A reference of a dimension cannot be found in its view (the element or the feature is gone, or it has no place there) |
 | `dimension.reference_parallel` | The dimension, then the element it references | A line reference runs along the dimension's offset line, so it has no place along it |
 | `dimension.out_of_range` | The dimension, then the element it references | A value or a point of a dimension does not fit the kernel's grid |
+| `railing.low` | The railing | The railing's top rail is lower than the least barrier height of its category (construct-railings' FORMAT.md), measured from the pitch line on a flight; one warning for the first piece that breaks it |
+| `railing.opening` | The railing | An opening a sphere of its openings rule passes, or one wider than the rule's most; one warning for the first place |
+| `railing.handrail` | The railing | A handrail on a stair's flight whose top is outside the rule set's handrail heights above the pitch line |
 | `insert.crosses_joined_wall` | The door, window or opening; its host wall; the joined wall | A wall on the host's level, not parallel to it, whose outline meets the host's and stands across a positive length of the stretch of the host the insert's opening takes |
 
 ## The list

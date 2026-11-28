@@ -2,10 +2,11 @@
 //! value that breaks it and its clause. A limit is not a refusal: a railing that breaks one is
 //! drawn and built, and the warning says what to fix.
 //!
-//! In construct-warnings' shape (its `Warning`: a stable kind, a severity, the elements involved
-//! by permanent ID, a sentence; its identity the kind and the elements), behind a type of ours
-//! while that crate is not on main: when it lands, its `RULES` table takes one entry per kind here
-//! whose function calls [`warnings`], and nothing here changes. The kinds:
+//! A railing's warning is construct-warnings' own [`Warning`], and [`Severity`] is its too, as a
+//! dimension's is: this crate adds the three kinds' names and the function that finds them. The
+//! same three names are entries of construct-warnings' `RULES` table, which lists what
+//! [`warnings`] reported for each railing of a model (construct-api's `cloud::warnings` hands it
+//! over). The kinds:
 //!
 //! - [`LOW`]: the top rail is lower than the least barrier height of the railing's category,
 //!   on a flight (measured from the pitch line) or on the level.
@@ -26,61 +27,14 @@ use construct_levels::show;
 use construct_params::{Length, Units};
 use kit_core::Id;
 
+pub use construct_warnings::{Severity, Warning};
+
 /// A top rail too low.
 pub const LOW: &str = "railing.low";
 /// An opening too wide.
 pub const OPENING: &str = "railing.opening";
 /// A handrail too low or too high.
 pub const HANDRAIL: &str = "railing.handrail";
-
-/// How serious a warning is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Severity {
-    /// Worth knowing; nothing is wrong yet.
-    Notice,
-    /// A problem a person should look at; the model still works.
-    Warning,
-    /// The model cannot be trusted until it is fixed.
-    Error,
-}
-
-impl Severity {
-    /// The word it is read by: `notice`, `warning` or `error`.
-    #[must_use]
-    pub fn word(self) -> &'static str {
-        match self {
-            Self::Notice => "notice",
-            Self::Warning => "warning",
-            Self::Error => "error",
-        }
-    }
-}
-
-/// One problem with a railing.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Warning {
-    /// Its kind's stable name.
-    pub kind: &'static str,
-    /// How serious it is.
-    pub severity: Severity,
-    /// The elements involved: the railing.
-    pub elements: Vec<Id>,
-    /// A plain sentence for people.
-    pub words: String,
-}
-
-impl Warning {
-    /// Its identity: its kind and its elements, as `kind|id`.
-    #[must_use]
-    pub fn identity(&self) -> String {
-        let mut text = self.kind.to_owned();
-        for element in &self.elements {
-            text.push('|');
-            text.push_str(element.as_str());
-        }
-        text
-    }
-}
 
 fn place(o: &Opening) -> String {
     let at = format!("piece {} of line {}", o.segment, o.line);

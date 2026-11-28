@@ -162,6 +162,8 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
             return Ok(Err(refused));
         }
         if let Err(refused) = railings::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = curtains::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }

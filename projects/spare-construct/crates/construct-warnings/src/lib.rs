@@ -193,6 +193,10 @@ pub struct Model {
     /// only, so it cannot measure). [`RULES`] lists their kinds; a warning of a kind that is not
     /// in [`RULES`] is not listed.
     pub dimensions: Vec<Warning>,
+    /// What the railings found, already worked out: construct-railings lays each railing out and
+    /// gives its warnings, which are handed over as they are, as the dimensions' are. [`RULES`]
+    /// lists their kinds.
+    pub railings: Vec<Warning>,
     /// Every door and window hosted in a wall, with the stretch its opening takes.
     pub inserts: Vec<Insert>,
 }
@@ -219,7 +223,7 @@ impl Rule {
 }
 
 /// Every kind there is. Add a kind here, with its function; nothing else changes.
-pub const RULES: [Rule; 7] = [
+pub const RULES: [Rule; 10] = [
     Rule {
         kind: "dimension.out_of_range",
         severity: Severity::Warning,
@@ -234,6 +238,21 @@ pub const RULES: [Rule; 7] = [
         kind: "dimension.reference_parallel",
         severity: Severity::Warning,
         find: measured_dimensions,
+    },
+    Rule {
+        kind: "railing.handrail",
+        severity: Severity::Warning,
+        find: measured_railings,
+    },
+    Rule {
+        kind: "railing.low",
+        severity: Severity::Warning,
+        find: measured_railings,
+    },
+    Rule {
+        kind: "railing.opening",
+        severity: Severity::Warning,
+        find: measured_railings,
     },
     Rule {
         kind: "room.not_enclosed",
@@ -263,6 +282,18 @@ pub const RULES: [Rule; 7] = [
 fn measured_dimensions(rule: &Rule, model: &Model) -> Vec<Warning> {
     model
         .dimensions
+        .iter()
+        .filter(|found| found.kind == rule.kind)
+        .map(|found| rule.warn(found.elements.clone(), found.words.clone()))
+        .collect()
+}
+
+/// A railing that breaks a limit of its rule set (a top rail too low, an opening a sphere passes,
+/// a handrail out of its heights), as construct-railings worked it out, one warning for each.
+/// Its elements: the railing.
+fn measured_railings(rule: &Rule, model: &Model) -> Vec<Warning> {
+    model
+        .railings
         .iter()
         .filter(|found| found.kind == rule.kind)
         .map(|found| rule.warn(found.elements.clone(), found.words.clone()))
