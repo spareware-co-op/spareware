@@ -41,6 +41,7 @@
 //! - [`spaces`]: models, packages, bridges and links.
 //! - [`directory`]: hubs, projects and teams, in the directory's log.
 //! - [`commands`]: a project's commands, each behind Cedar.
+//! - [`tool`]: the contract every tool of the commands meets, and the one ordered list of them.
 
 pub mod access;
 pub mod commands;
@@ -62,6 +63,7 @@ pub mod schedules;
 pub mod sheets;
 pub mod spaces;
 pub mod stairs;
+pub mod tool;
 pub mod transaction;
 pub mod undo;
 pub mod views;
@@ -70,3 +72,4 @@ pub mod warnings;
 
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;
+pub use tool::Tool;
