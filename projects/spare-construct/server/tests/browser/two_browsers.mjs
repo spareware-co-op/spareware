@@ -3144,7 +3144,7 @@ await ben.click('#browser [data-act="stackviewgraphics"]');
 await ben.waitForSelector(vtField('gfx-category'));
 await ben.locator(vtField('gfx-category')).selectOption('100');
 await ben.waitForSelector(`${vtDialog} [data-gfx-origin="category"]`);
-await ben.locator(vtField('gfx-halftone')).check();
+await ben.locator(vtField('gfx-halftone')).click();
 await ben.waitForSelector(`${vtDialog} [data-problem="graphics:100:cut"]`);
 const vtWords = await ben.locator(`${vtDialog} [data-problem="graphics:100:cut"]`).textContent();
 check(
