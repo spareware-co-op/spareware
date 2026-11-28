@@ -5,15 +5,18 @@
 //! the same list. Map: projects/spare-construct/ARCHITECTURE.md; the decisions are in
 //! notes/CON-A2-F7-P1-warnings.md and the read-only form in FORMAT.md beside this crate.
 //!
-//! - [`warnings`]: the one function. It takes a [`Model`], the elements of a document as they
+//! - [`warnings`]: the function. It takes a [`Model`], the elements of a document as they
 //!   stand (its walls as [`Wall`]s, its rooms as [`Room`]s, the doors and windows hosted in its
 //!   walls as [`Insert`]s), and gives the warnings now, in a
 //!   stated order. Nothing is stored: the list is worked out each time it is asked, so after any
 //!   edit it is the new list and a warning can never be out of date. A warning's identity
 //!   ([`Warning::identity`]) is its kind plus its elements, so the same problem has the same
 //!   identity across edits that do not touch it.
-//! - [`RULES`]: the kinds, one entry each ([`Rule`]): its name, its [`Severity`] and the function
-//!   that finds its warnings. A new kind is one more entry in the table and one function.
+//! - [`RULES`]: the kinds this crate finds, one entry each ([`Rule`]): its name, its
+//!   [`Severity`] and the function that finds its warnings, each also a constant of its own
+//!   ([`ROOM_NOT_ENCLOSED`] and the rest). The program asks the rules its tools register
+//!   ([`warnings_by`]; construct-api's tools, note A96): a tool registers these by name, or a rule
+//!   of its own over the same [`Model`], so a new tool's warnings touch no shared list.
 //! - [`wall`]: [`Wall`], an outline with a direction on a level, [`overlap_along_length`], the
 //!   exact test of two of them, and [`crosses_stretch`], the exact test of a joined wall against
 //!   the stretch of its host an insert's opening takes.
@@ -190,8 +193,8 @@ pub struct Model {
     pub rooms: Vec<Room>,
     /// What the dimensions found, already measured: construct-dimensions' `measure` works each
     /// dimension out and its warnings are given here as they are (this crate depends on kit-core
-    /// only, so it cannot measure). [`RULES`] lists their kinds; a warning of a kind that is not
-    /// in [`RULES`] is not listed.
+    /// only, so it cannot measure). The rules asked list their kinds; a warning of a kind that is
+    /// not among them is not listed.
     pub dimensions: Vec<Warning>,
     /// Every door and window hosted in a wall, with the stretch its opening takes.
     pub inserts: Vec<Insert>,
@@ -203,7 +206,7 @@ pub struct Rule {
     pub kind: &'static str,
     /// How serious its warnings are.
     pub severity: Severity,
-    /// Finds this kind's warnings in a model, in any order ([`warnings`] sorts them).
+    /// Finds this kind's warnings in a model, in any order ([`warnings_by`] sorts them).
     pub find: fn(&Rule, &Model) -> Vec<Warning>,
 }
 
@@ -218,43 +221,60 @@ impl Rule {
     }
 }
 
-/// Every kind there is. Add a kind here, with its function; nothing else changes.
+/// A dimension's value or point that does not fit the kernel's grid, as construct-dimensions
+/// measured it.
+pub const DIMENSION_OUT_OF_RANGE: Rule = Rule {
+    kind: "dimension.out_of_range",
+    severity: Severity::Warning,
+    find: measured_dimensions,
+};
+/// A dimension's reference that is not there or has no place in the view, as measured.
+pub const DIMENSION_REFERENCE_MISSING: Rule = Rule {
+    kind: "dimension.reference_missing",
+    severity: Severity::Warning,
+    find: measured_dimensions,
+};
+/// A dimension's line reference that runs along its offset line, as measured.
+pub const DIMENSION_REFERENCE_PARALLEL: Rule = Rule {
+    kind: "dimension.reference_parallel",
+    severity: Severity::Warning,
+    find: measured_dimensions,
+};
+/// A room whose walls do not close round its point.
+pub const ROOM_NOT_ENCLOSED: Rule = Rule {
+    kind: "room.not_enclosed",
+    severity: Severity::Warning,
+    find: not_enclosed,
+};
+/// A room placed in a space another room already holds.
+pub const ROOM_REDUNDANT: Rule = Rule {
+    kind: "room.redundant",
+    severity: Severity::Warning,
+    find: redundant,
+};
+/// Two walls on one level that overlap along their length.
+pub const WALL_OVERLAP: Rule = Rule {
+    kind: "wall.overlap",
+    severity: Severity::Warning,
+    find: overlapping,
+};
+/// A door or window whose opening crosses a wall joined to its host.
+pub const INSERT_CROSSES_JOINED_WALL: Rule = Rule {
+    kind: "insert.crosses_joined_wall",
+    severity: Severity::Warning,
+    find: crossing_joined,
+};
+
+/// Every kind this crate finds, in this order. A tool registers the ones of its records (see
+/// the crate's header); a new kind here is one more constant, its function and its entry.
 pub const RULES: [Rule; 7] = [
-    Rule {
-        kind: "dimension.out_of_range",
-        severity: Severity::Warning,
-        find: measured_dimensions,
-    },
-    Rule {
-        kind: "dimension.reference_missing",
-        severity: Severity::Warning,
-        find: measured_dimensions,
-    },
-    Rule {
-        kind: "dimension.reference_parallel",
-        severity: Severity::Warning,
-        find: measured_dimensions,
-    },
-    Rule {
-        kind: "room.not_enclosed",
-        severity: Severity::Warning,
-        find: not_enclosed,
-    },
-    Rule {
-        kind: "room.redundant",
-        severity: Severity::Warning,
-        find: redundant,
-    },
-    Rule {
-        kind: "wall.overlap",
-        severity: Severity::Warning,
-        find: overlapping,
-    },
-    Rule {
-        kind: "insert.crosses_joined_wall",
-        severity: Severity::Warning,
-        find: crossing_joined,
-    },
+    DIMENSION_OUT_OF_RANGE,
+    DIMENSION_REFERENCE_MISSING,
+    DIMENSION_REFERENCE_PARALLEL,
+    ROOM_NOT_ENCLOSED,
+    ROOM_REDUNDANT,
+    WALL_OVERLAP,
+    INSERT_CROSSES_JOINED_WALL,
 ];
 
 /// A reference of a dimension that cannot be used (it is gone, it has no place in the view, it
@@ -372,12 +392,19 @@ fn capital(text: &str) -> String {
     })
 }
 
-/// The warnings a model holds now: every kind's ([`RULES`]), sorted by kind name then by
-/// elements, each identity once.
+/// The warnings a model holds now: every kind's of this crate ([`RULES`]), sorted by kind name
+/// then by elements, each identity once.
 #[must_use]
 pub fn warnings(model: &Model) -> Vec<Warning> {
-    let mut all: Vec<Warning> = RULES
-        .iter()
+    warnings_by(&RULES, model)
+}
+
+/// The warnings these rules find in a model, sorted by kind name then by elements, each identity
+/// once: the same list in whatever order the rules come.
+#[must_use]
+pub fn warnings_by<'a>(rules: impl IntoIterator<Item = &'a Rule>, model: &Model) -> Vec<Warning> {
+    let mut all: Vec<Warning> = rules
+        .into_iter()
         .flat_map(|rule| (rule.find)(rule, model))
         .collect();
     all.sort_by(|a, b| (a.kind, &a.elements).cmp(&(b.kind, &b.elements)));
