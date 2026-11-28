@@ -1,6 +1,7 @@
 // Tool: view templates, overrides and filters.
 
 import { provide } from '../../core/late.js';
+import { register } from '../../core/registry.js';
 import { C } from '../../core/state.js';
 import { canEdit, capital, manage, newId, plural, problem, topLevel } from '../../core/problems.js';
 import { manageField, openManage, renderManage } from '../../core/dialogs.js';
@@ -217,6 +218,11 @@ ACT.stackoverrideset = () => {
 };
 ACT.stackoverrideclear = (button) => manage('view.override.clear', { view: C.manage.view, element: button.dataset.a }, 'overrides');
 ACT.stackoverrideclearall = () => manage('view.override.clear', { view: C.manage.view }, 'overrides');
+
+// What this tool plugs into the core with (core/registry.js; note A96-tool-architecture.md).
+register.dialogs({ id: 'templates', order: 50, html: (m) => templatesHtml(m) });
+register.dialogs({ id: 'filters', order: 51, html: (m) => filtersHtml(m) });
+register.dialogs({ id: 'overrides', order: 52, html: (m) => overridesHtml(m) });
 
 // What files loaded before this one use from it, bound once it has loaded.
 provide({

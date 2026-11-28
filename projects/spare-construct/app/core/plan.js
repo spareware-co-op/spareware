@@ -37,7 +37,6 @@ function hint() {
   // The tool in use says what to do next (register.hints): the first that answers.
   const told = firstAnswer('hints', (entry) => entry.hint());
   if (told !== undefined) return told;
-  if (S.tool === 'component') return '<b>Component:</b> choose a category, a family and a type in the properties palette, then click in the plan to place it (on a wall for one that hangs on it).';
   return 'Click an element to see its data. Drag it to move it: starting to work on it claims it for you.';
 }
 
@@ -264,7 +263,6 @@ function watchThePlan() {
     const at = toModel(event);
     if (S.tool !== 'select') {
       if (C.readOnly || !C.model) say('Open a model in your team’s WIP to add to it.');
-      else if (S.tool === 'component') late.placeComponent(at);
       else placeWith(at, event);
       return;
     }

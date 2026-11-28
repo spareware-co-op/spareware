@@ -1,9 +1,10 @@
 // Tool: components (furniture, casework, plumbing fixtures, lighting, planting and generic models).
 
-import { late, provide } from '../../core/late.js';
-import { C, levelOf, say } from '../../core/state.js';
+import { late } from '../../core/late.js';
+import { register } from '../../core/registry.js';
+import { C, S, levelOf, say } from '../../core/state.js';
 import { refreshSide } from '../../core/parameters.js';
-import { manage, newId, problem } from '../../core/problems.js';
+import { canEdit, manage, newId, problem } from '../../core/problems.js';
 import { snap } from '../../core/plan.js';
 import { onWall } from './wall.js';
 import { library, valueInput } from './family.js';
@@ -141,8 +142,12 @@ function placeComponent(at) {
   manage('family.place', args, 'component-place');
 }
 
-// What files loaded before this one use from it, bound once it has loaded.
-provide({
-  get componentRibbon() { return componentRibbon; },
-  get placeComponent() { return placeComponent; },
+// What this tool plugs into the core with (core/registry.js; note A96-tool-architecture.md).
+register.tools({ id: 'component', discipline: 'architecture', order: 95, place: (at) => placeComponent(at) });
+register.ribbons({ id: 'component', order: 65, ribbon: (config) => componentRibbon(config) });
+register.hints({
+  id: 'component',
+  order: 95,
+  hint: () => (S.tool === 'component' ? '<b>Component:</b> choose a category, a family and a type in the properties palette, then click in the plan to place it (on a wall for one that hangs on it).' : undefined),
 });
+register.palettes({ id: 'component', order: 75, palette: () => (S.tool === 'component' && canEdit() ? componentToolHtml() : undefined) });

@@ -132,7 +132,6 @@ function connectRibbon(config) {
   ]);
   // Each tool's buttons beside the demo's own (register.ribbons, under 1000).
   for (const entry of entries('ribbons')) if (entry.order < 1000) entry.ribbon(config);
-  late.componentRibbon(config); // the component tool after them
   set('ins', 'Link', [
     { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
   ]);
