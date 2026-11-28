@@ -9,6 +9,16 @@
 import { execSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
+// One section on its own, or the state each section leaves saved: see sections.mjs. With neither
+// SAVE_SECTIONS nor START_AT set, none of this runs and the test below runs whole, as always.
+//   SAVE_SECTIONS=<folder>  after each section, save the state it leaves
+//   START_AT=<label>        start at that section, on the state saved after the one before it
+//   ONLY=1                  with START_AT: that section alone       START_AT=?  lists the sections
+if (!globalThis.__sectionsChild && (process.env.SAVE_SECTIONS || process.env.START_AT)) {
+  await (await import('./sections.mjs')).runSections(import.meta.url);
+  process.exit(0);
+}
+
 const base = process.env.STACK_URL || 'http://localhost:8080';
 const shots = process.env.SHOTS;
 const channel = process.env.BROWSER || 'msedge';
