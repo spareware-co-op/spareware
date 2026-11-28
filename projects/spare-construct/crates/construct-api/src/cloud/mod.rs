@@ -13,6 +13,8 @@
 //!   swapped, and door and window types made by the generator, through the same log.
 //! - [`openings`]: openings in walls and floors, and shafts through floors, through the same log.
 //! - [`hosting`]: hosting an element on a face of another, a door on a wall, through the same log.
+//! - [`ifc`]: a document's levels, walls and floors read out for construct-interop's IFC writer
+//!   (read only).
 //! - [`levels`]: a document's levels, and tying elements and a wall's top to them, through the
 //!   same log.
 //! - [`walls`]: wall types and their layers, and drawing layered walls of them, through the same
@@ -52,6 +54,7 @@ pub mod families;
 pub mod floors;
 pub mod grids;
 pub mod hosting;
+pub mod ifc;
 pub mod levels;
 pub mod loading;
 pub mod openings;

@@ -993,6 +993,26 @@ async fn a_shape_cant_be_reached_through_another_model() {
     assert!(matches!(elsewhere, Err(Refusal::NotFound)));
 }
 
+/// The export read gives an IFC 4.3 file named for the model, only to a person who may read it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_model_is_exported_as_an_ifc_file_to_those_who_may_read_it() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let (name, text) = s.export_ifc(&anna, &project, &model).await.unwrap();
+    assert!(name.to_ascii_lowercase().ends_with(".ifc"), "{name}");
+    assert!(text.starts_with(
+        "ISO-10303-21;
+"
+    ));
+    assert!(text.contains("FILE_SCHEMA(('IFC4X3_ADD2'));"));
+    assert!(text.contains("=IFCPROJECT("));
+    let elsewhere = s.export_ifc(&anna, &project, &i("no-such-model")).await;
+    assert!(elsewhere.is_err());
+    let outsider = s.export_ifc(&i("dan"), &project, &model).await;
+    assert!(outsider.is_err());
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_view_says_how_far_regeneration_has_got() {
     let stack = seeded().await;

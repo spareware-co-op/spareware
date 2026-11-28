@@ -831,6 +831,9 @@ version = "0.0.0"
 dependencies = [
  "construct-elements",
  "construct-model",
+ "construct-params",
+ "construct-regen",
+ "sha2 0.11.0",
 ]
 
 [[package]]
@@ -4463,6 +4466,7 @@ dependencies = [
  "construct-categories",
  "construct-drawing",
  "construct-families",
+ "construct-interop",
  "construct-materials",
  "construct-model",
  "construct-params",

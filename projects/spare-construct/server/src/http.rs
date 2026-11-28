@@ -192,6 +192,10 @@ pub fn routes(app: Shared) -> Router {
             get(shape),
         )
         .route(
+            "/api/projects/{project}/models/{model}/export/ifc",
+            get(crate::ifc_export::export_ifc),
+        )
+        .route(
             "/api/projects/{project}/teams/{team}/publish",
             post(publish),
         )

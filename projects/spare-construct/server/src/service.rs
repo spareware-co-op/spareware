@@ -1571,6 +1571,42 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         })
     }
 
+    /// A model as an IFC 4.3 file (the STEP text form): its levels as storeys, its layered walls
+    /// and its floors (`construct_api::cloud::ifc`, then `construct_interop::ifc_spatial`). Gives
+    /// the file's name and its text. Every `GlobalId` is made from the model's and the element's
+    /// permanent IDs, so a second export of one model differs only in the header's time.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails, or there is no
+    /// such model; [`Refusal::Bad`] when it cannot be written, saying why.
+    pub async fn export_ifc(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<(String, String), Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.regen.caught_up(project).await?;
+        let place = Place::Model {
+            project: project.clone(),
+            model: model.clone(),
+        };
+        let row: Option<Model> = read_row(&mut snapshot, &place.key()).await?;
+        let row = row.ok_or(Refusal::NotFound)?;
+        let stamp = crate::ifc_export::iso_now();
+        let export = cloud::ifc::read_export(&mut snapshot, project, model, &row.name, &stamp)
+            .await?
+            .map_err(Refusal::Bad)?;
+        let text = construct_interop::ifc_spatial::write(&export)
+            .map_err(|e| Refusal::Bad(e.to_string()))?;
+        Ok((
+            format!("{}.ifc", crate::ifc_export::file_stem(&row.name)),
+            text,
+        ))
+    }
+
     /// A model's links.
     ///
     /// # Errors
