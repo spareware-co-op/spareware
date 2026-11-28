@@ -14,8 +14,9 @@
 //! type, and the picture does not change.
 
 use std::cmp::Reverse;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use construct_categories::CategoryId;
 use construct_materials::MaterialId;
 use construct_styles::{Colour, Micrometres, PatternId, Scale};
 use kit_core::Id;
@@ -23,7 +24,7 @@ use kit_core::Id;
 use crate::DrawingError;
 use crate::drawing::{Drawing, Line, LineKind, Shape, ViewPoint};
 use crate::hatch::hatch;
-use crate::look::opacity;
+use crate::look::{Look, opacity};
 use crate::merge::merge;
 use crate::overlay::Overlay;
 use crate::pens::{Styles, look_of, style};
@@ -116,7 +117,7 @@ fn shown(drawing: &Drawing, styles: Styles<'_>) -> Result<Option<Drawing>, Drawi
     let mut lines = Vec::new();
     for line in drawing.lines() {
         if looks
-            .look(line.category, line.kind)
+            .look_for(&line.source.element, line.category, line.kind)
             .map_err(DrawingError::Style)?
             .shown
         {
@@ -126,7 +127,7 @@ fn shown(drawing: &Drawing, styles: Styles<'_>) -> Result<Option<Drawing>, Drawi
     let mut regions = Vec::new();
     for region in drawing.regions() {
         if looks
-            .look(region.category, LineKind::Cut)
+            .look_for(&region.element, region.category, LineKind::Cut)
             .map_err(DrawingError::Style)?
             .shown
         {
@@ -134,6 +135,75 @@ fn shown(drawing: &Drawing, styles: Styles<'_>) -> Result<Option<Drawing>, Drawi
         }
     }
     Drawing::new(drawing.view(), lines, regions).map(Some)
+}
+
+/// An element's looks, region by region: a category and the look the view gives its cut.
+type Looked = Vec<(CategoryId, Look)>;
+
+/// The look the view gives the cut of a merged region, from its first element (all of a merged
+/// region's elements look alike); `None` when the view has no looks.
+fn cut_look(
+    styles: Styles<'_>,
+    region: &crate::merge::MergedRegion,
+) -> Result<Option<Look>, DrawingError> {
+    styles
+        .looks
+        .map(|looks| match region.elements.first() {
+            Some(element) => looks.look_for(element, region.category, LineKind::Cut),
+            None => looks.look(region.category, LineKind::Cut),
+        })
+        .transpose()
+        .map_err(DrawingError::Style)
+}
+
+/// The drawing's cut regions merged. When the view's looks differ from one element to the next
+/// ([`crate::look::Looks::per_element`]), only elements that look alike are merged, so a
+/// halftone element beside a solid one of the same material stays two regions; otherwise every
+/// element of a category and material merges, as it always did.
+fn merged_regions(
+    drawing: &Drawing,
+    styles: Styles<'_>,
+) -> Result<Vec<crate::merge::MergedRegion>, DrawingError> {
+    let Some(looks) = styles.looks.filter(|looks| looks.per_element()) else {
+        return merge(drawing);
+    };
+    // Each element's looks, region by region: elements with the same ones go together.
+    let mut by_element: BTreeMap<Id, Looked> = BTreeMap::new();
+    for region in drawing.regions() {
+        let look = looks
+            .look_for(&region.element, region.category, LineKind::Cut)
+            .map_err(DrawingError::Style)?;
+        by_element
+            .entry(region.element.clone())
+            .or_default()
+            .push((region.category, look));
+    }
+    let mut groups: Vec<(Looked, BTreeSet<Id>)> = Vec::new();
+    for (element, key) in by_element {
+        match groups.iter_mut().find(|(seen, _)| *seen == key) {
+            Some((_, elements)) => {
+                elements.insert(element);
+            }
+            None => groups.push((key, BTreeSet::from([element]))),
+        }
+    }
+    let mut merged = Vec::new();
+    for (_, elements) in groups {
+        let lines = drawing
+            .lines()
+            .iter()
+            .filter(|line| elements.contains(&line.source.element))
+            .cloned()
+            .collect();
+        let regions = drawing
+            .regions()
+            .iter()
+            .filter(|region| elements.contains(&region.element))
+            .cloned()
+            .collect();
+        merged.extend(merge(&Drawing::new(drawing.view(), lines, regions)?)?);
+    }
+    Ok(merged)
 }
 
 /// `drawing` ready to print at `scale` with `styles`.
@@ -150,7 +220,7 @@ pub fn picture(
 ) -> Result<Picture, DrawingError> {
     let left = shown(drawing, styles)?;
     let drawing = left.as_ref().unwrap_or(drawing);
-    let merged = merge(drawing)?;
+    let merged = merged_regions(drawing, styles)?;
     let mut hatches = Vec::new();
     for region in &merged {
         let Some(id) = &region.material else {
@@ -161,11 +231,7 @@ pub fn picture(
             .get(id)
             .ok_or_else(|| DrawingError::NoMaterial(id.as_str().to_owned()))?;
         // The view's fill for the category, where it has one, in place of the material's.
-        let cut = styles
-            .looks
-            .map(|looks| looks.look(region.category, LineKind::Cut))
-            .transpose()
-            .map_err(DrawingError::Style)?;
+        let cut = cut_look(styles, region)?;
         let over = cut.as_ref().and_then(|look| look.fill.as_ref());
         let Some(fill) = over.map(|f| f.pattern.as_str()).or_else(|| {
             material

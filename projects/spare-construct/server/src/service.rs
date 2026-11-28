@@ -1129,6 +1129,95 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         cloud::views::graphics_of(&world, view).ok_or(Refusal::NotFound)
     }
 
+    /// A model's view templates: each with the settings it holds and includes and the views tied
+    /// to it, by name. Read as of the log's head.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn view_templates(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<Vec<cloud::view_templates::TemplateSummary>, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        Ok(cloud::view_templates::template_summaries(&world))
+    }
+
+    /// A view template's graphics rules, listed as a view's are.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// template; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn template_graphics(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        template: &Id,
+    ) -> Result<cloud::views::TemplateGraphics, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let world = cloud::views::read_world(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)?;
+        cloud::views::template_graphics_of(&world, template).ok_or(Refusal::NotFound)
+    }
+
+    /// The filters of a view or of a view template, in the order that decides which wins, with the
+    /// parameters and operators a new one may name.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is neither
+    /// a view nor a template of this ID; [`Refusal::Bad`] when a record cannot be read.
+    pub async fn filters(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        owner: &Id,
+    ) -> Result<cloud::view_templates::FilterListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::view_templates::filters_of(&mut snapshot, project, model, owner)
+            .await?
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
+    /// A view's per-element overrides.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model, the store fails or there is no such
+    /// view; [`Refusal::Bad`] when a record cannot be read, saying why.
+    pub async fn overrides(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        view: &Id,
+    ) -> Result<cloud::view_templates::OverridesListing, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::view_templates::overrides_of(&mut snapshot, project, model, view)
+            .await?
+            .map_err(Refusal::Bad)?
+            .ok_or(Refusal::NotFound)
+    }
+
     /// A floor plan drawn from the stored model as of the log's head: the cut edges of what its
     /// cut plane crosses, hatched by material, as the geometry kernel's drawing makes them
     /// ([`crate::plan`]). The page asks for it when a person opens the view and again when the
@@ -1176,7 +1265,22 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 }),
             }
         }
-        let looks = ViewLooks::new(&world, view);
+        let drawn_records: Vec<Element> = shaped
+            .iter()
+            .filter(|one| listing.cut.contains(&one.record.id.to_string()))
+            .map(|one| one.record.clone())
+            .collect();
+        let own = cloud::view_templates::element_styles(
+            &mut snapshot,
+            project,
+            model,
+            &world,
+            view,
+            &drawn_records,
+        )
+        .await?
+        .map_err(Refusal::Bad)?;
+        let looks = ViewLooks::new(&world, view, &own);
         let drawn = drawer
             .draw(cut.cut, cut.scale, &elements, Some(&looks))
             .map_err(Refusal::Bad)?;

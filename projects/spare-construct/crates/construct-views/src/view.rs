@@ -4,11 +4,14 @@
 
 use crate::cut::{CutLine, Point, Side};
 use crate::error::ViewError;
+use crate::filters::{FILTERS_KEY, Filters};
 use crate::graphics::{GRAPHICS_KEY, Graphics};
 use crate::kind::{DetailLevel, PlanSetup, ViewKind};
 use crate::listing::Model;
+use crate::overrides::{OVERRIDES_KEY, Overrides};
 use crate::range::ViewRange;
-use construct_categories::VIEWS;
+use crate::settings::{HIDDEN_KEY, Settings, hidden_from_text, hidden_to_text};
+use construct_categories::{CategoryId, VIEWS};
 use construct_levels::{LEVEL_KEY, LEVEL_OFFSET_KEY, Tie, base_of, write_base};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::Recipe;
@@ -16,7 +19,7 @@ use construct_params::{Length, Value};
 use construct_phases::{ElementStaging, OptionChoice, ViewSettings};
 use construct_styles::{Micrometres, PenTable, Scale};
 use kit_core::Id;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The `kind` of every view record, and its recipe's operation.
 pub const VIEW_KIND: &str = "view";
@@ -28,6 +31,8 @@ pub const KIND_KEY: &str = "@view.kind";
 pub const SCALE_KEY: &str = "@view.scale";
 /// The view's detail level, in construct-params' stored choice text.
 pub const DETAIL_KEY: &str = "@view.detail";
+/// The view template the view is tied to: the template's ID, when it is tied to one.
+pub const TEMPLATE_TIE_KEY: &str = "@view.template";
 /// The view's phase settings, as the phases crate's JSON, when it has any.
 pub const PHASING_KEY: &str = "@view.phasing";
 /// The view's own staging fields (the phase it was created and demolished in, its design option),
@@ -82,6 +87,10 @@ pub struct View {
     staging: ElementStaging,
     phasing: Option<ViewSettings>,
     graphics: Graphics,
+    hidden: BTreeSet<CategoryId>,
+    filters: Filters,
+    overrides: Overrides,
+    template: Option<Id>,
 }
 
 impl View {
@@ -106,6 +115,10 @@ impl View {
             staging,
             phasing: None,
             graphics: Graphics::new(),
+            hidden: BTreeSet::new(),
+            filters: Filters::new(),
+            overrides: Overrides::new(),
+            template: None,
         })
     }
 
@@ -162,6 +175,83 @@ impl View {
     #[must_use]
     pub fn with_graphics(mut self, graphics: Graphics) -> Self {
         self.graphics = graphics;
+        self
+    }
+
+    /// The categories and subcategories this view does not draw, by number.
+    #[must_use]
+    pub fn hidden(&self) -> &BTreeSet<CategoryId> {
+        &self.hidden
+    }
+
+    /// The filters of this view, the one that wins first.
+    #[must_use]
+    pub fn filters(&self) -> &Filters {
+        &self.filters
+    }
+
+    /// This view's own per-element overrides.
+    #[must_use]
+    pub fn overrides(&self) -> &Overrides {
+        &self.overrides
+    }
+
+    /// The view template this view is tied to, if it is tied to one.
+    #[must_use]
+    pub fn template(&self) -> Option<&Id> {
+        self.template.as_ref()
+    }
+
+    /// The view's scale, detail level, graphics rules, hidden categories and filters together:
+    /// what a view template holds.
+    #[must_use]
+    pub fn settings(&self) -> Settings {
+        Settings {
+            scale: self.scale,
+            detail: self.detail,
+            graphics: self.graphics.clone(),
+            hidden: self.hidden.clone(),
+            filters: self.filters.clone(),
+        }
+    }
+
+    /// The view with these settings in place of its own.
+    #[must_use]
+    pub fn with_settings(mut self, settings: Settings) -> Self {
+        self.scale = settings.scale;
+        self.detail = settings.detail;
+        self.graphics = settings.graphics;
+        self.hidden = settings.hidden;
+        self.filters = settings.filters;
+        self
+    }
+
+    /// The view with the categories it does not draw.
+    #[must_use]
+    pub fn with_hidden(mut self, hidden: BTreeSet<CategoryId>) -> Self {
+        self.hidden = hidden;
+        self
+    }
+
+    /// The view with other filters.
+    #[must_use]
+    pub fn with_filters(mut self, filters: Filters) -> Self {
+        self.filters = filters;
+        self
+    }
+
+    /// The view with other overrides.
+    #[must_use]
+    pub fn with_overrides(mut self, overrides: Overrides) -> Self {
+        self.overrides = overrides;
+        self
+    }
+
+    /// The view tied to a template, or to none. The tie itself changes no setting: the template's
+    /// included settings reach the view through [`crate::ViewTemplates::effective`].
+    #[must_use]
+    pub fn with_template(mut self, template: Option<Id>) -> Self {
+        self.template = template;
         self
     }
 
@@ -288,6 +378,18 @@ impl View {
         if let Some(text) = self.graphics.to_text() {
             props.insert(GRAPHICS_KEY.to_owned(), text);
         }
+        if let Some(text) = hidden_to_text(&self.hidden) {
+            props.insert(HIDDEN_KEY.to_owned(), text);
+        }
+        if let Some(text) = self.filters.to_text() {
+            props.insert(FILTERS_KEY.to_owned(), text);
+        }
+        if let Some(text) = self.overrides.to_text() {
+            props.insert(OVERRIDES_KEY.to_owned(), text);
+        }
+        if let Some(template) = &self.template {
+            props.insert(TEMPLATE_TIE_KEY.to_owned(), template.to_string());
+        }
         if let Some(plan) = self.kind.plan() {
             write_plan(&mut props, plan);
         }
@@ -363,6 +465,24 @@ impl View {
         graphics
             .check_kind(&kind)
             .map_err(|why| malformed(&format!("holds graphics rules it cannot hold: {why}")))?;
+        let hidden = match record.props.get(HIDDEN_KEY) {
+            None => BTreeSet::new(),
+            Some(text) => hidden_from_text(text).map_err(|why| malformed(&why))?,
+        };
+        let filters = match record.props.get(FILTERS_KEY) {
+            None => Filters::new(),
+            Some(text) => Filters::from_text(text).map_err(|why| malformed(&why))?,
+        };
+        let overrides = match record.props.get(OVERRIDES_KEY) {
+            None => Overrides::new(),
+            Some(text) => Overrides::from_text(text).map_err(|why| malformed(&why))?,
+        };
+        let template = match record.props.get(TEMPLATE_TIE_KEY) {
+            None => None,
+            Some(text) => {
+                Some(Id::parse(text).map_err(|_| malformed("is tied to a template with no ID"))?)
+            }
+        };
         let view = Self::new(
             record.id.clone(),
             &record.name,
@@ -373,7 +493,11 @@ impl View {
         )
         .map_err(|_| malformed("has no name"))?
         .with_phasing(phasing)
-        .with_graphics(graphics);
+        .with_graphics(graphics)
+        .with_hidden(hidden)
+        .with_filters(filters)
+        .with_overrides(overrides)
+        .with_template(template);
         if view.to_record(&record.document) != *record {
             return Err(malformed("is not as a view record is written"));
         }

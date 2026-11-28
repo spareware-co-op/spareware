@@ -224,6 +224,30 @@ impl Graphics {
         Self { rules }
     }
 
+    /// These rules as a view of `kind` can hold them: none for a drafting view or a legend, and
+    /// the projection rules only for a three-dimensional view. A view template uses this to apply
+    /// one set of rules to views of every kind.
+    #[must_use]
+    pub fn for_kind(&self, kind: &ViewKind) -> Self {
+        match kind {
+            ViewKind::Drafting | ViewKind::Legend => Self::new(),
+            ViewKind::ThreeD => {
+                let mut rules = BTreeMap::new();
+                for (id, rule) in &self.rules {
+                    let kept = Rule {
+                        cut: None,
+                        projection: rule.projection.clone(),
+                    };
+                    if !kept.is_empty() {
+                        rules.insert(*id, kept);
+                    }
+                }
+                Self { rules }
+            }
+            _ => self.clone(),
+        }
+    }
+
     /// Asks whether a view of `kind` can hold these rules, whatever the categories are.
     ///
     /// # Errors
@@ -260,6 +284,20 @@ impl Graphics {
         lines: &LineStyles,
     ) -> Result<(), ViewError> {
         self.check_kind(kind)?;
+        self.check_rules(categories, lines)
+    }
+
+    /// Asks whether these rules stand against `categories` and `lines` whatever kind of view holds
+    /// them: [`Graphics::check`] without the question of the kind, which is what a view template,
+    /// that is of no kind, is asked.
+    ///
+    /// # Errors
+    /// The first refusal of [`Graphics::check`] after its two about the kind.
+    pub fn check_rules(
+        &self,
+        categories: &CategoryTable,
+        lines: &LineStyles,
+    ) -> Result<(), ViewError> {
         for (id, rule) in self.rules() {
             let category = categories.get(id).ok_or(ViewError::UnknownCategory(id))?;
             if category.kind == CategoryKind::View {

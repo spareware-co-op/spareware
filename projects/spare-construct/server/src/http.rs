@@ -222,6 +222,26 @@ fn view_routes() -> Router<Shared> {
             "/api/projects/{project}/models/{model}/views/{view}/graphics",
             get(graphics),
         )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/overrides",
+            get(overrides),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/views/{view}/filters",
+            get(filters),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/view-templates",
+            get(view_templates),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/view-templates/{template}/graphics",
+            get(template_graphics),
+        )
+        .route(
+            "/api/projects/{project}/models/{model}/view-templates/{template}/filters",
+            get(filters),
+        )
         .route("/api/projects/{project}/models/{model}/sheets", get(sheets))
         .route(
             "/api/projects/{project}/models/{model}/sheets/{sheet}",
@@ -682,6 +702,56 @@ async fn graphics(
     Ok(Json(
         app.service
             .graphics(&person, &id(&project)?, &id(&model)?, &id(&view)?)
+            .await?,
+    ))
+}
+
+async fn overrides(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, view)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .overrides(&person, &id(&project)?, &id(&model)?, &id(&view)?)
+            .await?,
+    ))
+}
+
+/// The filters of a view or of a view template: the path says which (`views/<id>/filters` or
+/// `view-templates/<id>/filters`) and the answer says what it found.
+async fn filters(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, owner)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .filters(&person, &id(&project)?, &id(&model)?, &id(&owner)?)
+            .await?,
+    ))
+}
+
+async fn view_templates(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .view_templates(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn template_graphics(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, template)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .template_graphics(&person, &id(&project)?, &id(&model)?, &id(&template)?)
             .await?,
     ))
 }

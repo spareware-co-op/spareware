@@ -47,7 +47,7 @@ pub struct Styles<'a> {
 pub fn style(styles: Styles<'_>, line: &Line, scale: Scale) -> Result<EdgeStyle, DrawingError> {
     if let Some(looks) = styles.looks {
         return looks
-            .look(line.category, line.kind)
+            .look_for(&line.source.element, line.category, line.kind)
             .map(|look| look.edge)
             .map_err(DrawingError::Style);
     }
@@ -70,7 +70,7 @@ pub fn style(styles: Styles<'_>, line: &Line, scale: Scale) -> Result<EdgeStyle,
 pub fn look_of(styles: Styles<'_>, line: &Line) -> Result<Option<Look>, DrawingError> {
     styles
         .looks
-        .map(|looks| looks.look(line.category, line.kind))
+        .map(|looks| looks.look_for(&line.source.element, line.category, line.kind))
         .transpose()
         .map_err(DrawingError::Style)
 }

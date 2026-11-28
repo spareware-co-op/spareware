@@ -16,10 +16,12 @@
 //! view's scale. The drawing calls [`resolve`] for each element; nothing here draws.
 
 use crate::error::ViewError;
-use crate::graphics::RuleStyle;
+use crate::graphics::{Graphics, RuleStyle, pen_exists};
+use crate::style::ElementStyle;
 use crate::view::View;
 use construct_categories::{CategoryId, CategoryKind, CategoryTable};
 use construct_styles::{Edge, LineStyles, Micrometres, ObjectStyles, Scale};
+use std::collections::BTreeSet;
 
 /// Which level of the rule gave an answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +91,110 @@ pub fn resolve(
     subcategory: Option<CategoryId>,
     edge: Edge,
 ) -> Result<Resolved, ViewError> {
+    resolve_in(
+        view.graphics(),
+        view.hidden(),
+        view.scale(),
+        categories,
+        objects,
+        lines,
+        category,
+        subcategory,
+        edge,
+    )
+}
+
+/// [`resolve`] over a view's three inputs (its graphics rules, its hidden categories and its
+/// scale) instead of a view, so a view template, which is not a view, is asked the same way. A
+/// category the view hides, or whose parent it hides, is not shown, whatever its rules say.
+///
+/// # Errors
+/// As [`resolve`].
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the three inputs of a view and the five of the question; a struct would only rename them"
+)]
+pub fn resolve_in(
+    graphics: &Graphics,
+    hidden: &BTreeSet<CategoryId>,
+    scale: Scale,
+    categories: &CategoryTable,
+    objects: &ObjectStyles,
+    lines: &LineStyles,
+    category: CategoryId,
+    subcategory: Option<CategoryId>,
+    edge: Edge,
+) -> Result<Resolved, ViewError> {
+    let found = resolve_rules(
+        graphics,
+        scale,
+        categories,
+        objects,
+        lines,
+        category,
+        subcategory,
+        edge,
+    )?;
+    if hidden.contains(&category) || subcategory.is_some_and(|sub| hidden.contains(&sub)) {
+        return Ok(Resolved {
+            style: RuleStyle {
+                shown: false,
+                ..found.style
+            },
+            ..found
+        });
+    }
+    Ok(found)
+}
+
+/// `resolved` with the parts `style` names put over it, as an element's own look in a view: the
+/// pen's printed width is worked out again at the view's `scale`. A pen the pen table of the
+/// category's `kind` does not have is left out, so an override never stops a drawing.
+///
+/// # Errors
+/// [`ViewError::Style`] when the pen table cannot give the pen's width.
+pub fn adjust(
+    resolved: &Resolved,
+    style: &ElementStyle,
+    lines: &LineStyles,
+    kind: CategoryKind,
+    scale: Scale,
+) -> Result<Resolved, ViewError> {
+    let pen = style.pen.filter(|number| pen_exists(lines, kind, *number));
+    let own = ElementStyle {
+        pen,
+        pattern: style
+            .pattern
+            .filter(|pattern| lines.patterns.get(*pattern).is_some()),
+        ..style.clone()
+    };
+    let changed = own.over(resolved.style.clone());
+    let width = if changed.pen == resolved.style.pen {
+        resolved.width
+    } else {
+        width(lines, kind, changed.pen, scale)?
+    };
+    Ok(Resolved {
+        style: changed,
+        width,
+        origin: resolved.origin,
+    })
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the inputs of the one question, as resolve asks it"
+)]
+fn resolve_rules(
+    graphics: &Graphics,
+    scale: Scale,
+    categories: &CategoryTable,
+    objects: &ObjectStyles,
+    lines: &LineStyles,
+    category: CategoryId,
+    subcategory: Option<CategoryId>,
+    edge: Edge,
+) -> Result<Resolved, ViewError> {
     let top = categories
         .get(category)
         .ok_or(ViewError::UnknownCategory(category))?;
@@ -111,7 +217,6 @@ pub fn resolve(
     if edge == Edge::Cut && !target.cuttable {
         return Err(ViewError::CutOnUncuttable(target.id));
     }
-    let graphics = view.graphics();
     let ruled = subcategory
         .and_then(|id| graphics.style(id, edge).map(|s| (s, Origin::Subcategory)))
         .or_else(|| {
@@ -121,7 +226,7 @@ pub fn resolve(
         });
     if let Some((style, origin)) = ruled {
         return Ok(Resolved {
-            width: width(lines, target.kind, style.pen, view.scale())?,
+            width: width(lines, target.kind, style.pen, scale)?,
             style: style.clone(),
             origin,
         });
@@ -134,7 +239,7 @@ pub fn resolve(
         Edge::Cut => own.cut_pen.ok_or(ViewError::CutOnUncuttable(target.id))?,
     };
     Ok(Resolved {
-        width: width(lines, target.kind, pen, view.scale())?,
+        width: width(lines, target.kind, pen, scale)?,
         style: RuleStyle {
             pen,
             pattern: own.pattern,

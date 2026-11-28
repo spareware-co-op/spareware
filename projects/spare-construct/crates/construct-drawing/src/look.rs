@@ -16,6 +16,7 @@ use std::fmt::Debug;
 
 use construct_categories::CategoryId;
 use construct_styles::{Colour, EdgeStyle};
+use kit_core::Id;
 
 use crate::drawing::LineKind;
 
@@ -54,6 +55,30 @@ pub trait Looks: Debug + Send + Sync {
     ///
     /// In words, when the view cannot say (an unknown category, a cut of what cannot be cut).
     fn look(&self, category: CategoryId, kind: LineKind) -> Result<Look, String>;
+
+    /// The look of `category` seen as `kind` says, for the one element `element`: what its view
+    /// says of its own, over what it says of its category (a filter that matches it, an override
+    /// of it). The default is [`Looks::look`], so a view that has nothing per element answers as
+    /// it always did.
+    ///
+    /// # Errors
+    ///
+    /// As [`Looks::look`].
+    fn look_for(
+        &self,
+        _element: &Id,
+        category: CategoryId,
+        kind: LineKind,
+    ) -> Result<Look, String> {
+        self.look(category, kind)
+    }
+
+    /// Whether [`Looks::look_for`] can answer differently for two elements of one category. When
+    /// it cannot (the default), the drawing merges the cut regions of a category and material as
+    /// it always did; when it can, it merges only elements that look alike.
+    fn per_element(&self) -> bool {
+        false
+    }
 }
 
 /// The opacity a look prints at, in whole percent: 100 is full strength.

@@ -31,6 +31,10 @@ A view is an element record like any other (the records in the database are the 
 | `@view.look` | A section or an elevation | `choice:left` or `choice:right`: the side of the line, walking from its first end to its second, that the view looks to |
 | `@view.far` | A section or an elevation | How far it sees, square to the line: stored length text, above zero |
 | `@view.graphics` | A view with graphics rules, never a drafting view or a legend | The rules, as JSON text, written only when the view has one: see "Graphics rules" below |
+| `@view.hidden` | A view that hides a category | The numbers of the categories and subcategories the view does not draw, ascending, separated by commas (`100,300`), written only when there is one |
+| `@view.filters` | A view with filters | The view's filters, as JSON text in priority order: see "View filters" below |
+| `@view.overrides` | A view with an override | The view's per-element overrides, as JSON text: see "Element overrides" below |
+| `@view.template` | A view tied to a view template | The template's ID: see "View templates" below |
 
 Which keys a record has depends on its kind, and no other keys are allowed: a section with a `@level`, or a plan with a line, is refused. Lengths are construct-params' stored length text in its one spelling (`length:q0:` and the grid steps); the older whole-millimetre spelling is not accepted here, since no view was ever written with it. A view range's height is `height_of` of its level plus its offset (construct-levels), so moving a level moves every view range tied to it and no view record changes.
 
@@ -86,10 +90,50 @@ Through the log: `view.graphics.set` and `view.graphics.clear` ([cloud format](.
 
 Interim: a document stores no pens, line patterns or object styles yet, so rules are checked and resolved against our defaults (construct-styles' `default_metric`), and the fill patterns are the drawing's default set, named in this crate and pinned to the drawing's own by a test in the server. The jobs that store them replace those places and no stored view changes.
 
+## View templates
+
+A view template is a saved set of view settings that many views follow (CON-A8-F3-P4). It is its own element record, of kind `view_template`, of the views category, with no shape (nothing builds it, and no view or element command touches it: the element commands turn it back, naming `view.template.*`).
+
+| Field | On a view template record |
+| --- | --- |
+| `kind` | `view_template` |
+| `name` | Trimmed, not empty, unique in the document among templates without regard to case |
+| `level`, `placement`, `references` | `0`, `{"x":0,"y":0,"z":0}`, `[]` |
+| `recipe` | `{"owner":"construct","schema":1,"op":"view_template","op_version":1,"args":{}}` |
+
+| `props` key | Value |
+| --- | --- |
+| `@category` | `7000` |
+| `@vt.scale`, `@vt.detail` | The scale and the detail level, spelt as a view's `@view.scale` and `@view.detail` |
+| `@vt.included` | The settings the template includes, by key, in the order `scale`, `detail`, `graphics`, `categories`, `filters`, separated by commas; `""` for none |
+| `@view.graphics`, `@view.hidden`, `@view.filters` | As on a view, each written only when it has something |
+
+A template holds the five settings a view has, whether included or not. **Tied:** a view whose record has `@view.template` follows the template: what it shows is its own settings with the template's included ones in place of them (`construct_views::ViewTemplate::apply_to`; `ViewTemplates::effective` does it for a document's views). Nothing is rewritten when the template changes, so every tied view changes in the same log entry as its template, and a drawing or a listing that asks the effective views never reads the template. The view's own name, kind, staging, overrides and the settings the template does not include stay its own. When a view is tied, its record is written with the included values copied in, so untying it (which writes the settings it was showing) changes nothing it shows. **Applied once:** the included settings are copied into a view that stays untied (`ViewTemplate::copy_into`).
+
+Rules the commands keep: a tied view cannot change an included setting by itself. A `view.set` of a scale or a detail level, a `view.graphics.*`, `view.categories.set` or `view.filter.*` of a tied view whose template includes that setting is refused, in words naming the view, the template and the setting (`"Level 2 plan follows the view template Working, which sets its scale: change it in the template, or untie the view first."`). A template cannot be deleted while a view is tied to it (the refusal counts them). An undo that would leave a view tied to a template the document no longer has is turned back. A drafting view or a legend shows no model and takes no template. Where a view's kind cannot hold part of a template's graphics (a cut rule in a three-dimensional view), that part is left out of what the view shows, so one template serves every kind of model view.
+
+Interim: view range and crop region are not settings of a template yet (a plan's range is its own; piece A79 adds crop regions to this crate).
+
+## Element overrides
+
+An override (CON-A8-F3-P6) is one element's look in one view: the parts of a style it names (`pen`, `pattern`, `colour`, `halftone`, `shown`, any of them), held by the view and put over what the element's category, the view's rules and its filters say. It changes nothing in the model or in any other view, and it is the view's own even when the view is tied to a template. One JSON text under `@view.overrides`, written only when the view has one: `{"format":1,"overrides":[{"element":"W-1","style":{"pen":5,"colour":[200,10,20],"shown":false}}]}`, in ascending element ID, never with an empty style, parts in the order `pen`, `pattern`, `colour`, `halftone`, `shown`, no spare space. `view.override.set` merges the parts it names over what the element already has in the view; `view.override.clear` takes one element's override away, or every override of the view when it names no element. An override of an element that is gone does no harm and is cleared with the rest.
+
+## View filters
+
+A filter (CON-A8-F3-P3 in the list of features, built here with templates) is a rule on a category and one of its parameters with a look of its own, held by a view or by a template. It names a category (a subcategory of it matches too), a parameter by its ID, an operator, a value in construct-params' stored text and the parts of look it gives (the style of an override). Operators: `equals` (the same value, text compared exactly), `contains` (text, a choice or a link holds the text, case aside) and `greater_than` (a length, area, volume, angle, number or whole number above the value; the same kind). An element that reads no value, or one of another kind, matches nothing.
+
+**The order decides.** A view's filters are a list. For one element, the first matching filter wins each part of the look it names, and a lower matching filter gives the parts the higher ones leave: so a filter higher up beats one lower down, and an element override beats every filter. The answer is worked out whenever a view is drawn, from the element's parameters as they are then (through the same reading a shape and the properties panel use), never stored against an element, so a changed parameter changes the drawing at once.
+
+One JSON text under `@view.filters`, written only when there is a filter: `{"format":1,"filters":[{"id":1,"name":"One hour","category":100,"parameter":"P-fire","op":"equals","value":"text:1h","style":{"colour":[255,0,0]}}]}`, in priority order, each `id` a whole number above zero and unique in the list (a new filter takes the next number above the highest), names unique in the list without regard to case, no spare space. The commands check that the parameter is one the category has, that the operator fits the parameter's kind and that the style's pen and pattern exist.
+
+## Through the log, templates, overrides and filters
+
+`view.template.create` (from a view, or fresh at 1:100 medium), `.rename`, `.delete`, `.set` (scale, detail, which settings are included), `.update` (the template takes a view's settings), `.tie`, `.untie` and `.apply`; `view.categories.set`; `view.override.set` and `.clear`; `view.filter.add`, `.set`, `.remove` and `.move`; and `view.graphics.set` and `.clear`, `view.categories.set` and `view.filter.*` naming a `template` instead of a `view`. Each is one undo step, runs behind `model.edit` and takes the claim on the one record it writes; a command that changes nothing writes nothing and is no step. `view.duplicate` keeps a view's tie, hidden categories, filters and overrides. The arguments are in the [cloud format](../construct-model/FORMAT.md). Read at `GET .../view-templates` (each template with its settings, what it includes and the views tied to it), `.../view-templates/<template>/graphics` (as a view's graphics listing), `.../views/<view>/filters` and `.../view-templates/<template>/filters` (the filters in order, with the parameters and operators a new one may name), and `.../views/<view>/overrides`. The server's plan drawing gives each element its filters' and its override's look through construct-drawing's `Looks::look_for`, and merges the cut regions of only those elements that look alike.
+
 ## What a view shows
 
 Not stored: `construct_views::list` answers it from the view and the model's elements (their category, box in whole millimetres in the project's frame, and staging), by the rules in that file's header: the category must be one a view draws (model and import categories), the phase rule is [construct-phases](../construct-phases/FORMAT.md)'s own, and the reach is the view range for a plan (cut, seen, beyond), the region of the line for a section or an elevation (cut, seen), and everything for a three-dimensional view. A drafting view and a legend show no model. Answers are sorted by element ID.
 
 ## Later versions
 
-Crop regions, a view template and per-element overrides will each be more reserved keys on this record, read strictly as these are; version 1 records read as views with none of them, and graphics rules (above) are the first of them. The shared spelling of an element's staging fields for every kind of element is the job that wires them into records; until it lands, a view's is the `@staging` key above, read in one function.
+Crop regions will be more reserved keys on this record, read strictly as these are; version 1 records read as views with none of them, and graphics rules, hidden categories, filters, overrides and a template's tie (above) are the first of them. The shared spelling of an element's staging fields for every kind of element is the job that wires them into records; until it lands, a view's is the `@staging` key above, read in one function.

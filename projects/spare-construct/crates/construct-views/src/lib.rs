@@ -26,6 +26,16 @@
 //!   [`View::graphics`] and stored under [`GRAPHICS_KEY`].
 //! - [`resolve`], [`Resolved`], [`Origin`]: the one rule for how an element looks in a view:
 //!   the subcategory's rule, else the category's, else the project's object style.
+//! - [`ViewTemplate`], [`ViewTemplates`], [`Setting`], [`Settings`]: a saved set of view settings
+//!   (scale, detail level, graphics rules, which categories show, filters, each with an "included"
+//!   flag) that many views follow (CON-A8-F3-P4); a view is tied to one with [`View::template`],
+//!   [`ViewTemplates::effective`] gives the views as they show, [`ViewTemplates::tied_refusal`] is
+//!   the refusal of a tied view's own change to an included setting, and
+//!   [`ViewTemplate::copy_into`] applies one once.
+//! - [`Overrides`], [`ElementStyle`]: one element's look in one view, over its category's rule and
+//!   its filters (CON-A8-F3-P6); [`adjust`] puts it over a [`Resolved`].
+//! - [`Filters`], [`Filter`], [`Operator`]: rules on a category and a parameter with a look of
+//!   their own, in the order that decides which wins ([`Filters::style_for`]).
 //! - [`ViewError`]: every refusal, as a value.
 //!
 //! Promises: records are the truth (main's ruling 7), and this crate is the types and pure
@@ -41,9 +51,10 @@
 //! Not built here, with their places kept:
 //! - Drawing a plan or a section from a view (jobs 7.2, 8.1): this crate says what a view shows,
 //!   not how it is drawn. A section's height range is not held; it is every height.
-//! - Crop regions, view templates and overrides (jobs 7.7, 8.5): more fields on the view record
-//!   under their own reserved keys, read in [`View::from_record`]. The plan drawing applying the
-//!   graphics rules, and the page showing them, are later jobs: [`resolve`] is what they call.
+//! - Crop regions (job 7.7, piece A79) and a plan's view range as a template setting: more fields
+//!   on the view record under their own reserved keys, read in [`View::from_record`]; a template
+//!   holds the five settings above until they land. [`resolve`] and [`adjust`] are what a drawing
+//!   calls for how an element looks.
 //! - Commands through the edit log: construct-api's `cloud::views` (a view's entry in
 //!   `construct_categories::category_of_kind` and the level-deletion guard for the levels a range
 //!   is tied to are done: construct-levels counts [`RANGE_KEYS`]).
@@ -51,12 +62,17 @@
 
 mod cut;
 mod error;
+mod filters;
 mod graphics;
 mod kind;
 mod listing;
+mod overrides;
 mod range;
 mod resolve;
+mod settings;
 mod shape;
+mod style;
+mod template;
 mod view;
 mod views;
 
@@ -66,16 +82,24 @@ pub use construct_styles::Scale;
 pub use construct_styles::{Colour, Edge, PatternId};
 pub use cut::{CutLine, Point, Side};
 pub use error::ViewError;
+pub use filters::{FILTERS_FORMAT_VERSION, FILTERS_KEY, Filter, Filters, Operator};
 pub use graphics::{
     FILL_PATTERNS, Fill, GRAPHICS_FORMAT_VERSION, GRAPHICS_KEY, Graphics, MOST_TRANSPARENCY, Rule,
     RuleStyle, check_style, edge_from_key, edge_key,
 };
 pub use kind::{DetailLevel, PlanSetup, ViewKind};
 pub use listing::{How, Listing, Model, Shown, ViewElement, list};
+pub use overrides::{OVERRIDES_FORMAT_VERSION, OVERRIDES_KEY, Overrides};
 pub use range::{Heights, ViewRange};
-pub use resolve::{Origin, Resolved, resolve};
+pub use resolve::{Origin, Resolved, adjust, resolve, resolve_in};
+pub use settings::{HIDDEN_KEY, Setting, Settings};
+pub use style::ElementStyle;
+pub use template::{
+    TEMPLATE_DETAIL_KEY, TEMPLATE_INCLUDED_KEY, TEMPLATE_KIND, TEMPLATE_SCALE_KEY, ViewTemplate,
+    ViewTemplates, template_recipe,
+};
 pub use view::{
     CATEGORY_KEY, DETAIL_KEY, FAR_KEY, KIND_KEY, LINE_KEYS, LOOK_KEY, PHASING_KEY, PLAN_LEVEL_KEYS,
-    RANGE_KEYS, SCALE_KEY, STAGING_KEY, VIEW_KIND, View, view_recipe,
+    RANGE_KEYS, SCALE_KEY, STAGING_KEY, TEMPLATE_TIE_KEY, VIEW_KIND, View, view_recipe,
 };
 pub use views::Views;

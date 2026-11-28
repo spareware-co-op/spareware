@@ -1712,9 +1712,9 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
         serde_json::to_value(&listed).unwrap(),
         json!([
             { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
-              "level_name": "Level 1", "scale": 100, "detail": "medium" },
+              "level_name": "Level 1", "scale": 100, "detail": "medium", "template": null },
             { "id": "VP-2", "name": "Level 2 plan", "kind": "floor_plan", "level": "2",
-              "level_name": "Level 2", "scale": 100, "detail": "medium" },
+              "level_name": "Level 2", "scale": 100, "detail": "medium", "template": null },
         ])
     );
     // Each model has the plans of its own levels: the riverside model stands on one.
@@ -1736,7 +1736,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
         serde_json::to_value(&level_1).unwrap(),
         json!({
             "view": { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
-                      "level_name": "Level 1", "scale": 100, "detail": "medium" },
+                      "level_name": "Level 1", "scale": 100, "detail": "medium", "template": null },
             "cut": ["D-101", "D-102", "D-103", "W-101", "W-102", "W-103", "W-104", "W-105"],
             "seen": [],
             "beyond": [],
@@ -1797,7 +1797,8 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
     let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
     let (plan_1, plan_2) = (i("VP-1"), i("VP-2"));
     let summary = json!({ "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan",
-                          "level": "1", "level_name": "Level 1", "scale": 100, "detail": "medium" });
+                          "level": "1", "level_name": "Level 1", "scale": 100, "detail": "medium",
+                          "template": null });
 
     let none = s.graphics(&anna, &project, &model, &plan_1).await.unwrap();
     let none = serde_json::to_value(&none).unwrap();
@@ -1920,6 +1921,160 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
             names.join(", ")
         )
     );
+}
+
+/// View templates, filters and overrides are read behind the same access as the views and as the
+/// log's head has them: no template at first, then the one `view.template.create` made with what it
+/// includes and the views tied to it; a template's graphics listed as a view's are; the filters of a
+/// view or a template in their order, with the parameters a new one may name; and a view's
+/// overrides with the element's name.
+#[tokio::test(flavor = "multi_thread")]
+async fn view_templates_filters_and_overrides_are_read_as_the_log_has_them() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.view_templates(&anna, &project, &model).await.unwrap();
+    assert_eq!(none.len(), 0);
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    edit(
+        "view.template.create",
+        json!({ "template": "VT-1", "name": "Working", "source": "VP-1" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "view.template.tie",
+        json!({ "view": "VP-2", "template": "VT-1" }),
+    )
+    .await
+    .unwrap();
+    let listed =
+        serde_json::to_value(s.view_templates(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(listed[0]["id"], "VT-1");
+    assert_eq!(listed[0]["name"], "Working");
+    assert_eq!(listed[0]["scale"], 100);
+    assert_eq!(
+        listed[0]["included"],
+        json!(["scale", "detail", "graphics", "categories", "filters"])
+    );
+    assert_eq!(listed[0]["views"], json!(["VP-2"]));
+    let views = s.views(&anna, &project, &model).await.unwrap();
+    let tied = views.iter().find(|view| view.id == "VP-2").unwrap();
+    assert_eq!(tied.template.as_deref(), Some("VT-1"));
+    assert!(
+        views
+            .iter()
+            .find(|view| view.id == "VP-1")
+            .unwrap()
+            .template
+            .is_none()
+    );
+
+    // The template's graphics, listed as a view's, and what it hides; the tied view shows them.
+    edit(
+        "view.graphics.set",
+        json!({ "template": "VT-1", "category": 100, "edge": "cut",
+                "style": { "shown": false } }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "view.categories.set",
+        json!({ "template": "VT-1", "category": 300, "shown": false }),
+    )
+    .await
+    .unwrap();
+    let graphics = serde_json::to_value(
+        s.template_graphics(&anna, &project, &model, &i("VT-1"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(graphics["template"]["name"], "Working");
+    assert_eq!(graphics["rules"][0]["category"], 100);
+    assert_eq!(graphics["rules"][0]["cut"]["shown"], false);
+    assert_eq!(graphics["hidden"], json!([300]));
+    let walls = graphics["looks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["category"] == 100)
+        .unwrap();
+    assert_eq!(walls["cut"]["origin"], "category");
+    let through = s
+        .graphics(&anna, &project, &model, &i("VP-2"))
+        .await
+        .unwrap();
+    assert_eq!(through.rules.len(), 1);
+    assert_eq!(through.hidden, [300]);
+    let free = s
+        .graphics(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(free.rules.len(), 0);
+
+    // Filters: the view that follows the template says so; a template and a view are both read at
+    // the same path, and anything else is not found.
+    let of_view = s
+        .filters(&anna, &project, &model, &i("VP-2"))
+        .await
+        .unwrap();
+    assert_eq!(of_view.of, "view");
+    assert_eq!(of_view.follows_template.as_deref(), Some("Working"));
+    assert_eq!(of_view.filters.len(), 0);
+    assert_eq!(of_view.operators, ["equals", "contains", "greater_than"]);
+    let of_template = s
+        .filters(&anna, &project, &model, &i("VT-1"))
+        .await
+        .unwrap();
+    assert_eq!(of_template.of, "template");
+    assert!(of_template.follows_template.is_none());
+    let missing = s.filters(&anna, &project, &model, &i("VP-9")).await;
+    assert!(matches!(missing, Err(Refusal::NotFound)));
+    let wall = s.filters(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+
+    // Overrides: one element in one view, with its name.
+    edit(
+        "view.override.set",
+        json!({ "view": "VP-1", "element": "W-101", "appearance": { "halftone": true } }),
+    )
+    .await
+    .unwrap();
+    let overrides = s
+        .overrides(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(overrides.view.id, "VP-1");
+    assert_eq!(overrides.overrides.len(), 1);
+    assert_eq!(overrides.overrides[0].element, "W-101");
+    assert!(overrides.overrides[0].name.is_some());
+    assert_eq!(overrides.overrides[0].look.halftone, Some(true));
+    let other = s
+        .overrides(&anna, &project, &model, &i("VP-2"))
+        .await
+        .unwrap();
+    assert_eq!(other.overrides.len(), 0);
+    let missing = s.overrides(&anna, &project, &model, &i("VT-1")).await;
+    assert!(matches!(missing, Err(Refusal::NotFound)));
+
+    // Behind the same access as the views.
+    assert!(refused(s.view_templates(&dan, &project, &model).await));
+    assert!(refused(
+        s.template_graphics(&dan, &project, &model, &i("VT-1"))
+            .await
+    ));
+    assert!(refused(s.filters(&dan, &project, &model, &i("VP-1")).await));
+    assert!(refused(
+        s.overrides(&dan, &project, &model, &i("VP-1")).await
+    ));
+    let gone = s
+        .template_graphics(&anna, &project, &model, &i("VT-9"))
+        .await;
+    assert!(matches!(gone, Err(Refusal::NotFound)));
 }
 
 /// A drawer that only records what the server asks of it, so the read path is tested without an

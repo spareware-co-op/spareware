@@ -329,7 +329,19 @@ The element, parameter, type, hosting, family, level, wall, grid and reference p
 | `schedule.sorting` | `schedule`, `sorting` (a list of `{field, order}`) | The schedule's sorting, as a whole list; `[]` clears |
 | `schedule.delete` | `schedule` | Its pointer goes |
 | `view.graphics.set` | `view`, `category` (a category's or subcategory's number), `edge` (`cut` or `projection`), `style`: any of `pen` (a pen's number), `pattern` (a line pattern's number), `colour` (`[r, g, b]`, each 0 to 255), `fill` (`{"pattern": <name>, "colour": [r, g, b]}` or `null`; a cut only), `halftone`, `transparency` (a whole percentage, 0 to 100), `shown` | One graphics rule of the view ([construct-views' format](../construct-views/FORMAT.md)). A part not named keeps what the element looks like in that view now. Refused: an unknown category, the views category, a cut rule for a category that cannot be cut, a pen, pattern or fill pattern there is not, a value out of range, a fill on a projection, and a view that cannot hold one (a drafting view or a legend; a cut rule in a three-dimensional view) |
-| `view.graphics.clear` | `view`, `category`, `edge` (default both) | The rule, or both of the category's rules; nothing at all, and no step, when there is none |
+| `view.categories.set` | `view` or `template`, `category`, `shown` | Whether the view (or template) draws the category or subcategory at all; a tied view's change to what its template includes is refused |
+| `view.override.set` | `view`, `element`, `appearance`: any of `pen`, `pattern`, `colour`, `halftone` (a boolean), `shown` (a boolean) | One element's override in the view, merged over what it has; nothing at all when it changes nothing |
+| `view.override.clear` | `view`, `element` (default every override of the view) | The element's override, or all of the view's; nothing at all when there is none |
+| `view.filter.add` | `view` or `template`, `name`, `category`, `parameter` (ID or name), `op` (`equals`, `contains`, `greater_than`), `value` (typed text), `appearance` (as an override's) | A filter, last in the list |
+| `view.filter.set` | `view` or `template`, `filter` (its number), and any of `name`, `category`, `parameter`, `op`, `value`, `appearance` (whole) | The filter changed, in its place |
+| `view.filter.remove`, `view.filter.move` | `view` or `template`, `filter`, and `place` (0 is the first) for the move | The list |
+| `view.template.create` | `template` (the new ID), `name`, `source` (a view to take the settings from; default fresh) | A view template record, every setting included |
+| `view.template.rename`, `view.template.delete` | `template`, and `name` | The template; a delete is refused while a view is tied to it |
+| `view.template.set` | `template`, any of `scale`, `detail`, `included` (`{"scale": false}`: setting key to on or off) | The template |
+| `view.template.update` | `template`, `source` (a view) | The template's settings taken from the view's |
+| `view.template.tie`, `view.template.apply` | `view`, `template` | The view follows the template (and holds the values it shows); or copies the included settings once and stays free |
+| `view.template.untie` | `view` | The view stops following its template and keeps what it showed |
+| `view.graphics.clear` | `view` or `template`, `category`, `edge` (default both) | The rule, or both of the category's rules; nothing at all, and no step, when there is none |
 | `sheet.create` | `sheet`, `number`, `name`; `paper` (a size and orientation, or a width and height; default A1 landscape) | A sheet record ([construct-sheets' format](../construct-sheets/FORMAT.md)), and the parameter table when it lacks the standard sheet parameters. The number is unique among the sheets, case aside |
 | `sheet.set` | `sheet`, and any of `number`, `name`, `paper` | The sheet, its parameter values kept; nothing at all if it already is so. Paper that would leave a viewport's centre off it is refused |
 | `sheet.delete` | `sheet` | The sheet and every viewport on it, in one step |
