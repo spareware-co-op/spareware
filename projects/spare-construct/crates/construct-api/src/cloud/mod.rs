@@ -25,6 +25,8 @@
 //!   line or embedded in a wall, their grid lines, segments and panels, through the same log.
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
+//! - [`areas`]: area schemes, area boundary lines and areas, and the area plan views that show them,
+//!   through the same log.
 //! - [`stairs`]: making and changing stairs laid out by rules (width, direction, runs and
 //!   landings), through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
@@ -43,6 +45,7 @@
 //! - [`commands`]: a project's commands, each behind Cedar.
 
 pub mod access;
+pub mod areas;
 pub mod commands;
 pub mod curtains;
 pub mod dimensions;

@@ -21,7 +21,6 @@ server = [
     "dep:construct-walls",
     "dep:construct-slabs",
     "dep:construct-roofs",
-    "dep:construct-rooms",
     "dep:construct-stairs",
     "dep:construct-materials",
     "dep:construct-views",
@@ -57,8 +56,9 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 # A roof's layers are read from its roof type and its shape worked out (src/roofs.rs). Same
 # workspace.
 construct-roofs = { path = "../construct-roofs", optional = true }
-# A room's loop is found from the walls of its level (src/rooms.rs). Same workspace.
-construct-rooms = { path = "../construct-rooms", optional = true }
+# A room's loop is found from the walls of its level (src/rooms.rs), and lines and areas are
+# built flat (src/flat.rs) by both builders, the browser's too, so it is not optional. Same workspace.
+construct-rooms = { path = "../construct-rooms" }
 # A stair is laid out from the rise its levels give it and filled with its pieces (src/stairs.rs).
 # Same workspace.
 construct-stairs = { path = "../construct-stairs", optional = true }

@@ -256,6 +256,7 @@
     curtainRibbon(config); // the curtain wall tool beside the roof tool
     familyRibbon(config); // the family tool beside the door tool
     openingRibbon(config); // the opening and shaft tools beside the family tool
+    roomAreaRibbon(config); // the separation and area tools beside the room tool
     set('ins', 'Link', [
       { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
     ]);
@@ -1373,6 +1374,7 @@
       }
     }
     roomsAgain(entry.target, into, entry);
+    areasAgain(entry.target, into, entry);
     // A type, a parameter or a level changed, or may have: what the selected element reads may have
     // too, and so may what a recipe that reads records is filled with.
     const reads = READ_BY_RECIPES.test(entry.cmd) || UNDOING.has(entry.cmd);
@@ -1594,7 +1596,7 @@
   }
   function hasShape(record) {
     // A schedule, a sheet, a viewport and a dimension are records with no shape too: the plan draws none of them.
-    return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'sheet', 'viewport', 'dimension'].includes(record.kind);
+    return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'sheet', 'viewport', 'dimension', 'area_scheme'].includes(record.kind);
   }
   C.params = null; // { key, view } of the selected element
   C.paramsEpoch = 0; // goes up when a type or a parameter changes
@@ -1602,7 +1604,7 @@
 
   function paramsFor(piece) {
     if (!C.model) return null;
-    const key = `${piece.el.id}/${piece.hash}/${C.paramsEpoch}/${isRoom(piece.el) ? (piece.fill?.head ?? 0) : ''}`;
+    const key = `${piece.el.id}/${piece.hash}/${C.paramsEpoch}/${isRoom(piece.el) || isArea(piece.el) ? (piece.fill?.head ?? 0) : ''}`;
     if (C.params?.key !== key && C.paramsLoading !== key) {
       C.paramsLoading = key;
       api(`${modelUrl(C.model.id)}/parameters/${piece.el.id}`)
@@ -2300,6 +2302,12 @@
     if (!view || !model) return;
     C.planSeq += 1;
     const seq = C.planSeq;
+    if (C.views?.find((v) => v.id === view)?.kind === 'area_plan') {
+      // An area plan is drawn here, from the elements: the server draws floor plans only.
+      C.drawn = { view, svg: '', skipped: [], through: 0 };
+      queueDraw();
+      return;
+    }
     let drawn;
     try {
       const answer = await api(`${modelUrl(model)}/views/${encodeURIComponent(view)}/plan`);
@@ -2387,7 +2395,7 @@
     const off = canEdit() ? '' : ' disabled';
     for (const view of C.views) {
       const open = view.id === C.openView;
-      html += `<div data-view="${esc(view.id)}">${leaf('stackview', view.id, view.name, open && S.screen === 'plan', view.kind === 'floor_plan' ? 'plan' : 'cube', `title="${esc(`${view.kind}, 1:${view.scale}`)}"`)}`;
+      html += `<div data-view="${esc(view.id)}">${leaf('stackview', view.id, view.name, open && S.screen === 'plan', view.kind === 'floor_plan' || view.kind === 'area_plan' ? 'plan' : 'cube', `title="${esc(`${view.kind}, 1:${view.scale}`)}"`)}`;
       if (open) {
         const id = esc(view.id);
         html += `<div class="stack-line pad"><input class="inp" data-chg="stackviewrename" data-view="${id}" data-key="view-name:${id}" value="${esc(view.name)}" aria-label="Name of ${esc(view.name)}"${off}>`;
@@ -2404,7 +2412,7 @@
     html += `<div class="stack-line pad"><input class="inp" data-draft data-enter="stacknewview" data-key="new-view-name" placeholder="New plan name" aria-label="Name for a new plan view"${off}>`;
     html += `<select class="inp" data-chg="stacknewviewlevel" data-key="new-view-level" aria-label="Level of the new plan view"${off}>${options}</select>`;
     html += `<button class="btn pri sm" data-act="stacknewview" data-key="new-view-make"${off}>Make plan</button></div>`;
-    return html + problem('new-view');
+    return html + problem('new-view') + areaPlansHtml();
   }
 
   CHG.stacknewviewlevel = (select) => {
@@ -3076,7 +3084,7 @@
   const CLOSE_PX = 10; // a click this near a loop's first corner on screen closes the loop
   const isFloor = (record) => record?.kind === 'floor' && record?.recipe?.op === FLOOR_OP;
   /** How the plan stacks what it draws: floors under walls, walls under the rest, so a door in a wall stays on top. */
-  const drawOrder = (el) => (el.kind === 'roof' ? -2 : el.kind === 'room' ? -1 : isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
+  const drawOrder = (el) => (el.kind === 'roof' ? -2 : el.kind === 'room' || el.kind === 'area' ? -1 : isFloor(el) ? 0 : el.kind === 'wall' ? 1 : 2);
 
   DTOOLS.architecture.push(['floor', 'Floor', 'layers', 'Click the corners of its edge, then any holes. Close each on its first corner or with Enter.']);
   TOOLNAME.floor = 'floor';
@@ -4204,6 +4212,438 @@
     if (!UNDOING.has(entry.cmd) && !entry.changes.some((change) => !own.has(change.piece))) return;
     for (const [id, piece] of rooms) refill(model, into, id, piece);
   }
+
+  // --- Room separation lines, area schemes, area plans and areas ---
+  // A room separation line (`roomline.draw`) is two clicks in a floor plan: a line that bounds the
+  // rooms of its level as a wall does, so one open space is two rooms; it is moved or deleted by its
+  // ends in the properties palette (`roomline.move`, `roomline.delete`) and the rooms it touches
+  // are found again by the server, which the page draws from `/filled/<room>`. An area scheme
+  // (gross, rentable, another measure: `areascheme.add`) holds areas; an area plan (a view of
+  // kind `area_plan`, made from the Model views part of the browser) shows one scheme on one
+  // level. In it the Area boundary tool is two clicks (`arealine.draw`), the Pick walls tool takes
+  // the face of a wall nearest the click (`arealine.pick`: the line is its own and does not follow
+  // the wall), and the Area tool a click inside a loop of boundary lines (`area.place`). The page
+  // finds no loop and works out no area: `/filled/<area>` carries its loops and what it measures
+  // (`area`: state, area, perimeter in the document's units), drawn as a light fill with a tag
+  // giving name, number and area, or in words what became of it. An area plan draws the walls, the
+  // areas and boundary lines of its scheme, and no rooms; a floor plan draws no area.
+
+  const isRoomLine = (record) => record?.kind === 'room_line';
+  const isAreaLine = (record) => record?.kind === 'area_line';
+  const isArea = (record) => record?.kind === 'area';
+  const isFlatThing = (record) => isRoomLine(record) || isAreaLine(record) || isArea(record);
+  const schemeOf = (record) => record?.props?.['@area.scheme'];
+  /** The open view, when it is an area plan: `{id, kind, scheme, ...}`. */
+  const areaPlanOpen = () => {
+    const view = C.views?.find((v) => v.id === C.openView);
+    return view?.kind === 'area_plan' ? view : null;
+  };
+
+  Object.assign(WORDS, {
+    'roomline.draw': 'drew a room separation line',
+    'roomline.move': 'moved a room separation line',
+    'roomline.delete': 'deleted a room separation line',
+    'areascheme.add': 'made an area scheme',
+    'areascheme.rename': 'renamed an area scheme',
+    'areascheme.delete': 'deleted an area scheme',
+    'arealine.draw': 'drew an area boundary line',
+    'arealine.pick': 'picked an area boundary line from a wall',
+    'arealine.move': 'moved an area boundary line',
+    'arealine.delete': 'deleted an area boundary line',
+    'area.place': 'placed an area',
+    'area.rename': 'renamed an area',
+    'area.number': 'renumbered an area',
+    'area.move': 'moved an area',
+    'area.delete': 'deleted an area',
+  });
+  Object.assign(STEP_WORDS, {
+    'roomline.draw': 'drawing a room separation line',
+    'roomline.move': 'moving a room separation line',
+    'roomline.delete': 'deleting a room separation line',
+    'areascheme.add': 'making an area scheme',
+    'areascheme.rename': 'renaming an area scheme',
+    'areascheme.delete': 'deleting an area scheme',
+    'arealine.draw': 'drawing an area boundary line',
+    'arealine.pick': 'picking an area boundary line',
+    'arealine.move': 'moving an area boundary line',
+    'arealine.delete': 'deleting an area boundary line',
+    'area.place': 'placing an area',
+    'area.rename': 'renaming an area',
+    'area.number': 'renumbering an area',
+    'area.move': 'moving an area',
+    'area.delete': 'deleting an area',
+  });
+
+  DTOOLS.architecture.push(
+    ['room-line', 'Room separation', 'grid', 'Click both ends of a line that splits what the walls leave open into rooms.'],
+    ['area', 'Area', 'room', 'In an area plan, click inside a loop of area boundary lines to find an area.'],
+    ['area-line', 'Area boundary', 'grid', 'In an area plan, click both ends of an area boundary line.'],
+    ['area-pick', 'Pick walls', 'wall', 'In an area plan, click a wall to draw an area boundary line along its face.'],
+  );
+  Object.assign(TOOLNAME, {
+    'room-line': 'room separation line',
+    area: 'area',
+    'area-line': 'area boundary line',
+    'area-pick': 'area boundary from a wall',
+  });
+  const LINE_TOOLS = ['room-line', 'area-line'];
+  const AREA_TOOLS = ['area', 'area-line', 'area-pick'];
+  const FLAT_TOOLS = ['room-line', ...AREA_TOOLS];
+  const LINE = { from: null, at: null };
+  C.areaTool = { name: 'Area', number: null };
+  C.areas = null; // { key, schemes }: the model's area schemes and the next free number in each
+
+  /** The ribbon: the separation and area tools beside the Room tool, in the Room and area panel. */
+  function roomAreaRibbon(config) {
+    const panel = config.tabs?.find((tab) => tab.id === 'arch')?.panels.find((p) => p.label === 'Room and area');
+    if (!panel || panel.items.some((item) => item.a === 'architecture:room-line')) return;
+    const room = panel.items.findIndex((item) => item.a === 'architecture:room');
+    panel.items.splice(room + 1, 0, ...['room-line', 'area', 'area-line', 'area-pick'].map((tool) => DT_('architecture', tool)));
+  }
+
+  /** The model's area schemes, read now if they have not come yet: `[{id, name, measure, next_number}]`, or null until they do. */
+  function areaSchemes() {
+    if (!C.model) return null;
+    const model = C.model.id;
+    const key = `${model}/${C.head}`;
+    if (C.areas?.key !== key && C.areasLoading !== key) {
+      C.areasLoading = key;
+      api(`${modelUrl(model)}/areas`)
+        .then((view) => {
+          C.areas = { key, schemes: view.schemes };
+          drawBrowser();
+          refreshSide();
+        })
+        .catch(() => {});
+    }
+    return C.areas?.schemes ?? null;
+  }
+
+  const sizedMm = (n) => `${Math.round(n)} mm`;
+
+  /** A line's two ends in millimetres, from its record. */
+  const lineEnds = (record) => [record.recipe.args.from.map(storedMm), record.recipe.args.to.map(storedMm)];
+
+  /** A separation line or an area boundary line in the plan: a thin line with a wide invisible one over it to pick it by. */
+  function lineInPlan(piece, data) {
+    const { el: e } = piece;
+    const [[x1, y1], [x2, y2]] = lineEnds(e);
+    const chosen = S.sel === e.id;
+    const kind = isRoomLine(e) ? 'room-line' : 'area-line';
+    let group = `<line class="line-hit" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    group += `<line class="${kind}${chosen ? ' sel' : ''}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    const claim = heldClaim(e.id);
+    if (claim && claim.person !== C.me.person.id) group += `<text class="claimt" x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 200}">${esc(claim.name)} editing</text>`;
+    return `<g ${data}>${group}</g>`;
+  }
+
+  /** An area in the plan: its loops as the server filled them, a light fill, and a tag at its point. */
+  function areaInPlan(piece, data, scale) {
+    const { el: e } = piece;
+    const info = piece.fill?.area;
+    const loops = piece.fill?.recipe?.args?.loops;
+    const [px, py] = (e.recipe.args.at || [0, 0]).map(storedMm);
+    const chosen = S.sel === e.id;
+    let group = '';
+    if (Array.isArray(loops) && loops.length) {
+      const rings = loops.map((loop) => loop.map((corner) => [nearestMm(corner.at[0]), nearestMm(corner.at[1])]));
+      group += `<path class="area-fill${chosen ? ' sel' : ''}" data-holes="${rings.length - 1}" d="${rings.map(ringPath).join('')}"/>`;
+    } else {
+      group += `<circle class="area-point${chosen ? ' sel' : ''}" cx="${px}" cy="${py}" r="150"/>`;
+    }
+    const number = e.props?.['@area.number'] ?? '';
+    const last = info?.area
+      ? TX(px, py + 330, scale, esc(info.area), 'area-area', 240)
+      : TX(px, py + 330, scale, esc(capital(info?.state ?? 'not worked out yet')), 'area-state', 240);
+    group += `<g class="area-tag" data-area-tag="${esc(e.id)}">${TX(px, py - 330, scale, esc(e.name), 'area-name', 280)}${TX(px, py, scale, esc(number), 'area-number', 240)}${last}</g>`;
+    const claim = heldClaim(e.id);
+    if (claim && claim.person !== C.me.person.id) group += TX(px, py - 700, scale, `${claim.name} editing`, 'claimt', 260);
+    return `<g ${data}>${group}</g>`;
+  }
+
+  /** Whether the open view leaves an element out: an area plan draws no rooms and only its scheme's areas, a floor plan no areas. */
+  function hiddenInThisView(e) {
+    const plan = areaPlanOpen();
+    if (isArea(e) || isAreaLine(e)) return !plan || schemeOf(e) !== plan.scheme;
+    return Boolean(plan) && (isRoom(e) || isRoomLine(e));
+  }
+
+  /** The line being drawn, from its first end to the pointer. */
+  function lineSketch() {
+    if (!LINE_TOOLS.includes(S.tool) || !LINE.from) return '';
+    const [ax, ay] = LINE.from;
+    const [bx, by] = LINE.at ?? LINE.from;
+    return `<line class="${S.tool} sketch" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/>`;
+  }
+
+  const FLAT_HINTS = {
+    'room-line': () => (LINE.from ? '<b>Room separation line:</b> click its other end. Esc to stop.' : '<b>Room separation line:</b> click one end. It splits what the walls leave open into rooms.'),
+    'area-line': () => (areaPlanOpen() ? (LINE.from ? '<b>Area boundary:</b> click its other end. Esc to stop.' : '<b>Area boundary:</b> click one end.') : '<b>Area boundary:</b> open an area plan first.'),
+    'area-pick': () => (areaPlanOpen() ? '<b>Pick walls:</b> click beside a wall’s face to draw an area boundary line along it.' : '<b>Pick walls:</b> open an area plan first.'),
+    area: () => (areaPlanOpen() ? '<b>Area:</b> click inside a loop of area boundary lines. Esc to stop.' : '<b>Area:</b> open an area plan first.'),
+  };
+  const flatHint = () => FLAT_HINTS[S.tool]?.() ?? '';
+
+  /** The next free area number in the open area plan's scheme, '' until the server says. */
+  function nextAreaNumber() {
+    const scheme = areaPlanOpen()?.scheme;
+    return areaSchemes()?.find((s) => s.id === scheme)?.next_number ?? '';
+  }
+
+  function areaToolHtml() {
+    let html = typeSel('room', 'Area', '<b>New area</b>');
+    const plan = areaPlanOpen();
+    const scheme = areaSchemes()?.find((s) => s.id === plan?.scheme);
+    const number = C.areaTool.number ?? nextAreaNumber();
+    html += '<table class="props" data-area-tool>';
+    html += prow('Name', `<input class="inp" data-chg="stackareatoolname" data-key="area-tool-name" value="${esc(C.areaTool.name)}" aria-label="Name of the area">`);
+    html += prow('Number', `<input class="inp" data-chg="stackareatoolnumber" data-key="area-tool-number" value="${esc(number)}" aria-label="Number of the area">`);
+    html += prow('Scheme', esc(scheme?.name ?? (plan ? '' : 'Open an area plan')));
+    html += prow('Level', esc(levelName({ props: { '@level': levelOf() } })));
+    html += '</table>';
+    html += '<p class="pad small muted">Click inside a loop of area boundary lines. The area finds its own boundary.</p>';
+    return html + problem('area-place');
+  }
+  CHG.stackareatoolname = (input) => {
+    C.areaTool.name = input.value;
+  };
+  CHG.stackareatoolnumber = (input) => {
+    C.areaTool.number = input.value;
+  };
+
+  function lineToolHtml() {
+    const roomLine = S.tool === 'room-line';
+    let html = typeSel('grid', roomLine ? 'Room separation line' : 'Area boundary line', roomLine ? '<b>New room separation line</b>' : '<b>New area boundary line</b>');
+    html += `<p class="pad small muted" data-line-sketch="${LINE.from ? 'open' : 'empty'}">${flatHint()}</p>`;
+    return html + problem(roomLine ? 'roomline-draw' : 'arealine-draw');
+  }
+
+  function pickToolHtml() {
+    const html = typeSel('wall', 'Pick walls', '<b>Area boundary from a wall</b>');
+    return `${html}<p class="pad small muted">${flatHint()}</p>${problem('arealine-pick')}`;
+  }
+
+  /** The properties of a selected line: its two ends, to change, and Delete. */
+  function lineProperties(piece) {
+    const { el: e } = piece;
+    const [[x1, y1], [x2, y2]] = lineEnds(e);
+    const off = canEdit() ? '' : ' disabled';
+    const claim = heldClaim(e.id);
+    const roomLine = isRoomLine(e);
+    let html = typeSel('grid', roomLine ? 'Room separation line' : 'Area boundary line', `<b>${esc(roomLine ? 'Room separation line' : 'Area boundary line')}</b>`);
+    html += '<table class="props" data-flat-element>';
+    for (const [key, label, value] of [['x1', 'From x', x1], ['y1', 'From y', y1], ['x2', 'To x', x2], ['y2', 'To y', y2]]) {
+      html += prow(label, `<input class="inp" data-chg="stackflatend" data-key="flat-${key}" value="${esc(sizedMm(value))}" aria-label="${label} of the line"${off}>`);
+    }
+    html += prow('Level', esc(levelName(e)));
+    if (!roomLine) html += prow('Scheme', esc(areaSchemes()?.find((s) => s.id === schemeOf(e))?.name ?? ''));
+    html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
+    html += '</table>';
+    if (canEdit()) html += '<div class="pad"><button class="btn sm" data-act="stackdelete" data-key="flat-delete">Delete</button></div>';
+    return html + problem(`flat:${e.id}`);
+  }
+  CHG.stackflatend = () => {
+    const piece = C.elements.get(S.sel);
+    if (!piece || !canEdit() || !(isRoomLine(piece.el) || isAreaLine(piece.el))) return;
+    const field = (key) => $(`[data-flat-element] [data-key="flat-${key}"]`)?.value;
+    const args = { element: S.sel, from: [field('x1'), field('y1')], to: [field('x2'), field('y2')] };
+    manage(isRoomLine(piece.el) ? 'roomline.move' : 'arealine.move', args, `flat:${S.sel}`);
+  };
+
+  /** The properties of a selected area: name and number to change, what the server works out of it, and Delete. */
+  function areaProperties(piece) {
+    const { el: e } = piece;
+    const view = paramsFor(piece);
+    const info = piece.fill?.area;
+    const off = canEdit() ? '' : ' disabled';
+    const claim = heldClaim(e.id);
+    let html = typeSel('room', 'Area', `<b>${esc(e.name)}</b>`);
+    html += '<table class="props" data-area-element>';
+    html += prow('Name', `<input class="inp" data-chg="stackareaname" data-key="area-name" value="${esc(e.name)}" aria-label="Name of the area"${off}>`);
+    html += prow('Number', `<input class="inp" data-chg="stackareanumber" data-key="area-number" value="${esc(e.props?.['@area.number'] ?? '')}" aria-label="Number of the area"${off}>`);
+    html += prow('Scheme', esc(areaSchemes()?.find((s) => s.id === schemeOf(e))?.name ?? ''));
+    html += prow('Level', esc(levelName(e)));
+    html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
+    html += '</table>';
+    if (info?.words) html += `<div class="note small" data-area-words>${esc(info.words)}</div>`;
+    if (view) html += readOnlyTable(view);
+    if (canEdit()) html += '<div class="pad"><button class="btn sm" data-act="stackdelete" data-key="area-delete">Delete</button></div>';
+    return html + problem(`flat:${e.id}`);
+  }
+  const sendArea = (cmd, args) => {
+    if (S.sel && canEdit()) manage(cmd, { element: S.sel, ...args }, `flat:${S.sel}`);
+  };
+  CHG.stackareaname = (input) => sendArea('area.rename', { name: input.value });
+  CHG.stackareanumber = (input) => sendArea('area.number', { number: input.value });
+
+  /** The properties palette's part for these: a tool's options, or a selected line or area; '' for anything else. */
+  function flatPalette(piece) {
+    if (canEdit() && S.tool === 'area') return areaToolHtml();
+    if (canEdit() && LINE_TOOLS.includes(S.tool)) return lineToolHtml();
+    if (canEdit() && S.tool === 'area-pick') return pickToolHtml();
+    if (piece && isFlatThing(piece.el) && !(S.tool === 'wall' && canEdit())) return isArea(piece.el) ? areaProperties(piece) : lineProperties(piece);
+    return '';
+  }
+
+  /** One click of a line tool: the first end, then the second, which sends the line. */
+  function lineClick(event) {
+    const at = toModel(event);
+    const point = [snap(at.x), snap(at.y)];
+    const area = S.tool === 'area-line';
+    if (area && !areaPlanOpen()) {
+      say('Open an area plan first: area boundary lines belong to one.');
+      return;
+    }
+    if (!LINE.from) {
+      Object.assign(LINE, { from: point, at: point });
+      sketchChanged();
+      return;
+    }
+    const [from, to] = [LINE.from, point];
+    if (from[0] === to[0] && from[1] === to[1]) {
+      say('Click the other end, away from the first.');
+      return;
+    }
+    Object.assign(LINE, { from: null, at: null });
+    const ends = { from: [`${from[0]} mm`, `${from[1]} mm`], to: [`${to[0]} mm`, `${to[1]} mm`], level: levelOf() };
+    if (area) manage('arealine.draw', { element: newId('AL'), scheme: areaPlanOpen().scheme, ...ends }, 'arealine-draw');
+    else manage('roomline.draw', { element: newId('RL'), ...ends }, 'roomline-draw');
+    sketchChanged();
+  }
+
+  /** One click of the Pick walls tool: the face of the wall under the pointer, nearest the click. */
+  function pickClick(event) {
+    const plan = areaPlanOpen();
+    if (!plan) {
+      say('Open an area plan first: area boundary lines belong to one.');
+      return;
+    }
+    const wall = event.target.closest?.('[data-id]')?.dataset.id;
+    if (!wall || C.elements.get(wall)?.el.kind !== 'wall') {
+      say('Click a wall to take its face.');
+      return;
+    }
+    const at = toModel(event);
+    manage('arealine.pick', { element: newId('AL'), scheme: plan.scheme, wall, near: [`${Math.round(at.x)} mm`, `${Math.round(at.y)} mm`] }, 'arealine-pick');
+  }
+
+  /** One click of the Area tool: the point, with the scheme and level of the open area plan. */
+  function areaClick(event) {
+    const plan = areaPlanOpen();
+    if (!plan) {
+      say('Open an area plan first: areas belong to one.');
+      return;
+    }
+    const at = toModel(event);
+    const point = [snap(at.x), snap(at.y)];
+    const args = { element: newId('AR'), scheme: plan.scheme, level: levelOf(), at: [`${point[0]} mm`, `${point[1]} mm`] };
+    if (C.areaTool.name.trim() !== '') args.name = C.areaTool.name;
+    const number = C.areaTool.number ?? nextAreaNumber();
+    if (number) args.number = number;
+    manage('area.place', args, 'area-place', () => {
+      C.areaTool.number = null;
+      refreshSide();
+    });
+  }
+
+  // In the plan, before the elements' own handlers: the clicks of these tools.
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (!FLAT_TOOLS.includes(S.tool) || event.button !== 0 || S.screen !== 'plan' || !event.target.closest?.('#pv-canvas svg')) return;
+      event.stopPropagation();
+      if (!canEdit()) say('Open a model in your team’s WIP to add to it.');
+      else if (LINE_TOOLS.includes(S.tool)) lineClick(event);
+      else if (S.tool === 'area-pick') pickClick(event);
+      else areaClick(event);
+    },
+    true,
+  );
+  window.addEventListener('pointermove', (event) => {
+    if (!LINE_TOOLS.includes(S.tool) || !LINE.from || !$('#pv-canvas svg')) return;
+    const at = toModel(event);
+    LINE.at = [snap(at.x), snap(at.y)];
+    queueDraw();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && LINE.from) {
+      Object.assign(LINE, { from: null, at: null });
+      queueDraw();
+    }
+  });
+  const toolBeforeAreas = ACT.tool;
+  ACT.tool = (button) => {
+    Object.assign(LINE, { from: null, at: null });
+    toolBeforeAreas(button);
+  };
+
+  const DELETE_COMMAND = { room_line: 'roomline.delete', area_line: 'arealine.delete', area: 'area.delete' };
+  const deleteBeforeAreas = ACT.stackdelete;
+  ACT.stackdelete = () => {
+    const piece = C.elements.get(S.sel);
+    const cmd = piece && DELETE_COMMAND[piece.el.kind];
+    if (!cmd) {
+      deleteBeforeAreas();
+      return;
+    }
+    if (!canEdit()) return;
+    manage(cmd, { element: piece.el.id }, `flat:${piece.el.id}`);
+    S.sel = null;
+    refresh();
+  };
+
+  /** Every area of `into` filled and built again when an entry changed something other than areas: the boundary lines round them may have moved. */
+  function areasAgain(model, into, entry) {
+    const areas = [...into].filter(([, piece]) => isArea(piece.el));
+    if (!areas.length) return;
+    const own = new Set(areas.map(([id]) => id));
+    if (!UNDOING.has(entry.cmd) && !entry.changes.some((change) => !own.has(change.piece))) return;
+    for (const [id, piece] of areas) refill(model, into, id, piece);
+  }
+
+  /** The browser's part for area plans: a new scheme, and a new area plan of a scheme on a level. */
+  function areaPlansHtml() {
+    if (!C.model) return '';
+    const off = canEdit() ? '' : ' disabled';
+    const schemes = areaSchemes();
+    let html = '<div class="sub">Area plans</div>';
+    html += `<div class="stack-line pad"><input class="inp" data-draft data-enter="stacknewscheme" data-key="new-scheme-name" placeholder="New area scheme" aria-label="Name for a new area scheme"${off}>`;
+    html += `<select class="inp" data-key="new-scheme-measure" aria-label="What the new area scheme measures"${off}><option value="gross">Gross</option><option value="rentable">Rentable</option><option value="other">Other</option></select>`;
+    html += `<button class="btn sm" data-act="stacknewscheme" data-key="new-scheme-make"${off}>Add scheme</button></div>`;
+    html += problem('new-scheme');
+    if (!schemes?.length) return `${html}<p class="pad small faint">${schemes ? 'Add an area scheme to make an area plan.' : 'Loading.'}</p>`;
+    const chosen = schemes.some((s) => s.id === C.newAreaScheme) ? C.newAreaScheme : schemes[0].id;
+    const options = schemes.map((s) => `<option value="${esc(s.id)}"${s.id === chosen ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+    html += `<div class="stack-line pad"><input class="inp" data-draft data-enter="stacknewareaplan" data-key="new-areaplan-name" placeholder="New area plan name" aria-label="Name for a new area plan"${off}>`;
+    html += `<select class="inp" data-chg="stacknewareaplanscheme" data-key="new-areaplan-scheme" aria-label="Area scheme of the new area plan"${off}>${options}</select>`;
+    html += `<button class="btn pri sm" data-act="stacknewareaplan" data-key="new-areaplan-make"${off}>Make area plan</button></div>`;
+    return html + problem('new-areaplan');
+  }
+  CHG.stacknewareaplanscheme = (select) => {
+    C.newAreaScheme = select.value;
+  };
+  ACT.stacknewscheme = () => {
+    const name = $('#browser [data-key="new-scheme-name"]');
+    const measure = $('#browser [data-key="new-scheme-measure"]');
+    if (!name || !measure) return;
+    manage('areascheme.add', { element: newId('AS'), name: name.value, measure: measure.value }, 'new-scheme', () => {
+      const again = $('#browser [data-key="new-scheme-name"]');
+      if (again) again.value = '';
+      C.areas = null;
+      drawBrowser();
+    });
+  };
+  ACT.stacknewareaplan = () => {
+    const name = $('#browser [data-key="new-areaplan-name"]');
+    const scheme = $('#browser [data-key="new-areaplan-scheme"]');
+    const level = $('#browser [data-key="new-view-level"]');
+    if (!name || !scheme) return;
+    const args = { view: newId('VA'), kind: 'area_plan', name: name.value, level: level?.value ?? levelOf(), scheme: scheme.value };
+    manage('view.create', args, 'new-areaplan', () => {
+      const again = $('#browser [data-key="new-areaplan-name"]');
+      if (again) again.value = '';
+    });
+  };
 
   // --- Workshop's elements ---
   // Workshop, a page of its own in a frame, keeps its parts and its assembly as elements of the open
@@ -5563,6 +6003,7 @@
     if (S.tool === 'floor' || S.tool === 'roof') return floorHint();
     if (S.tool === 'stair') return stairHint();
     if (S.tool === 'room') return '<b>Room:</b> click inside a loop of walls. Choose its name, number and upper limit in the properties palette. Esc to stop.';
+    if (FLAT_TOOLS.includes(S.tool)) return flatHint();
     if (S.tool === 'curtain') return curtainHint();
     if (S.tool === 'wall') return S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.';
     if (S.tool === 'door') return '<b>Door:</b> click on a wall to place a door.';
@@ -5585,7 +6026,7 @@
     const piece = C.elements.get(S.sel);
     let html = '<div class="sec">';
     const floor = floorPalette(piece) || roofPalette(piece) || stairPalette(piece) || curtainPalette(piece);
-    const room = roomPalette(piece);
+    const room = roomPalette(piece) || flatPalette(piece);
     if (floor) {
       html += floor;
     } else if (room) {
@@ -5685,6 +6126,15 @@
       const { el: e } = piece;
       const { x, y } = placementOf(e);
       const data = `class="element" data-id="${esc(e.id)}" data-x="${x}" data-y="${y}"`;
+      if (hiddenInThisView(e)) continue;
+      if (isArea(e)) {
+        shapes += areaInPlan(piece, data, scale);
+        continue;
+      }
+      if (isRoomLine(e) || isAreaLine(e)) {
+        shapes += lineInPlan(piece, data);
+        continue;
+      }
       if (isRoom(e)) {
         shapes += roomInPlan(piece, data, scale);
         continue;
@@ -5731,6 +6181,7 @@
     shapes += dimensionsSvg(scale); // dimensions, over the elements they measure
     shapes += floorSketch();
     shapes += rectSketch();
+    shapes += lineSketch();
     const underDrawing = C.drawn?.svg && C.drawn.view === C.openView ? ' drawn' : '';
     canvas.innerHTML = `${planNote()}<svg class="dw pan${underDrawing}${S.tool !== 'select' ? ' press' : ''}" viewBox="${viewBox(S.view)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(view?.name || '')}"><rect class="paper" x="-20000" y="-20000" width="80000" height="80000"/>${shapes}</svg>`;
     for (const entry of C.arriving.splice(0)) {
@@ -5913,7 +6364,7 @@
         say(`${claim.name} is working on this.`);
         return;
       }
-      if (isRoom(C.elements.get(id)?.el) || isStair(C.elements.get(id)?.el)) return; // a room or a stair is picked, not dragged: a room's point moves by room.move, a stair by stair.direction
+      if (isRoom(C.elements.get(id)?.el) || isStair(C.elements.get(id)?.el) || isFlatThing(C.elements.get(id)?.el)) return; // a room or a stair is picked, not dragged: a room's point moves by room.move, a stair by stair.direction
       const { el } = C.elements.get(id);
       const placement = placementOf(el);
       edit('element.claim', { element: id });

@@ -15,8 +15,8 @@ use construct_phases::{
 };
 use construct_styles::default::default_model_pens;
 use construct_views::{
-    CutLine, DetailLevel, Model, PlanSetup, Point, Scale, Side, View, ViewError, ViewKind,
-    ViewRange, Views,
+    AreaPlan, CutLine, DetailLevel, Model, PlanSetup, Point, Scale, Side, View, ViewError,
+    ViewKind, ViewRange, Views,
 };
 use kit_core::Id;
 
@@ -139,6 +139,13 @@ fn every_kind_has_its_own_key_and_only_the_model_views_show_the_model() {
             level: id("l1"),
             range: ViewRange::on_level(&id("l1"), mm(2300), mm(1200), mm(0), mm(-500)),
         }),
+        ViewKind::AreaPlan(AreaPlan {
+            plan: PlanSetup {
+                level: id("l1"),
+                range: ViewRange::on_level(&id("l1"), mm(2300), mm(1200), mm(0), mm(-500)),
+            },
+            scheme: id("gross"),
+        }),
         ViewKind::Section(line),
         ViewKind::Elevation(line),
         ViewKind::ThreeD,
@@ -148,7 +155,7 @@ fn every_kind_has_its_own_key_and_only_the_model_views_show_the_model() {
     let keys: Vec<&str> = kinds.iter().map(ViewKind::key).collect();
     assert_eq!(keys, ViewKind::KEYS);
     let shows: Vec<bool> = kinds.iter().map(ViewKind::shows_model).collect();
-    assert_eq!(shows, [true, true, true, true, true, false, false]);
+    assert_eq!(shows, [true, true, true, true, true, true, false, false]);
 }
 
 #[test]

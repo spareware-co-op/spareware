@@ -113,6 +113,9 @@ pub struct FilledView {
     /// For a room, what became of it and what it measures, in the document's units.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub room: Option<construct_regen::rooms::RoomView>,
+    /// For an area, what became of it and what it measures, in the document's units.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub area: Option<construct_regen::rooms::AreaView>,
     /// For a curtain wall, its grid as it is laid out now (every line and panel, for the page to edit
     /// by), in the document's units.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,6 +137,36 @@ pub struct FilledCut {
     pub placement: construct_model::element::Placement,
     /// The opening's recipe.
     pub recipe: construct_model::geometry::Recipe,
+}
+
+impl FilledView {
+    /// What a recipe filled, or why it did not, with what else is told of the element.
+    fn of(
+        head: u64,
+        built: Result<construct_model::geometry::Recipe, construct_model::geometry::GeometryError>,
+        cut_by: Option<cloud::openings::FloorCuts>,
+        room: Option<construct_regen::rooms::RoomView>,
+        area: Option<construct_regen::rooms::AreaView>,
+    ) -> Self {
+        let (recipe, failed) = match built {
+            Ok(recipe) => (Some(recipe), None),
+            Err(failed) => (
+                None,
+                Some(json!({ "code": failed.code, "message": failed.message })),
+            ),
+        };
+        Self {
+            head,
+            recipe,
+            failed,
+            cut_by,
+            room,
+            area,
+            curtain: None,
+            placement: None,
+            cut: None,
+        }
+    }
 }
 
 const NO_DRAWER: &str =
@@ -767,7 +800,21 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                 ));
         }
         if construct_regen::rooms::is_room(&record) {
-            let worked = construct_regen::rooms::worked_at(
+            let viewed = cloud::rooms::view_of(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &context.units,
+                records::At::Now,
+            )
+            .await?;
+            if let Ok((_, room)) = viewed {
+                view.parameters.extend(room.rows());
+            }
+        }
+        if construct_regen::rooms::is_area(&record) {
+            let worked = construct_regen::rooms::area_worked_at(
                 &mut snapshot,
                 project,
                 model,
@@ -776,8 +823,8 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             )
             .await?;
             if let Ok(worked) = worked {
-                let room = construct_regen::rooms::RoomView::of(&worked, &context.units);
-                view.parameters.extend(room.rows());
+                let area = construct_regen::rooms::AreaView::of(&worked, &context.units);
+                view.parameters.extend(area.rows());
             }
         }
         // A stair's rise, risers, riser height, treads, going, total run, pitch and width, read
@@ -1025,6 +1072,24 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(cloud::rooms::read_rooms(&mut snapshot, project, model).await?)
     }
 
+    /// A model's area schemes as the page's area tools need them: each with the next free area
+    /// number.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails.
+    pub async fn areas(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::areas::AreasView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        Ok(cloud::areas::read_areas(&mut snapshot, project, model).await?)
+    }
+
     /// The problems a model holds now (a room not enclosed, two walls overlapping), worked out
     /// from the document as it stands, never stored: by kind, then by the elements involved.
     ///
@@ -1076,45 +1141,30 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         };
         let at = records::At::Now;
         if construct_regen::rooms::is_room(&record) {
+            let viewed = cloud::rooms::view_of(
+                &mut snapshot,
+                project,
+                model,
+                &record,
+                &Units::default(),
+                at,
+            )
+            .await?;
+            return Ok(match viewed {
+                Ok((worked, room)) => FilledView::of(head, worked.0, None, Some(room), None),
+                Err(failed) => FilledView::of(head, Err(failed), None, None, None),
+            });
+        }
+        if construct_regen::rooms::is_area(&record) {
             let worked =
-                construct_regen::rooms::worked_at(&mut snapshot, project, model, &record, at)
+                construct_regen::rooms::area_worked_at(&mut snapshot, project, model, &record, at)
                     .await?;
             return Ok(match worked {
                 Ok(worked) => {
-                    let room = construct_regen::rooms::RoomView::of(&worked, &Units::default());
-                    match worked.0 {
-                        Ok(recipe) => FilledView {
-                            head,
-                            recipe: Some(recipe),
-                            failed: None,
-                            cut_by: None,
-                            room: Some(room),
-                            curtain: None,
-                            placement: None,
-                            cut: None,
-                        },
-                        Err(failed) => FilledView {
-                            head,
-                            recipe: None,
-                            failed: Some(json!({ "code": failed.code, "message": failed.message })),
-                            cut_by: None,
-                            room: Some(room),
-                            curtain: None,
-                            placement: None,
-                            cut: None,
-                        },
-                    }
+                    let area = construct_regen::rooms::AreaView::of(&worked, &Units::default());
+                    FilledView::of(head, worked.0, None, None, Some(area))
                 }
-                Err(failed) => FilledView {
-                    head,
-                    recipe: None,
-                    failed: Some(json!({ "code": failed.code, "message": failed.message })),
-                    cut_by: None,
-                    room: None,
-                    curtain: None,
-                    placement: None,
-                    cut: None,
-                },
+                Err(failed) => FilledView::of(head, Err(failed), None, None, None),
             });
         }
         Ok(
@@ -1130,29 +1180,11 @@ impl<K: Kv, F: FileStore> Service<K, F> {
                     } else {
                         None
                     };
-                    let mut view = FilledView {
-                        head,
-                        recipe: Some(recipe),
-                        failed: None,
-                        cut_by,
-                        room: None,
-                        curtain: None,
-                        placement: None,
-                        cut: None,
-                    };
+                    let mut view = FilledView::of(head, Ok(recipe), cut_by, None, None);
                     add_curtain(&mut snapshot, project, model, &record, &mut view).await?;
                     view
                 }
-                Err(failed) => FilledView {
-                    head,
-                    recipe: None,
-                    failed: Some(json!({ "code": failed.code, "message": failed.message })),
-                    cut_by: None,
-                    room: None,
-                    curtain: None,
-                    placement: None,
-                    cut: None,
-                },
+                Err(failed) => FilledView::of(head, Err(failed), None, None, None),
             },
         )
     }

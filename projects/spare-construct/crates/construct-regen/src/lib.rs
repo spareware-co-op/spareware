@@ -28,6 +28,8 @@
 //! - [`roofs`]: how a roof's recipe reads its layers from its roof type and has its shape worked
 //!   out (construct-roofs), filled with the parameters by [`parameters::recipe_at`].
 //!
+//! - [`flat`]: the display shape of a room separation line, an area boundary line and an area
+//!   (jobs 6.3 and 14.6), which have no solid; both builders hand their recipes to it first.
 //! - [`room_plan`]: a room (`room`) as both builders read it: its filled recipe's loops and
 //!   height in grid steps (job 5.4). The kernel builds its volume as one solid, the stand-in one
 //!   box.
@@ -92,6 +94,7 @@ pub mod curtain_plan;
 pub mod curtains;
 pub mod datum;
 pub mod families;
+pub mod flat;
 pub mod floor_plan;
 #[cfg(feature = "server")]
 pub mod hosting;

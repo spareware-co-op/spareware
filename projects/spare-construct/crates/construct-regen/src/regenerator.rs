@@ -477,11 +477,12 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 hosted,
                 joined,
                 spaces,
+                areas,
             }) => {
                 let fed = hosts.iter().chain(&hosted).chain(&joined);
                 self.dependents(txn, project, document, fed, built).await?;
                 return self
-                    .rooms_around(txn, project, document, &change.piece, &spaces, built)
+                    .rooms_around(txn, project, document, &change.piece, &spaces, areas, built)
                     .await;
             }
             Some(Fed::Read(read)) => read,
@@ -513,8 +514,13 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
     }
 
     /// Builds again, one step deep, every room other than `changed` that stands on one of
-    /// `spaces` (the levels a changed wall or room was and is on) or whose `reads` row lists
-    /// `changed` (a wall its loop runs along), in key order ([`rooms`]).
+    /// `spaces` (the levels a changed wall, room or room separation line was and is on) or whose
+    /// `reads` row lists `changed` (a wall or line its loop runs along), in key order
+    /// ([`rooms`]); for a changed area or area boundary line (`areas`), the areas the same way.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the store, the document, what changed, where, and what it feeds: one step"
+    )]
     async fn rooms_around(
         &self,
         txn: &mut K::Txn,
@@ -522,9 +528,14 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         document: &Id,
         changed: &Id,
         spaces: &[Id],
+        areas: bool,
         built: &mut Vec<(Id, Id, Option<Id>)>,
     ) -> Result<(), StoreError> {
-        let Ok(kind) = Id::parse(construct_rooms::ROOM_KIND) else {
+        let Ok(kind) = Id::parse(if areas {
+            construct_rooms::AREA_KIND
+        } else {
+            construct_rooms::ROOM_KIND
+        }) else {
             return Ok(());
         };
         let mut again = Vec::new();
@@ -644,6 +655,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         let mut was_read = None;
         let mut was_shaft = false;
         let mut spaces: Vec<Id> = Vec::new();
+        let mut areas = false;
         if let Some(hash) = old.as_ref().map(|old| &old.input).or(before) {
             let record = kit_store::Place::Record {
                 project: project.clone(),
@@ -656,6 +668,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             }
             old_host = hosting::host_of(&before);
             was_shaft = is_shaft_record(&before);
+            areas = rooms::is_area_spatial(&before.kind);
             if rooms::is_spatial(&before.kind)
                 && let Some(level) = old.as_ref().and_then(|old| old.level.clone())
             {
@@ -692,6 +705,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                     hosts,
                     hosted: ids(&hosted)?,
                     spaces,
+                    areas,
                     joined: ids(&joined_before.into_iter().collect::<Vec<_>>())?,
                 }),
             ));
@@ -799,6 +813,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 hosts,
                 hosted: ids(&hosted)?,
                 spaces,
+                areas: areas || rooms::is_area_spatial(&element.kind),
                 joined: ids(&joined)?,
             }),
         ))
@@ -894,9 +909,12 @@ enum Fed {
         hosts: Vec<Id>,
         /// The elements hosted on it, in key order.
         hosted: Vec<Id>,
-        /// For a wall or a room ([`rooms::is_spatial`]), the levels it was and is on: the rooms
-        /// on them are built again.
+        /// For a wall, a room or a room separation line ([`rooms::is_spatial`]), the levels it was
+        /// and is on: the rooms on them are built again; for an area or an area boundary line
+        /// (`areas`), the areas on them.
         spaces: Vec<Id>,
+        /// Whether it is an area or an area boundary line ([`rooms::is_area_spatial`]).
+        areas: bool,
         /// The walls its joints read, before and now, in key order: a wall it meets, or met, is
         /// built again with it.
         joined: Vec<Id>,

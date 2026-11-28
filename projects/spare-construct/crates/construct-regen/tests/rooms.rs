@@ -730,3 +730,221 @@ async fn rooms_either_side_of_a_t_meet_the_faces_as_the_layers_join() {
         );
     }
 }
+
+/// A room separation line on level L-0 from `from` to `to`, in millimetres.
+fn separation(id: &str, from: [i64; 2], to: [i64; 2]) -> Element {
+    let point = |p: [i64; 2]| p.map(|v| Length::checked_from_mm(v).unwrap());
+    construct_rooms::room_line_record(&i(id), &i(DOCUMENT), &on("L-0"), point(from), point(to))
+        .unwrap()
+}
+
+/// A separation line splits an open plan into two rooms through the log: before it the later room
+/// is redundant, after it each room is its own loop and their `reads` rows list the line; moved,
+/// both rooms are built again; deleted, the later room is redundant again. The line's own display
+/// is its two ends, flat.
+#[tokio::test]
+async fn a_separation_line_splits_the_rooms_it_crosses_and_follows_its_moves() {
+    let stack = Stack::new().await;
+    for wall in box_walls(0) {
+        stack.put(&wall).await;
+    }
+    let up = Limit::Level(on("L-1"));
+    let kitchen = room("R-1", "101", [700, 1500], &up);
+    let living = room("R-2", "102", [3000, 1500], &up);
+    stack.stack_rooms(&kitchen, &living).await;
+    assert_eq!(
+        stack.bounds("R-1").await,
+        Ok(([100, 100, 0], [3900, 2900, 3000]))
+    );
+    assert!(
+        stack
+            .bounds("R-2")
+            .await
+            .unwrap_err()
+            .starts_with("Redundant: room 102 Kitchen")
+    );
+
+    stack
+        .put(&separation("RL-1", [1500, 0], [1500, 3000]))
+        .await;
+    assert_eq!(
+        stack.bounds("R-1").await,
+        Ok(([100, 100, 0], [1500, 2900, 3000]))
+    );
+    assert_eq!(
+        stack.bounds("R-2").await,
+        Ok(([1500, 100, 0], [3900, 2900, 3000]))
+    );
+    assert_eq!(area(&stack.room(&kitchen).await), Ok(mm2(1400 * 2800)));
+    assert_eq!(area(&stack.room(&living).await), Ok(mm2(2400 * 2800)));
+    assert!(stack.reads("R-1").await.contains(&"RL-1".to_owned()));
+    assert!(stack.reads("R-2").await.contains(&"RL-1".to_owned()));
+    // The line is built as its two ends.
+    assert_eq!(
+        stack.bounds("RL-1").await,
+        Ok(([1500, 0, 0], [1500, 3000, 0]))
+    );
+
+    // Moved 1000 mm east: both rooms are built again.
+    stack
+        .put(&separation("RL-1", [2500, 0], [2500, 3000]))
+        .await;
+    assert_eq!(
+        stack.bounds("R-1").await,
+        Ok(([100, 100, 0], [2500, 2900, 3000]))
+    );
+    assert_eq!(area(&stack.room(&living).await), Ok(mm2(1400 * 2800)));
+
+    // Deleted: one loop, so the later room is redundant again.
+    stack.delete("RL-1").await;
+    assert_eq!(
+        stack.bounds("R-1").await,
+        Ok(([100, 100, 0], [3900, 2900, 3000]))
+    );
+    assert!(
+        stack
+            .bounds("R-2")
+            .await
+            .unwrap_err()
+            .starts_with("Redundant: room 102 Kitchen")
+    );
+
+    // A line that crosses nothing is kept and changes nothing.
+    stack
+        .put(&separation("RL-2", [9000, 0], [9000, 3000]))
+        .await;
+    assert_eq!(
+        stack.bounds("R-1").await,
+        Ok(([100, 100, 0], [3900, 2900, 3000]))
+    );
+    assert_eq!(
+        stack.bounds("RL-2").await,
+        Ok(([9000, 0, 0], [9000, 3000, 0]))
+    );
+}
+
+impl Stack {
+    /// Stores two rooms.
+    async fn stack_rooms(&self, a: &Element, b: &Element) {
+        self.put(a).await;
+        self.put(b).await;
+    }
+
+    /// What becomes of an area as the document stands now.
+    async fn area(&self, record: &Element) -> construct_regen::rooms::AreaWorked {
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        rooms::area_worked_at(&mut snapshot, &i(PROJECT), &i(DOCUMENT), record, At::Now)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+}
+
+/// An area boundary line of scheme `S-1` on level L-0, in millimetres.
+fn boundary(id: &str, from: [i64; 2], to: [i64; 2]) -> Element {
+    let point = |p: [i64; 2]| p.map(|v| Length::checked_from_mm(v).unwrap());
+    construct_rooms::area_line_record(
+        &i(id),
+        &i(DOCUMENT),
+        &i("S-1"),
+        &on("L-0"),
+        point(from),
+        point(to),
+    )
+    .unwrap()
+}
+
+/// An area is found from the area boundary lines of its scheme and level alone, through the log:
+/// the gross area of an L, built flat; walls bound no area; a gap in the lines leaves it not
+/// enclosed and closing it takes it back; a line of another scheme is not read; a changed line builds
+/// the area again.
+#[tokio::test]
+async fn an_area_is_found_from_the_boundary_lines_of_its_scheme_alone() {
+    let stack = Stack::new().await;
+    for wall in box_walls(0) {
+        stack.put(&wall).await;
+    }
+    stack
+        .put(
+            &construct_rooms::scheme_record(
+                &i("S-1"),
+                &i(DOCUMENT),
+                "Gross",
+                construct_rooms::Measure::Gross,
+            )
+            .unwrap(),
+        )
+        .await;
+    let corners = [
+        [0, 0],
+        [10_000, 0],
+        [10_000, 4000],
+        [4000, 4000],
+        [4000, 8000],
+        [0, 8000],
+    ];
+    for k in 0..corners.len() {
+        stack
+            .put(&boundary(
+                &format!("AL-{k}"),
+                corners[k],
+                corners[(k + 1) % corners.len()],
+            ))
+            .await;
+    }
+    let at = |p: [i64; 2]| p.map(|v| Length::checked_from_mm(v).unwrap());
+    let gross = construct_rooms::area_record(
+        &i("A-1"),
+        &i(DOCUMENT),
+        &i("S-1"),
+        "Level 0",
+        "G1",
+        at([2000, 2000]),
+        &on("L-0"),
+    );
+    stack.put(&gross).await;
+    assert_eq!(
+        stack.bounds("A-1").await,
+        Ok(([0, 0, 0], [10_000, 8000, 0]))
+    );
+    let (filled, measures) = stack.area(&gross).await;
+    assert!(filled.is_ok());
+    let measures = measures.unwrap();
+    // 10000 x 4000 + 4000 x 4000 = 56 square metres, 36 metres round.
+    assert_eq!(measures.area, mm2(56_000_000));
+    assert_eq!(measures.perimeter, Length::from_mm(36_000));
+    assert!(stack.reads("A-1").await.contains(&"AL-3".to_owned()));
+
+    // A line removed: the area stays, not enclosed; put back, it is found again.
+    stack.delete("AL-3").await;
+    let failed = stack.bounds("A-1").await.unwrap_err();
+    assert!(
+        failed.starts_with("NotEnclosed: area G1 Level 0"),
+        "{failed}"
+    );
+    stack
+        .put(&boundary("AL-3", [4000, 4000], [4000, 8000]))
+        .await;
+    assert_eq!(
+        stack.bounds("A-1").await,
+        Ok(([0, 0, 0], [10_000, 8000, 0]))
+    );
+
+    // Walls do not bound an area, and a line of another scheme is not read.
+    let other = construct_rooms::area_line_record(
+        &i("AL-x"),
+        &i(DOCUMENT),
+        &i("S-2"),
+        &on("L-0"),
+        at([2000, 0]),
+        at([2000, 8000]),
+    )
+    .unwrap();
+    stack.put(&other).await;
+    let (_, measures) = stack.area(&gross).await;
+    assert_eq!(measures.unwrap().area, mm2(56_000_000));
+    assert_eq!(
+        stack.bounds("A-1").await,
+        Ok(([0, 0, 0], [10_000, 8000, 0]))
+    );
+}

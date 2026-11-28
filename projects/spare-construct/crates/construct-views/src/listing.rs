@@ -237,6 +237,7 @@ fn region_of(view: &View, model: &Model<'_>) -> Result<Region, ViewError> {
     Ok(match view.kind() {
         ViewKind::FloorPlan(plan) => Region::Floor(plan.range.resolve(model.levels)?),
         ViewKind::CeilingPlan(plan) => Region::Ceiling(plan.range.resolve(model.levels)?),
+        ViewKind::AreaPlan(area) => Region::Floor(area.plan.range.resolve(model.levels)?),
         ViewKind::Section(line) | ViewKind::Elevation(line) => {
             let point = |p: crate::cut::Point| (i128::from(p.x.steps()), i128::from(p.y.steps()));
             let (from, to) = (point(line.from()), point(line.to()));

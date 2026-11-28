@@ -32,9 +32,18 @@ A room is placed by a point inside it on a level. Its boundary is where the wall
 
 ## Not decided here
 
-- Rooms bounded by floors, ceilings and roofs, and room separation lines (job 6.3).
-- Room separation lines, and rooms bounded by floors, ceilings and roofs (job 6.3).
-- Area schemes and national measurement rules (A4-F7-P2, P3).
+- Rooms bounded by ceilings and roofs (job 6.8 and the roof jobs): a room is bounded by its levels and floors only until they are built.
+- National measurement rules for areas (A4-F7-P3).
+
+## Room separation lines and room volume (piece A92, job 6.3)
+
+**Status, 2026-11-28:** Decided for the build. The stored form is in the crate's [FORMAT.md](../crates/construct-rooms/FORMAT.md) ("Room separation lines", "Room volume"); area plans are in [CON-A4-F7-P2](CON-A4-F7-P2-area-plans.md).
+
+- **A line is a zero-thickness bound of the same search.** A room separation line is a segment in plan that bounds the open space on both of its sides (both directions are kept as pieces, as a wall's face is one). Inside a wall's outline or along a wall's face the wall stands and the line is dropped; two lines along each other, the earlier ID stands. A line with a loose end, and a line that ties one loop to another, is a spike or a bridge in a face's walk: it is cut out, so every loop is simple and a room's perimeter never counts a line twice. A line that crosses nothing or bounds nothing is kept: a person may draw it first and close the walls after.
+- **Any angle, rounded once.** A line's corner where it meets a wall's face or another line is a rational point, on the grid only by luck. Refusing every angled line would make them useless, so the corner is rounded once, to the nearest grid step (a half up), the same for both rooms either side of it, and the loop's area is then rounded once, a half up, instead of refused as inexact. A corner between two walls only keeps the old rule, refused by name. This is main's rule for any angle (exact rationals, each point rounded once to the nearest grid step) kept with the rationals the search has always used (dashu), so no second big-number type enters the crate.
+- **Moving or deleting a line finds the rooms it touches again** by regeneration alone: a line is a spatial kind, so every room on its level is built again, and a room whose loop runs along it lists it in its `reads` row.
+- **Volume less the floors.** A room's height is from its base to its upper limit; what floors in the space take is the integral, over the floor's plan inside the room, of `max(0, min(top, upper) - max(top - thickness, base))`. The floor above takes its thickness from the room's top, a raised floor what stands above the base, a floor at the base nothing, a sloped floor by its plane. Exact (rationals, Green's theorem over the intersections of polygons with holes, strips between lines of equal top height for a slope), rounded once at the end. It is worked out in construct-api, which can read the document's floors and their openings; the filled recipe the builders take is unchanged. A floor's slab edges are not counted (they hang below its underside) and ceilings are not built, so rooms are bounded by levels and floors only until job 6.8, which adds its underside as one more surface in the same integral.
+- **Lines are not schedule rows.** A room separation line carries the rooms category, so schedules skip it; the Rooms schedule's `Volume` field is the same net number.
 
 ## The commands and the page (second half)
 

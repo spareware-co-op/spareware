@@ -17,7 +17,7 @@
 
 use construct_api::cloud::schedules::{ScheduleTable, read_table};
 use construct_api::cloud::{Access, ProjectCommands};
-use construct_categories::{DOORS, FLOORS, ROOFS, ROOMS};
+use construct_categories::{AREAS, DOORS, FLOORS, ROOFS, ROOMS};
 use construct_model::element::Element;
 use construct_model::geometry::{Geometry, Recipe};
 use construct_model::keys::Place;
@@ -702,4 +702,74 @@ async fn quantities_are_the_products_own_exact_read_only_rows() {
     assert_eq!(table.schedule.id, "S-f");
     let record = stack.record("S-f").await.unwrap();
     assert!(!records::has_shape(&record));
+}
+
+/// An Areas schedule lists each area with its number, scheme, state and exact measures, and never
+/// the boundary lines or the separation lines that bound them; the numbers are the areas' own,
+/// found from the lines of their scheme, so the gross area of an L is 56 square metres.
+#[tokio::test]
+async fn an_areas_schedule_lists_each_area_with_its_scheme_and_exact_measures() {
+    let stack = Stack::new().await;
+    a_box(&stack).await;
+    stack
+        .edit(
+            "areascheme.add",
+            json!({ "element": "S-g", "name": "Gross", "measure": "gross" }),
+        )
+        .await
+        .unwrap();
+    let corners = [
+        ["0", "0"],
+        ["10 m", "0"],
+        ["10 m", "4 m"],
+        ["4 m", "4 m"],
+        ["4 m", "8 m"],
+        ["0", "8 m"],
+    ];
+    for k in 0..corners.len() {
+        let args = json!({ "element": format!("AL-{k}"), "scheme": "S-g", "level": "L-g",
+                           "from": corners[k], "to": corners[(k + 1) % corners.len()] });
+        stack.edit("arealine.draw", args).await.unwrap();
+    }
+    let args = json!({ "element": "A-1", "scheme": "S-g", "level": "L-g", "at": ["2 m", "2 m"],
+                       "name": "Ground gross", "number": "G1" });
+    stack.edit("area.place", args).await.unwrap();
+    // An area no lines close round, and a room separation line: neither bounds the L.
+    let args = json!({ "element": "A-2", "scheme": "S-g", "level": "L-g", "at": ["20 m", "20 m"],
+                       "name": "Open", "number": "G2" });
+    stack.edit("area.place", args).await.unwrap();
+    let args =
+        json!({ "element": "RL-1", "level": "L-g", "from": ["2 m", "0"], "to": ["2 m", "3 m"] });
+    stack.edit("roomline.draw", args).await.unwrap();
+
+    let mut args = make("S-a", "Areas", AREAS.0);
+    args["fields"] = json!([
+        "name",
+        "quantity:Number",
+        "quantity:Scheme",
+        "quantity:State",
+        "quantity:Area",
+        "quantity:Perimeter"
+    ]);
+    args["sorting"] = json!([{ "field": "name" }]);
+    stack.edit("schedule.create", args).await.unwrap();
+    let table = stack.table("S-a").await;
+    assert_eq!(elements(&table), ["A-1", "A-2"]);
+    let gross = &table.rows[0].cells;
+    assert_eq!(gross[1].shown.as_deref(), Some("G1"));
+    assert_eq!(gross[2].shown.as_deref(), Some("Gross"));
+    assert_eq!(gross[3].shown.as_deref(), Some("enclosed"));
+    let exact = construct_params::Value::Area(construct_params::Area::from_mm2(56_000_000));
+    assert_eq!(gross[4].value, Some(exact.stored()));
+    let round = construct_params::Value::Length(construct_params::Length::from_mm(36_000));
+    assert_eq!(gross[5].value, Some(round.stored()));
+    let open = &table.rows[1].cells;
+    assert_eq!(open[3].shown.as_deref(), Some("not enclosed"));
+    assert_eq!(open[4].value, None);
+
+    // Rooms' schedules do not list the separation line either.
+    let mut args = make("S-m", "Rooms", ROOMS.0);
+    args["fields"] = json!(["name"]);
+    stack.edit("schedule.create", args).await.unwrap();
+    assert_eq!(elements(&stack.table("S-m").await).len(), 0);
 }

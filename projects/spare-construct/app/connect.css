@@ -122,6 +122,18 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .sched-table thead th { position: sticky; top: 0; background: var(--page); font-weight: 600; }
 .sched-table tr.click { cursor: pointer; }
 .sched-table tr.sel td { background: var(--hover, rgba(127, 127, 127, 0.18)); }
+.dw .area-fill { fill: var(--app-tint); fill-opacity: .55; fill-rule: evenodd; stroke: none; }
+.dw .area-fill.sel { stroke: var(--app-strong); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.dw .area-point { fill: var(--danger-tint); stroke: var(--danger); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .area-point.sel { stroke: var(--app-strong); stroke-width: 1.5px; }
+.dw .area-tag text { pointer-events: none; fill: var(--ink-2); }
+.dw .area-tag .area-name { font-weight: 650; fill: var(--ink); }
+.dw .area-tag .area-state { fill: var(--danger); }
+.dw .room-line, .dw .area-line { stroke: var(--app-strong); stroke-width: 1.5px; vector-effect: non-scaling-stroke; stroke-dasharray: 8 4; fill: none; }
+.dw .area-line { stroke-dasharray: none; stroke-width: 2px; }
+.dw .room-line.sel, .dw .area-line.sel { stroke: var(--danger); stroke-width: 2.5px; }
+.dw .room-line.sketch, .dw .area-line.sketch { opacity: .6; pointer-events: none; }
+.dw .line-hit { stroke: transparent; stroke-width: 12px; vector-effect: non-scaling-stroke; fill: none; }
 /* Linear dimensions: the open view's own are picked by a band along the offset line; the text is never picked. */
 .dw .dim.own { cursor: pointer; }
 .dw .dim-hit { fill: none; stroke: transparent; stroke-width: 10px; vector-effect: non-scaling-stroke; }

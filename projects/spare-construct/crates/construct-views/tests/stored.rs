@@ -11,8 +11,8 @@ use construct_model::element::{Element, Placement, Reference, Want};
 use construct_params::Length;
 use construct_phases::{DesignOptions, ElementStaging, PhaseFilter, PhaseList, ViewSettings};
 use construct_views::{
-    CATEGORY_KEY, CutLine, DetailLevel, PlanSetup, Point, RANGE_KEYS, Scale, Side, VIEW_KIND, View,
-    ViewError, ViewKind, ViewRange, Views,
+    AreaPlan, CATEGORY_KEY, CutLine, DetailLevel, PlanSetup, Point, RANGE_KEYS, Scale, Side,
+    VIEW_KIND, View, ViewError, ViewKind, ViewRange, Views,
 };
 use kit_core::Id;
 
@@ -359,4 +359,45 @@ fn the_same_view_is_the_same_bytes_every_time() {
     let one = serde_json::to_vec(&section().to_record(&id("DOC-1"))).unwrap();
     let two = serde_json::to_vec(&section().to_record(&id("DOC-1"))).unwrap();
     assert_eq!(one, two);
+}
+
+/// An area plan is a plan of a level with the area scheme it shows: stored beside the plan's own
+/// keys, read back as written, and its level tie counted like a plan's.
+#[test]
+fn an_area_plan_holds_its_scheme_and_reads_back_as_written() {
+    let view = View::new(
+        id("V-3"),
+        "Ground gross areas",
+        Scale::new(100).unwrap(),
+        DetailLevel::Medium,
+        ViewKind::AreaPlan(AreaPlan {
+            plan: PlanSetup {
+                level: id("L-1"),
+                range: ViewRange::on_level(&id("L-1"), mm(2300), mm(1200), mm(0), mm(-500)),
+            },
+            scheme: id("S-gross"),
+        }),
+        staging(),
+    )
+    .unwrap();
+    let record = view.to_record(&id("DOC-1"));
+    assert_eq!(
+        record.props.get("@area.scheme").map(String::as_str),
+        Some("S-gross")
+    );
+    assert_eq!(
+        record.props.get("@view.kind").map(String::as_str),
+        Some("choice:area_plan")
+    );
+    assert_eq!(View::from_record(&record).unwrap(), view);
+    assert_eq!(
+        view.kind().plan().map(|plan| plan.level.clone()),
+        Some(id("L-1"))
+    );
+    assert_eq!(view.kind().area_scheme(), Some(&id("S-gross")));
+    assert_eq!(plan().kind().area_scheme(), None);
+    // Without its scheme the record is refused, never repaired.
+    let mut bare = record;
+    bare.props.remove("@area.scheme");
+    assert!(View::from_record(&bare).is_err());
 }

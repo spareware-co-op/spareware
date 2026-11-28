@@ -35,7 +35,7 @@
 //! crop and a plan's range with each view; a viewport's size on its sheet is the crop's when it is
 //! on.
 //!
-//! The values: `kind` is one of `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`,
+//! The values: `kind` is one of `floor_plan`, `ceiling_plan`, `area_plan` (which also takes `scheme`, an area scheme's ID), `section`, `elevation`, `three_d`,
 //! `drafting`, `legend`. `scale` is the `n` of 1:n, a whole number from 1 to 1,000,000 (default
 //! [`DEFAULT_SCALE`]); `detail` is `coarse`, `medium` or `fine` (default medium). `level` is a
 //! level's ID. A plan's `range` holds any of `top`, `cut`, `bottom`, `depth`, each
@@ -85,9 +85,9 @@ use construct_regen::levels::read_levels;
 use construct_regen::parameters as records;
 use construct_styles::{Colour, Edge, LineStyles, ObjectStyles, PatternId};
 use construct_views::{
-    Crop, CutLine, DetailLevel, Fill, Model, PlanSetup, Point, Region, RuleStyle, Scale, Side, Tie,
-    VIEW_KIND, View, ViewElement, ViewError, ViewKind, ViewRange, Views, edge_from_key, list,
-    resolve,
+    AreaPlan, Crop, CutLine, DetailLevel, Fill, Model, PlanSetup, Point, Region, RuleStyle, Scale,
+    Side, Tie, VIEW_KIND, View, ViewElement, ViewError, ViewKind, ViewRange, Views, edge_from_key,
+    list, resolve,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, Edit};
@@ -142,6 +142,9 @@ struct Args {
     kind: Option<String>,
     name: Option<String>,
     level: Option<String>,
+    /// An area plan's area scheme: its ID.
+    #[serde(default, with = "kit_ops::id::option")]
+    scheme: Option<Id>,
     scale: Option<u32>,
     detail: Option<String>,
     range: Option<RangeArgs>,
@@ -385,6 +388,9 @@ pub struct ViewSummary {
     pub kind: String,
     /// The level a plan is of, if it is one.
     pub level: Option<String>,
+    /// The area scheme an area plan shows, if it is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
     /// That level's name.
     pub level_name: Option<String>,
     /// The `n` of 1:n.
@@ -523,6 +529,7 @@ pub fn summary(view: &View, levels: &Levels) -> ViewSummary {
             .and_then(|id| levels.resolve(id))
             .map(|found: Level| found.name().to_owned()),
         level: level.map(|id| id.to_string()),
+        scheme: view.kind().area_scheme().map(ToString::to_string),
         scale: view.scale().denominator(),
         detail: view.detail().key().to_owned(),
     }
@@ -919,7 +926,7 @@ fn line_of(args: &Args, base: Option<&CutLine>) -> Result<CutLine, String> {
 
 /// Refuses an argument the kind has no use for, naming the kind.
 fn fit(args: &Args, key: &str) -> Result<(), String> {
-    let plan = matches!(key, "floor_plan" | "ceiling_plan");
+    let plan = matches!(key, "floor_plan" | "ceiling_plan" | "area_plan");
     let cut = matches!(key, "section" | "elevation");
     let words = key.replace('_', " ");
     if !plan && (args.level.is_some() || args.range.is_some()) {
@@ -929,6 +936,9 @@ fn fit(args: &Args, key: &str) -> Result<(), String> {
             "view range"
         };
         return Err(format!("A {words} has no {what}."));
+    }
+    if key != "area_plan" && args.scheme.is_some() {
+        return Err(format!("A {words} has no area scheme."));
     }
     let line_given =
         args.from.is_some() || args.to.is_some() || args.look.is_some() || args.depth.is_some();
@@ -944,6 +954,14 @@ fn kind_of(args: &Args, key: &str, base: Option<&ViewKind>) -> Result<ViewKind, 
     Ok(match key {
         "floor_plan" => ViewKind::FloorPlan(plan_of(args, base.and_then(ViewKind::plan))?),
         "ceiling_plan" => ViewKind::CeilingPlan(plan_of(args, base.and_then(ViewKind::plan))?),
+        "area_plan" => ViewKind::AreaPlan(AreaPlan {
+            plan: plan_of(args, base.and_then(ViewKind::plan))?,
+            scheme: args
+                .scheme
+                .clone()
+                .or_else(|| base.and_then(ViewKind::area_scheme).cloned())
+                .ok_or_else(|| "An area plan needs an area scheme (scheme).".to_owned())?,
+        }),
         "section" => ViewKind::Section(line_of(args, base.and_then(ViewKind::cut_line))?),
         "elevation" => ViewKind::Elevation(line_of(args, base.and_then(ViewKind::cut_line))?),
         "three_d" => ViewKind::ThreeD,
@@ -985,6 +1003,14 @@ async fn create<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     };
     if run.current(view.id()).await?.is_some() {
         return Ok(Err("That element already exists.".to_owned()));
+    }
+    if let Some(scheme) = view.kind().area_scheme() {
+        let known = run.current(scheme).await?;
+        if !known.is_some_and(|(_, record)| construct_rooms::is_scheme(&record)) {
+            return Ok(Err(format!(
+                "{scheme} is not an area scheme of this model: make one first."
+            )));
+        }
     }
     let mut views = world.views.clone();
     if let Err(e) = views.add(view.clone()) {

@@ -108,6 +108,25 @@ fn a_room_that_is_not_enclosed_is_a_warning_naming_it() {
 }
 
 #[test]
+fn an_area_that_is_not_enclosed_is_a_warning_naming_it() {
+    let m = Model {
+        areas: vec![
+            room("A-1", RoomState::NotEnclosed),
+            room("A-2", RoomState::Enclosed),
+        ],
+        ..Model::default()
+    };
+    let list = warnings(&m);
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].kind, "area.not_enclosed");
+    assert_eq!(list[0].elements, [i("A-1")]);
+    assert_eq!(
+        list[0].words,
+        "Room A-1 is not enclosed: the area boundary lines round its point do not close"
+    );
+}
+
+#[test]
 fn a_warning_keeps_its_identity_through_an_unrelated_edit_and_leaves_when_fixed() {
     let open = model(
         vec![rect("W-1", "L1", [0, 0], [100, 10])],
@@ -269,6 +288,7 @@ fn every_kind_is_one_entry_with_its_own_name() {
             "dimension.reference_missing",
             "dimension.reference_parallel",
             "room.not_enclosed",
+            "area.not_enclosed",
             "room.redundant",
             "wall.overlap",
             "insert.crosses_joined_wall"

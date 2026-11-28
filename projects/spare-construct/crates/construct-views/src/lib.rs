@@ -13,8 +13,8 @@
 //!   settings; written as an element record of kind [`VIEW_KIND`] in the views category and read
 //!   back strictly; [`View::check`] asks whether it stands in a [`Model`]; [`View::pen_width`]
 //!   picks a pen's printed width by the view's scale.
-//! - [`ViewKind`]: the seven kinds, each holding only its own data: [`PlanSetup`] (a level and a
-//!   [`ViewRange`]) for the two plans, a [`CutLine`] for a section or an elevation.
+//! - [`ViewKind`]: the eight kinds, each holding only its own data: [`PlanSetup`] (a level and a
+//!   [`ViewRange`]) for the two plans, [`AreaPlan`] (a plan setup and an area scheme) for an area plan, a [`CutLine`] for a section or an elevation.
 //! - [`ViewRange`], [`Heights`]: a plan's top, cut plane, bottom and view depth, each a level and an
 //!   offset (construct-levels' [`Tie`]); [`ViewRange::resolve`] gives the heights, in order.
 //! - [`CutLine`], [`Point`], [`Side`]: a section's or elevation's line, direction and depth.
@@ -77,12 +77,12 @@ pub use graphics::{
     FILL_PATTERNS, Fill, GRAPHICS_FORMAT_VERSION, GRAPHICS_KEY, Graphics, MOST_TRANSPARENCY, Rule,
     RuleStyle, check_style, edge_from_key, edge_key,
 };
-pub use kind::{DetailLevel, PlanSetup, ViewKind};
+pub use kind::{AreaPlan, DetailLevel, PlanSetup, ViewKind};
 pub use listing::{How, Listing, Model, Shown, ViewElement, list};
 pub use range::{Heights, ViewRange};
 pub use resolve::{Origin, Resolved, resolve};
 pub use view::{
-    CATEGORY_KEY, DETAIL_KEY, FAR_KEY, KIND_KEY, LINE_KEYS, LOOK_KEY, PHASING_KEY, PLAN_LEVEL_KEYS,
-    RANGE_KEYS, SCALE_KEY, STAGING_KEY, VIEW_KIND, View, view_recipe,
+    AREA_SCHEME_KEY, CATEGORY_KEY, DETAIL_KEY, FAR_KEY, KIND_KEY, LINE_KEYS, LOOK_KEY, PHASING_KEY,
+    PLAN_LEVEL_KEYS, RANGE_KEYS, SCALE_KEY, STAGING_KEY, VIEW_KIND, View, view_recipe,
 };
 pub use views::Views;

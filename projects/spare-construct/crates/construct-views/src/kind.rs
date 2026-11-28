@@ -52,6 +52,16 @@ pub struct PlanSetup {
     pub range: ViewRange,
 }
 
+/// What an area plan holds: a plan's level and range, and the area scheme whose areas and area
+/// boundary lines it shows and draws (job 14.6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AreaPlan {
+    /// The level and range, as a floor plan's.
+    pub plan: PlanSetup,
+    /// The ID of the area scheme (an element of construct-rooms' area scheme kind).
+    pub scheme: Id,
+}
+
 /// The kind of a view, with the data of that kind.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ViewKind {
@@ -59,6 +69,9 @@ pub enum ViewKind {
     FloorPlan(PlanSetup),
     /// A plan looking up at what is above the cut plane (a reflected ceiling plan).
     CeilingPlan(PlanSetup),
+    /// A plan of one level in which the areas of one area scheme are drawn and found, with their
+    /// boundary lines and the walls to pick them from.
+    AreaPlan(AreaPlan),
     /// A vertical cut along a line.
     Section(CutLine),
     /// A view of the faces of the building from a plane in front of them.
@@ -78,6 +91,7 @@ impl ViewKind {
         match self {
             Self::FloorPlan(_) => "floor_plan",
             Self::CeilingPlan(_) => "ceiling_plan",
+            Self::AreaPlan(_) => "area_plan",
             Self::Section(_) => "section",
             Self::Elevation(_) => "elevation",
             Self::ThreeD => "three_d",
@@ -87,9 +101,10 @@ impl ViewKind {
     }
 
     /// Every key a kind is stored under.
-    pub const KEYS: [&'static str; 7] = [
+    pub const KEYS: [&'static str; 8] = [
         "floor_plan",
         "ceiling_plan",
+        "area_plan",
         "section",
         "elevation",
         "three_d",
@@ -97,11 +112,21 @@ impl ViewKind {
         "legend",
     ];
 
-    /// The plan's level and range, for a floor plan or a ceiling plan.
+    /// The plan's level and range, for a floor plan, a ceiling plan or an area plan.
     #[must_use]
     pub fn plan(&self) -> Option<&PlanSetup> {
         match self {
             Self::FloorPlan(plan) | Self::CeilingPlan(plan) => Some(plan),
+            Self::AreaPlan(area) => Some(&area.plan),
+            _ => None,
+        }
+    }
+
+    /// The area scheme an area plan shows.
+    #[must_use]
+    pub fn area_scheme(&self) -> Option<&Id> {
+        match self {
+            Self::AreaPlan(area) => Some(&area.scheme),
             _ => None,
         }
     }

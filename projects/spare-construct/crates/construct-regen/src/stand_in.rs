@@ -1194,7 +1194,7 @@ fn box_names() -> Vec<FaceName> {
 ///
 /// As [`Geometry::build`]: a recipe it cannot build has no faces.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
-    if construct_openings::is_void(recipe) {
+    if construct_openings::is_void(recipe) || crate::flat::is_flat(recipe) {
         return Ok(Vec::new());
     }
     if families::is_instance(recipe) {
@@ -1572,6 +1572,9 @@ impl Geometry for Boxes {
         }
         if let Some(void) = crate::voids::build(recipe) {
             return void;
+        }
+        if let Some(flat) = crate::flat::build(recipe) {
+            return flat;
         }
         if floor_plan::is_floor(recipe) {
             return floor(recipe);

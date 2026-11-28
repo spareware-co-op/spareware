@@ -19,12 +19,13 @@ A view is an element record like any other (the records in the database are the 
 | `props` key | On | Value |
 | --- | --- | --- |
 | `@category` | Every view | `7000`, the views category ([construct-categories](../construct-categories/FORMAT.md)) |
-| `@view.kind` | Every view | `choice:` and one of `floor_plan`, `ceiling_plan`, `section`, `elevation`, `three_d`, `drafting`, `legend` |
+| `@view.kind` | Every view | `choice:` and one of `floor_plan`, `ceiling_plan`, `area_plan`, `section`, `elevation`, `three_d`, `drafting`, `legend` |
 | `@view.scale` | Every view | `whole:` and the `n` of 1:n, a whole number from 1 to 1,000,000, no leading zero: `whole:100` is 1:100 |
 | `@view.detail` | Every view | `choice:coarse`, `choice:medium` or `choice:fine` |
 | `@staging` | Every view | The view's own staging fields, as the [phases format](../construct-phases/FORMAT.md) spells them, as JSON text with the keys in this order: `{"created":"ph-a","demolished":null,"design_option":null}` |
 | `@view.phasing` | A view with phase settings | The phases format's view settings as JSON text, keys in this order: `{"phase":"ph-b","filter":"show_new","choices":[{"set":"s","option":"o"}]}`; `choices` sorted by set ID. A view without the key shows every element whatever its phase |
-| `@level`, `@level.offset` | A floor plan or a ceiling plan | The level the plan is of, and `length:q0:0`: the tie construct-levels writes for any element, so a level is not deleted while a plan is of it |
+| `@level`, `@level.offset` | A floor plan, a ceiling plan or an area plan | The level the plan is of, and `length:q0:0`: the tie construct-levels writes for any element, so a level is not deleted while a plan is of it |
+| `@area.scheme` | An area plan | The ID of the area scheme whose areas and area boundary lines it shows and draws: the same key an area and an area boundary line carry their scheme under ([the rooms format](../construct-rooms/FORMAT.md), "Areas"). An area plan without it is refused on reading |
 | `@view.range.top`, `@view.range.cut`, `@view.range.bottom`, `@view.range.depth` | A plan | The ID of the level each height is tied to |
 | the same with `.offset` after the key | A plan | The height's offset from that level in stored length text (`length:q0:7680000` is 1,200 mm). Each pair is written together |
 | `@view.line.x0`, `@view.line.y0`, `@view.line.x1`, `@view.line.y1` | A section or an elevation | The first and second end of its line in the plan, stored length text, in the project's frame |

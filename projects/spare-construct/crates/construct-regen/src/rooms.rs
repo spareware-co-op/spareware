@@ -29,6 +29,17 @@
 //!   ([`is_spatial`] says which kinds do this), one step deep; a room that changes builds again the
 //!   other rooms of its levels, since which of two rooms in one loop comes first may change.
 //!
+//! - Room separation lines (job 6.3, kind `room_line`) on the room's level are read as walls are:
+//!   each is a [`Bound`] of construct-rooms' `Outline::Line`, by its two ends, so a room is bounded
+//!   by a line as it is by a wall, a line that bounds nothing changes nothing, and a line that is
+//!   moved or deleted builds again every room on its level ([`is_spatial`]). Their IDs are listed
+//!   in a room's `reads` row beside the walls ([`walls_read`]) when the room's loop runs along
+//!   one.
+//! - Areas (job 14.6, kind `area`) are found the same way from the area boundary lines
+//!   (`area_line`) of their level and scheme alone ([`area_bounds_on`], [`area_outcome`],
+//!   [`area_filled_at`]): walls bound no area. A changed area or area boundary line builds again
+//!   the areas of its level ([`is_area_spatial`]).
+//!
 //! Depends on construct-rooms (the search and the record), construct-levels (ties),
 //! construct-model, construct-params and kit-store, and on [`crate::parameters`] and
 //! [`crate::levels`] for a wall's filled recipe and [`crate::joins`] for its joints. Interim: none
@@ -46,14 +57,15 @@ use construct_model::geometry::{GeometryError, Recipe};
 use construct_model::keys::list;
 use construct_params::{Definition, Holder, Kind, Length, Units, Value};
 use construct_rooms::{
-    Bound, HEIGHT_ARG, LOOPS_ARG, Measures, Neighbour, Outcome, Outline, ROOM_KIND, RoomError,
-    assess, at_of, reads_walls,
+    AREA_KIND, AREA_LINE_KIND, Bound, Flat, HEIGHT_ARG, LOOPS_ARG, Measures, Neighbour, Outcome,
+    Outline, ROOM_KIND, ROOM_LINE_KIND, RoomError, area_at_of, assess, assess_flat, at_of, ends_of,
+    reads_lines, reads_walls, scheme_of,
 };
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
 use serde::Serialize;
 
-pub use construct_rooms::is_room;
+pub use construct_rooms::{is_area, is_room};
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
 
@@ -71,11 +83,18 @@ fn refused(error: &RoomError) -> GeometryError {
     failure(error.code(), error.to_string())
 }
 
-/// Whether a change to an element of this kind builds the rooms round it again: a wall's (its
-/// outline bounds them) or a room's (which of two rooms in one loop comes first).
+/// Whether a change to an element of this kind builds the rooms or areas round it again: a wall's
+/// or a room separation line's (they bound rooms), a room's (which of two rooms in one loop comes
+/// first), an area boundary line's or an area's (the same for areas: [`is_area_spatial`]).
 #[must_use]
 pub fn is_spatial(kind: &str) -> bool {
-    kind == WALL_KIND || kind == ROOM_KIND
+    kind == WALL_KIND || kind == ROOM_KIND || kind == ROOM_LINE_KIND || is_area_spatial(kind)
+}
+
+/// Whether a change to an element of this kind builds the areas of its level again.
+#[must_use]
+pub fn is_area_spatial(kind: &str) -> bool {
+    kind == AREA_KIND || kind == AREA_LINE_KIND
 }
 
 /// The walls a room's filled recipe runs along, by ID, ascending: its `reads` row lists them.
@@ -83,7 +102,7 @@ pub fn is_spatial(kind: &str) -> bool {
 #[must_use]
 pub fn walls_read(filled: &Recipe) -> BTreeSet<String> {
     let mut walls = BTreeSet::new();
-    if !construct_rooms::is_room_recipe(filled) {
+    if !construct_rooms::is_room_recipe(filled) && !construct_rooms::is_area_recipe(filled) {
         return walls;
     }
     let loops = filled.args.get(LOOPS_ARG).and_then(Json::as_array);
@@ -308,6 +327,49 @@ pub async fn bounds_on<R: Reader>(
             });
         }
     }
+    for line in of_kind(reader, project, document, ROOM_LINE_KIND, at).await? {
+        if level_of(&line).as_ref() == Some(level)
+            && let Some(bound) = line_bound(&line)
+        {
+            bounds.push(bound);
+        }
+    }
+    Ok(bounds)
+}
+
+/// A line record as a bound of the search, moved by its placement into the model's plan; `None`
+/// for a record that does not read as a line (it is passed over, as a wall that does not build is).
+fn line_bound(line: &Element) -> Option<Bound> {
+    let ends = ends_of(&line.recipe).ok()?;
+    let moved = moved(&ends, &line.placement)?;
+    Some(Bound {
+        wall: line.id.clone(),
+        outline: Outline::Line([*moved.first()?, *moved.get(1)?]),
+    })
+}
+
+/// The area boundary lines of `scheme` on `level` as the document stands `at` that state, as
+/// bounds of the search: all that bounds an area (walls bound none).
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn area_bounds_on<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    level: &Id,
+    scheme: &Id,
+    at: At,
+) -> Result<Vec<Bound>, StoreError> {
+    let mut bounds = Vec::new();
+    for line in of_kind(reader, project, document, AREA_LINE_KIND, at).await? {
+        if level_of(&line).as_ref() == Some(level)
+            && scheme_of(&line).as_ref() == Some(scheme)
+            && let Some(bound) = line_bound(&line)
+        {
+            bounds.push(bound);
+        }
+    }
     Ok(bounds)
 }
 
@@ -448,6 +510,19 @@ pub async fn filled<R: Reader>(
     recipe: Recipe,
     level: Option<&Id>,
 ) -> Result<Result<Recipe, GeometryError>, StoreError> {
+    if reads_lines(&recipe) {
+        let (filled, _) = area_filled_at(
+            reader,
+            project,
+            document,
+            room,
+            recipe,
+            level,
+            At::Regenerated,
+        )
+        .await?;
+        return Ok(filled);
+    }
     let (filled, _) = filled_at(
         reader,
         project,
@@ -644,6 +719,255 @@ pub async fn worked_at<R: Reader>(
     )
     .await?))
 }
+
+/// What becomes of the area `area`, its recipe `recipe`, standing on `level` in its scheme: its loop
+/// among the area boundary lines of that level and scheme and the other areas on it, as the module
+/// header says. The inner error is a refusal, in words, under its code.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn area_outcome<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    area: &Element,
+    recipe: &Recipe,
+    level: Option<&Id>,
+    at: At,
+) -> Result<Result<Outcome<Flat>, GeometryError>, StoreError> {
+    let Some(level) = level else {
+        return Ok(Err(failure(
+            "NoLevel",
+            format!("area {}: an area stands on a level", area.name),
+        )));
+    };
+    let Some(scheme) = scheme_of(area) else {
+        return Ok(Err(failure(
+            "NoScheme",
+            format!("area {}: an area is measured in an area scheme", area.name),
+        )));
+    };
+    let point = match area_at_of(recipe) {
+        Ok(point) => point,
+        Err(e) => return Ok(Err(refused(&e))),
+    };
+    let bounds = area_bounds_on(reader, project, document, level, &scheme, at).await?;
+    let mut others = Vec::new();
+    for other in of_kind(reader, project, document, AREA_KIND, at).await? {
+        if other.id == area.id
+            || level_of(&other).as_ref() != Some(level)
+            || scheme_of(&other).as_ref() != Some(&scheme)
+        {
+            continue;
+        }
+        if let Ok(at) = area_at_of(&other.recipe) {
+            others.push(Neighbour {
+                id: other.id.clone(),
+                at,
+            });
+        }
+    }
+    Ok(assess_flat(&area.id, point, &bounds, &others).map_err(|e| refused(&e)))
+}
+
+/// What becomes of an area as the document stands `at` that state, from its record alone: its level
+/// read, then [`area_outcome`]. What a command or a warning reads by.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails. The inner error is a level that cannot be read, or a
+/// refusal, in words.
+pub async fn area_found_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    area: &Element,
+    at: At,
+) -> Result<Result<Outcome<Flat>, GeometryError>, StoreError> {
+    let placed = match levels::placed(reader, project, document, area, at).await? {
+        Ok(placed) => placed,
+        Err(e) => return Ok(Err(e)),
+    };
+    area_outcome(
+        reader,
+        project,
+        document,
+        area,
+        &area.recipe,
+        placed.level.as_ref(),
+        at,
+    )
+    .await
+}
+
+/// An area's loop worked out at the state asked, with what it measures: the recipe the builders
+/// take (or the build failure, in words), and the measures when it is enclosed.
+pub type AreaWorked = (Result<Recipe, GeometryError>, Option<Flat>);
+
+/// The recipe an area is built from: `{"area":"lines"}` filled with its loop ([`area_outcome`])
+/// as the document stands `at` the state asked, with the area's measures. A recipe that reads no
+/// lines is returned as it is.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn area_filled_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    area: &Element,
+    recipe: Recipe,
+    level: Option<&Id>,
+    at: At,
+) -> Result<AreaWorked, StoreError> {
+    if !reads_lines(&recipe) {
+        return Ok((Ok(recipe), None));
+    }
+    let outcome = area_outcome(reader, project, document, area, &recipe, level, at).await?;
+    let who = match construct_rooms::area_number_of(area) {
+        Some(number) if !number.is_empty() => format!("area {number} {}", area.name),
+        _ => format!("area {}", area.name),
+    };
+    Ok(match outcome {
+        Ok(Outcome::Enclosed { found, measures }) => (
+            construct_rooms::filled_area(&recipe, &found).map_err(|e| refused(&e)),
+            Some(measures),
+        ),
+        Ok(Outcome::NotEnclosed) => (
+            Err(failure(
+                "NotEnclosed",
+                format!(
+                    "{who} is not enclosed: the area boundary lines round its point do not close"
+                ),
+            )),
+            None,
+        ),
+        Ok(Outcome::Redundant { first }) => (
+            Err(failure(
+                "Redundant",
+                format!("{who} is redundant: area {first} is already in the same loop"),
+            )),
+            None,
+        ),
+        Err(e) => (Err(e), None),
+    })
+}
+
+/// What becomes of an area as the document stands `at` that state, from its record alone: its
+/// level read, then [`area_filled_at`]. What the page is told an area is built from. The inner
+/// error is a level that cannot be read, in words.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn area_worked_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    area: &Element,
+    at: At,
+) -> Result<Result<AreaWorked, GeometryError>, StoreError> {
+    let placed = match levels::placed(reader, project, document, area, at).await? {
+        Ok(placed) => placed,
+        Err(e) => return Ok(Err(e)),
+    };
+    Ok(Ok(area_filled_at(
+        reader,
+        project,
+        document,
+        area,
+        area.recipe.clone(),
+        placed.level.as_ref(),
+        at,
+    )
+    .await?))
+}
+
+/// What a page is told of an area besides its record: its state and what it measures, in the
+/// document's units. Worked out each time it is read, never stored.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct AreaView {
+    /// `enclosed`, `not enclosed`, `redundant`, or `refused`.
+    pub state: &'static str,
+    /// Why the area has no measure, in words; empty when it is enclosed.
+    pub words: String,
+    /// Its area, as `12.5 m²`; none unless enclosed.
+    pub area: Option<String>,
+    /// Its perimeter; none unless enclosed.
+    pub perimeter: Option<String>,
+}
+
+impl AreaView {
+    /// The view of an area from what became of it ([`area_filled_at`]), shown in `units`.
+    #[must_use]
+    pub fn of(worked: &AreaWorked, units: &Units) -> Self {
+        let (filled, measures) = worked;
+        let shown = |definition: Option<Definition>, value: Value| {
+            definition.and_then(|def| def.format(&value, units).ok())
+        };
+        let (state, words) = match filled {
+            Ok(_) => ("enclosed", String::new()),
+            Err(failed) if failed.code == "NotEnclosed" => ("not enclosed", failed.message.clone()),
+            Err(failed) if failed.code == "Redundant" => ("redundant", failed.message.clone()),
+            Err(failed) => ("refused", failed.message.clone()),
+        };
+        let measures = measures.filter(|_| filled.is_ok());
+        Self {
+            state,
+            words,
+            area: measures.and_then(|m| {
+                shown(
+                    definition(AREA_AREA, "Area", Kind::Area),
+                    Value::Area(m.area),
+                )
+            }),
+            perimeter: measures.and_then(|m| {
+                shown(
+                    definition(AREA_PERIMETER, "Perimeter", Kind::Length),
+                    Value::Length(m.perimeter),
+                )
+            }),
+        }
+    }
+
+    /// The same as read-only parameters, as `/parameters/<area>` lists them after the ones its
+    /// category has: its state, then, when enclosed, its area and perimeter.
+    #[must_use]
+    pub fn rows(&self) -> Vec<ParameterView> {
+        let row =
+            |id: &str, name: &str, kind: &str, shown: &str, reason: Option<String>| ParameterView {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                kind: kind.to_owned(),
+                holder: "instance",
+                value: Some(shown.to_owned()),
+                shown: Some(shown.to_owned()),
+                from: crate::slabs::READ_ONLY,
+                formula: None,
+                reason,
+            };
+        let mut rows = vec![row(
+            AREA_STATE,
+            "State",
+            "text",
+            self.state,
+            (!self.words.is_empty()).then(|| self.words.clone()),
+        )];
+        for (id, name, kind, shown) in [
+            (AREA_AREA, "Area", "area", &self.area),
+            (AREA_PERIMETER, "Perimeter", "length", &self.perimeter),
+        ] {
+            if let Some(shown) = shown {
+                rows.push(row(id, name, kind, shown, None));
+            }
+        }
+        rows
+    }
+}
+
+/// The read-only parameter of an area's state.
+pub const AREA_STATE: &str = "area.state";
+/// The read-only parameter of an area's floor area.
+pub const AREA_AREA: &str = "area.area";
+/// The read-only parameter of an area's perimeter.
+pub const AREA_PERIMETER: &str = "area.perimeter";
 
 #[cfg(test)]
 #[allow(

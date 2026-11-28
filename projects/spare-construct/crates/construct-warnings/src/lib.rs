@@ -188,6 +188,8 @@ pub struct Model {
     pub walls: Vec<Wall>,
     /// Every room, with what became of it.
     pub rooms: Vec<Room>,
+    /// Every area, with what became of it (an area is found from its scheme's boundary lines).
+    pub areas: Vec<Room>,
     /// What the dimensions found, already measured: construct-dimensions' `measure` works each
     /// dimension out and its warnings are given here as they are (this crate depends on kit-core
     /// only, so it cannot measure). [`RULES`] lists their kinds; a warning of a kind that is not
@@ -219,7 +221,7 @@ impl Rule {
 }
 
 /// Every kind there is. Add a kind here, with its function; nothing else changes.
-pub const RULES: [Rule; 7] = [
+pub const RULES: [Rule; 8] = [
     Rule {
         kind: "dimension.out_of_range",
         severity: Severity::Warning,
@@ -239,6 +241,11 @@ pub const RULES: [Rule; 7] = [
         kind: "room.not_enclosed",
         severity: Severity::Warning,
         find: not_enclosed,
+    },
+    Rule {
+        kind: "area.not_enclosed",
+        severity: Severity::Warning,
+        find: area_not_enclosed,
     },
     Rule {
         kind: "room.redundant",
@@ -281,6 +288,24 @@ fn not_enclosed(rule: &Rule, model: &Model) -> Vec<Warning> {
                 format!(
                     "{} is not enclosed: the walls round its point do not close",
                     capital(&room.who)
+                ),
+            )
+        })
+        .collect()
+}
+
+/// An area whose boundary lines do not close round its point. Its elements: the area.
+fn area_not_enclosed(rule: &Rule, model: &Model) -> Vec<Warning> {
+    model
+        .areas
+        .iter()
+        .filter(|area| area.state == RoomState::NotEnclosed)
+        .map(|area| {
+            rule.warn(
+                vec![area.id.clone()],
+                format!(
+                    "{} is not enclosed: the area boundary lines round its point do not close",
+                    capital(&area.who)
                 ),
             )
         })
