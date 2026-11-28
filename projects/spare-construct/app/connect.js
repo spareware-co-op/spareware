@@ -620,6 +620,7 @@
     clearTimeout(C.schedulesTimer);
     C.problems.clear();
     C.asked.clear();
+    C.cropHold = 0;
     C.cuts = false;
     C.builder = null;
     forgetDatums();
@@ -1666,7 +1667,12 @@
   C.typeList = null; // { key, view }: the types of the selected element's category
   C.manage = null; // the open dialog: { which, category, open, data, error }
   C.problems = new Map(); // where -> the server's reason, until that is tried again
-  C.asked = new Map(); // edit counter -> { where, after }
+  C.asked = new Map(); // edit counter -> { where, after, hold }
+  // Edits of the crop and range panel sent and not yet answered. While there are any, the panel is not
+  // drawn again from the page's older record of the view: a person's click on one of its controls
+  // (the crop's checkboxes, a field) stays as it was set until the server's answer for that command
+  // arrives, and the panel is then drawn from the view as it is after it.
+  C.cropHold = 0;
 
   const canEdit = () => Boolean(C.model) && !C.readOnly && !C.viewing;
   const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -1693,8 +1699,10 @@
       return;
     }
     C.problems.delete(where);
+    const hold = where === 'crop' || where === 'range';
+    if (hold) C.cropHold += 1;
     const counter = edit(cmd, args);
-    C.asked.set(counter, { where, after });
+    C.asked.set(counter, { where, after, hold });
     showProblems();
   }
 
@@ -1703,6 +1711,7 @@
     const ask = C.asked.get(counter);
     C.asked.delete(counter);
     if (!ask) return;
+    if (ask.hold) C.cropHold = Math.max(0, C.cropHold - 1);
     C.problems.set(ask.where, reason);
     dimsRefused(ask.where);
     showProblems();
@@ -1712,6 +1721,11 @@
   function done(counter) {
     const ask = C.asked.get(counter);
     C.asked.delete(counter);
+    if (ask?.hold) {
+      C.cropHold = Math.max(0, C.cropHold - 1);
+      // The views read while it was held were not drawn: read them again, and draw them.
+      if (C.cropHold === 0) loadViews();
+    }
     if (ask?.after) ask.after();
   }
 
@@ -1822,6 +1836,7 @@
     const m = C.manage;
     const root = $('#stack-manage');
     if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
+    if (m.which === 'crop' && C.cropHold > 0) return;
     let html;
     if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
     else if (m.which === 'families') html = familiesHtml(m);
