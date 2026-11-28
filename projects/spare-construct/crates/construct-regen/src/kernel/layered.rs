@@ -986,6 +986,9 @@ struct Cutter<'c, S> {
     cut: &'c Cut,
     solid: S,
     reach: Option<([i64; 2], [i64; 2])>,
+    /// The planes and names of the faces the opening makes in a layer, for a drawing to find a cut
+    /// edge's face by; empty for a build, which names them in [`Cut::names`] alone.
+    faces: Vec<super::NamedFace>,
 }
 
 /// One piece of a layer on the engine: its extrusion's mesh, and its mesh less every opening
@@ -1190,6 +1193,7 @@ pub(super) fn build<E: Engine>(
             cut,
             solid: engine.extrude(tool, *up).map_err(named)?,
             reach: plan_box(&tool.outer),
+            faces: Vec::new(),
         });
     }
     let mut levels = Levels::new();
@@ -1297,6 +1301,51 @@ pub(super) fn solids<E: Engine>(
     solids_cut(engine, recipe, wall, units, &[])
 }
 
+/// The faces an opening makes in a layer of an axis-aligned wall, each with its plane (its
+/// normal pointing out of the wall's material, into the opening) and its persistent name
+/// ([`Cut::names`]): the two jambs, the head and, for a raised opening, the sill. A drawing finds
+/// the face of a cut edge by its plane.
+fn opening_faces(
+    frame: &WallFrame,
+    cut: &Cut,
+    wall: OpId,
+) -> Result<Vec<super::NamedFace>, GeometryError> {
+    let span = cut.span();
+    let [ux, uy] = frame.unit;
+    let at = |along: i64| frame.to_plan([along, 0]);
+    let along_plane = |along: i64, way: i128| -> Result<GridPlane, GeometryError> {
+        let [x, y] = at(along)?;
+        let held = i128::from(ux)
+            .checked_mul(i128::from(x))
+            .zip(i128::from(uy).checked_mul(i128::from(y)))
+            .and_then(|(a, b)| a.checked_add(b))
+            .ok_or_else(super::too_big)?;
+        let toward = |c: i64| i128::from(c).checked_mul(way).ok_or_else(super::too_big);
+        carrier(
+            [toward(ux)?, toward(uy)?, 0],
+            held.checked_mul(way).ok_or_else(super::too_big)?,
+        )
+    };
+    let mut faces = Vec::new();
+    for name in cut.names(wall)? {
+        let role = name.role.split_once(").").map_or("", |(_, role)| role);
+        let plane = match role {
+            "jamb.start" => along_plane(span.start, 1)?,
+            "jamb.end" => along_plane(span.end, -1)?,
+            "head" => carrier(
+                [0, 0, -1],
+                i128::from(span.head)
+                    .checked_neg()
+                    .ok_or_else(super::too_big)?,
+            )?,
+            "sill" => carrier([0, 0, 1], i128::from(span.foot))?,
+            _ => continue,
+        };
+        faces.push(super::NamedFace { plane, name });
+    }
+    Ok(faces)
+}
+
 /// [`solids`] with the openings of the doors and placed families `hosted` in the wall cut through
 /// every layer they reach, as [`build`] cuts them (job 8.1: a section through a wall with a door
 /// shows the opening). A wall at an angle is given whole: its openings are united cells in
@@ -1314,7 +1363,7 @@ pub(super) fn solids_hosting<E: Engine>(
     band: i64,
     families: &dyn FamilySource,
 ) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
-    let (cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
+    let (frame, cut_list, tools) = match cuts(wall, hosted, units, band, families)? {
         None => return solids(engine, recipe, wall, units),
         Some((frame, _)) if frame.line.is_some() => return solids(engine, recipe, wall, units),
         Some((frame, cuts)) => {
@@ -1322,7 +1371,7 @@ pub(super) fn solids_hosting<E: Engine>(
                 .iter()
                 .map(|cut| frame.cutter(cut))
                 .collect::<Result<Vec<_>, _>>()?;
-            (cuts, tools)
+            (frame, cuts, tools)
         }
     };
     let mut cutters = Vec::with_capacity(tools.len());
@@ -1332,6 +1381,7 @@ pub(super) fn solids_hosting<E: Engine>(
             cut,
             solid: engine.extrude(tool, *up).map_err(named)?,
             reach: plan_box(&tool.outer),
+            faces: opening_faces(&frame, cut, op_id(recipe)?)?,
         });
     }
     solids_cut(engine, recipe, wall, units, &cutters)
@@ -1372,9 +1422,11 @@ fn solids_cut<E: Engine>(
                 [0, 0, height],
             )
             .map_err(from_engine)?;
+        let mut opened = Vec::new();
         for cutter in cutters.iter().filter(|c| overlap(c.reach, reach)) {
             let named = |e: EngineError| cutter.cut.engine_error(from_engine(e));
             solid = engine.subtract(&solid, &cutter.solid).map_err(named)?;
+            opened.extend(cutter.faces.iter().cloned());
         }
         let outside = if k == 0 {
             "exterior".to_owned()
@@ -1415,6 +1467,7 @@ fn solids_cut<E: Engine>(
                 name: name(op, role)?,
             });
         }
+        faces.extend(opened);
         found.push(LayerSolid {
             function: layer.function.clone(),
             material: Some(layer.material.clone()),

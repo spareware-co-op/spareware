@@ -303,7 +303,7 @@ impl Engine for Recording {
 /// A drawing's solids for a layered wall with a door hosted in it (job 8.1) have the door's opening
 /// cut from each layer: the engine is asked for one subtraction a layer, all by the door's one
 /// cutter, where the wall alone is asked for none; the layers keep their materials and their six
-/// named faces; a wall with nothing hosted in it is as [`Kernel::layers`] gives it.
+/// named faces and add the opening's three; a wall with nothing hosted in it is as [`Kernel::layers`] gives it.
 #[test]
 fn a_layered_walls_drawing_solids_have_a_doors_opening_cut_from_each_layer() {
     use construct_model::element::Placement;
@@ -335,7 +335,8 @@ fn a_layered_walls_drawing_solids_have_a_doors_opening_cut_from_each_layer() {
     assert_eq!(cut.len(), 3);
     for (with, without) in cut.iter().zip(&whole) {
         assert_eq!(with.material, without.material);
-        assert_eq!(with.solid.faces.len(), 6);
+        // The wall's six, and the opening's two jambs and its head.
+        assert_eq!(with.solid.faces.len(), 6 + 3);
     }
 }
 

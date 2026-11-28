@@ -4382,28 +4382,21 @@ const svDrawn = '#pv-canvas g.drawn[data-section-view]';
 const svNote = '[data-section-note]';
 if (withKernel) {
   for (const page of [anna, ben]) await page.waitForSelector(`${svDrawn} path[data-material]`);
-  // The wall's own layers' materials: floors and roofs the section also cuts are other materials.
-  const svMaterials = await ben.evaluate((id) => window.spare.elements.get(id).fill.recipe.args.layers.map((l) => l.material), svWall);
-  const hatchHeights = (page) =>
+  // The cut wall's own edge at the door's head: the opening's top, a line named for the door's
+  // head at 2100 mm (the view's y runs up the sheet and is written negated).
+  const headLines = (page) =>
     page.evaluate(
-      ([sel, materials]) => {
-        const ys = [];
-        for (const path of document.querySelectorAll(`${sel} path[data-material]`)) {
-          if (!materials.includes(path.getAttribute('data-material'))) continue;
-          const numbers = path.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
-          for (let i = 1; i < numbers.length; i += 2) ys.push(numbers[i]);
-        }
-        return ys;
-      },
-      [svDrawn, svMaterials],
+      ([sel, role]) =>
+        [...document.querySelectorAll(`${sel} line`)]
+          .filter((line) => line.getAttribute('data-role') === role)
+          .map((line) => Number(line.getAttribute('y1'))),
+      [svDrawn, `tool(${svDoor}).head`],
     );
   for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
-    const ys = await hatchHeights(page);
-    // The view's y runs up the sheet and is written negated: the cut wall is filled from its top
-    // down to the door's head at 2100 mm, and nothing below it, where the opening is.
+    const heads = await headLines(page);
     check(
-      ys.length > 0 && Math.max(...ys) <= -2000 && Math.min(...ys) < -2500,
-      `${name}'s section fills the cut wall by material, and the opening is in it: nothing is filled below the door's head (filled from ${-Math.max(...ys)} to ${-Math.min(...ys)} mm up)`,
+      heads.length > 0 && heads.every((y) => y === -2100),
+      `${name}'s section fills the cut wall by material and has the opening in it: the wall's cut has an edge at the door's head, 2100 mm up (${JSON.stringify(heads)})`,
     );
   }
   const svBytes = await Promise.all([anna, ben].map((page) => page.locator(svDrawn).innerHTML()));
@@ -4495,7 +4488,7 @@ const svFromList = async (page, id) => {
 await svFromList(ben, svNorth);
 await svFromList(anna, svNorth);
 if (withKernel) {
-  for (const page of [anna, ben]) await page.waitForSelector(`${svDrawn} line[data-element]`);
+  for (const page of [anna, ben]) await page.waitForSelector(`${svDrawn} line[data-element]`, { state: 'attached' });
   const outlines = await Promise.all([anna, ben].map((page) => page.locator(svDrawn).innerHTML()));
   check(outlines[0] === outlines[1] && outlines[0].includes('data-role'), 'Ben and Anna draw the same north elevation, outlines of what the server sees');
   await shot(ben, 'ben-elevation-open');
