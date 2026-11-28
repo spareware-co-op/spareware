@@ -920,10 +920,10 @@ pub async fn apply<T: Txn>(
         )));
     }
     // The crop commands name their own stray arguments (below, in their handlers).
-    if !edit.cmd.starts_with("view.crop.") {
-        if let Some(refusal) = crate::cloud::view_templates::stray(&edit.cmd, &args) {
-            return Ok(Err(refusal));
-        }
+    if !edit.cmd.starts_with("view.crop.")
+        && let Some(refusal) = crate::cloud::view_templates::stray(&edit.cmd, &args)
+    {
+        return Ok(Err(refusal));
     }
     let mut run = Run {
         txn,

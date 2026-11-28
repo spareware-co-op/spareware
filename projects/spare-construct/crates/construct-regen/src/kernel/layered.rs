@@ -1443,13 +1443,17 @@ fn add_turns<E: Engine>(
     Ok(())
 }
 
+/// The cutters a wall's layers are cut by: all of them, and each layer's own where the wall wraps
+/// at inserts.
+type LayerCutters<'a, S> = (&'a [Cutter<'a, S>], &'a [Vec<Cutter<'a, S>>]);
+
 /// Each piece of each layer of `wall` with a thickness, extruded on `engine` and cut by its
 /// cutters (`own`, a layer's own at its inserts where the wall wraps there, else `cutters`),
 /// listed in `asked` and added to `levels`.
 fn add_layers<E: Engine>(
     engine: &mut E,
     wall: &Layered,
-    (cutters, own): (&[Cutter<'_, E::Solid>], &[Vec<Cutter<'_, E::Solid>>]),
+    (cutters, own): LayerCutters<'_, E::Solid>,
     (line, cut_list): (Option<&Seat>, &[Cut]),
     asked: &mut Asked,
     levels: &mut Levels,
