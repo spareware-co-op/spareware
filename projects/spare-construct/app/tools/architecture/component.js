@@ -2,7 +2,7 @@
 
 import { late } from '../../core/late.js';
 import { register } from '../../core/registry.js';
-import { C, S, levelOf, say } from '../../core/state.js';
+import { C, levelOf, say } from '../../core/state.js';
 import { refreshSide } from '../../core/parameters.js';
 import { canEdit, manage, newId, problem } from '../../core/problems.js';
 import { snap } from '../../core/plan.js';
