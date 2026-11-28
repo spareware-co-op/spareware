@@ -467,4 +467,67 @@ mod tests {
             assert!(Tools::is_step(cmd), "{cmd}");
         }
     }
+
+    /// Every kind construct-warnings finds is one tool's rule, and no kind is two tools', so the
+    /// tools' rules give the list `warnings` gave.
+    #[test]
+    fn every_warning_kind_is_one_tools() {
+        let mut seen = BTreeSet::new();
+        for (tool, rules) in Tools::RULES {
+            for rule in *rules {
+                assert!(
+                    seen.insert(rule.kind),
+                    "{tool} registers {}, which another tool does",
+                    rule.kind
+                );
+            }
+        }
+        for rule in &construct_warnings::RULES {
+            assert!(seen.contains(rule.kind), "no tool registers {}", rule.kind);
+        }
+    }
+
+    /// Every quantity construct-schedules defines is one tool's field, and none is two tools'.
+    #[test]
+    fn every_quantity_is_one_tools() {
+        let mut seen = BTreeSet::new();
+        for (tool, fields) in Tools::FIELDS {
+            for field in *fields {
+                assert!(
+                    seen.insert(field.id),
+                    "{tool} registers {}, which another tool does",
+                    field.id
+                );
+            }
+        }
+        for quantity in &construct_schedules::QUANTITIES {
+            assert!(
+                seen.contains(quantity.id),
+                "no tool registers {}",
+                quantity.id
+            );
+        }
+    }
+
+    /// A category's quantities are offered in their order ([`fields_of_among`]), so the tools give
+    /// each category's in the order construct-schedules' table gave them.
+    ///
+    /// [`fields_of_among`]: construct_schedules::Basis::fields_of_among
+    #[test]
+    fn each_categorys_quantities_keep_their_order() {
+        let fields = Tools::fields();
+        for quantity in &construct_schedules::QUANTITIES {
+            let ours: Vec<&str> = fields
+                .iter()
+                .filter(|field| field.category == quantity.category)
+                .map(|field| field.id)
+                .collect();
+            let table: Vec<&str> = construct_schedules::QUANTITIES
+                .iter()
+                .filter(|q| q.category == quantity.category)
+                .map(|q| q.id)
+                .collect();
+            assert_eq!(only(&ours, &table), table);
+        }
+    }
 }

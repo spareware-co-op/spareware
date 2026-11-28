@@ -3,7 +3,10 @@
 //! the list for the document as it stands and undo and redo need nothing of it.
 //! [`read_warnings`] reads the walls and rooms the way rooms and the regenerator do
 //! ([`construct_regen::rooms`]: a wall's outline as the builders lay it out, a room's outcome from
-//! the same search), hands them to construct-warnings' [`warnings`] and returns the list in its
+//! the same search), once, into one model, asks every tool's warning rules of it
+//! ([`Tools::rules`](crate::cloud::Tools::rules), through construct-warnings' [`warnings_by`],
+//! so no rule reads the store and the list is the same whichever order the tools come in), and
+//! returns the list in its
 //! order as a view a page, a script or an AI reads: each warning's identity, kind, severity,
 //! elements and sentence.
 //!
@@ -17,10 +20,11 @@
 //! builder places them ([`construct_regen::inserts`]), each with the stretch of its host its
 //! opening takes, so an opening that crosses a wall joined to its host is a warning.
 
+use crate::cloud::Tools;
 use construct_regen::parameters::At;
 use construct_regen::rooms::{WALL_KIND, level_of, of_kind, wall_plan_of};
 use construct_rooms::{Outcome, ROOM_KIND};
-use construct_warnings::{Insert, Model, Room, RoomState, Wall, warnings};
+use construct_warnings::{Insert, Model, Room, RoomState, Wall, warnings_by};
 use kit_core::Id;
 use kit_store::{Reader, StoreError};
 use serde::Serialize;
@@ -102,7 +106,7 @@ pub async fn read_warnings<R: Reader>(
     model.dimensions =
         crate::cloud::dimensions::measured_warnings(reader, project, document).await?;
     Ok(WarningsView {
-        warnings: warnings(&model)
+        warnings: warnings_by(Tools::rules(), &model)
             .into_iter()
             .map(|w| WarningView {
                 identity: w.identity(),
