@@ -1,7 +1,7 @@
 // Signing in and choosing where to work.
 
 import { C, api, initials } from './state.js';
-import { takeOverTheFrame } from './frame.js';
+import { reloadEarlyFrame, takeOverTheFrame } from './frame.js';
 import { drawBrowser } from './browser.js';
 import { openModel } from './open.js';
 import { loadGeometry } from './shapes.js';
@@ -10,6 +10,7 @@ import { connect } from './channel.js';
 // --- Signing in and choosing where to work ---
 
 async function boot() {
+  reloadEarlyFrame();
   try {
     C.me = await api('/api/me');
   } catch (e) {

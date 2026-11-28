@@ -112,6 +112,7 @@ The cut moves code; it does not change what any line does:
 - Each tool's functions moved to its module unchanged, as text (only de-indented, outside strings).
 - The core calls a tool's hooks directly, in the order it called the functions they wrap, so an exception still goes where it went. (Transport's `Registry.call` catches a plug-in's exception; whether Construct does is decided later, separately.)
 - Every top-level statement that does something when the page loads (a listener added, an `ACT` entry wrapped) runs in the same order as before, and the split checks it (below).
+- One thing moves in time, by the nature of a module: the page's code runs once the document has been read, as every module does, rather than at the point the script stood, which was already the end of the document. The demo's own start has run before it either way. One part of the page leaned on the old moment: Workshop's frame, which the demo's start opens on a reload of Workshop's view, finds its way into the model (`spare.workshop`) once, as it loads, and could now load first and find none. The frame host loads such a frame again when it starts (`reloadEarlyFrame`), so it finds it as before.
 - The two-browser test ran unedited.
 
 ### The split, repeatable on any newer main

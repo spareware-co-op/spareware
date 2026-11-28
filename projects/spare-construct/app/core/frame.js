@@ -197,4 +197,20 @@ function setStatus(text, live) {
   box.dataset.state = live ? 'live' : 'down';
 }
 
-export { setStatus, takeOverTheFrame };
+/** Workshop's page finds its way into the open model (`spare.workshop`) once, as it loads. This page's
+ *  code is a module, which runs once the document has been read: a Workshop frame the demo's start
+ *  opened (a reload on Workshop's view) can have loaded before it and found none. Such a frame is
+ *  loaded again, so it finds it, as it always did when this page was one script run as the
+ *  document was read. A frame still loading finds it by itself. */
+function reloadEarlyFrame() {
+  const frame = $('#sc-workshop iframe');
+  let early = false;
+  try {
+    early = Boolean(frame?.contentWindow?.WorkshopFrame);
+  } catch {
+    early = false;
+  }
+  if (early) frame.contentWindow.location.reload();
+}
+
+export { reloadEarlyFrame, setStatus, takeOverTheFrame };
