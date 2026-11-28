@@ -286,7 +286,7 @@ function watchThePlan() {
     // A door hosted on a face slides along its wall, and is sent once, when the drag ends.
     const hosted = el.props?.['@host.along'] !== undefined && hostOf(el) !== null;
     // A floor opening and a shaft are moved by their outline in the palette, never dragged.
-    drag = entries('elements').some((entry) => entry.drags && entry.owns(el) && !entry.drags(el, hosted)) ? null : { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
+    drag = entries('elements').some((entry) => entry.drags && entry.owns(el) && !entry.drags(el, hosted)) ? null : { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted, sent: { x: placement.x, y: placement.y } };
   });
 
   window.addEventListener('pointermove', (event) => {
@@ -317,6 +317,7 @@ function watchThePlan() {
     const now = performance.now();
     if (now - lastSent >= SEND_EVERY_MS) {
       lastSent = now;
+      drag.sent = { x, y };
       sendMove(piece);
     }
   });
@@ -329,7 +330,9 @@ function watchThePlan() {
         const move = entries('elements').find((entry) => entry.move && entry.owns(piece.el))?.move ?? 'hosted.move';
         edit(move, { element: drag.id, along: `${drag.along} mm` });
       }
-    } else if (piece) {
+    } else if (piece && (piece.el.placement.x !== drag.sent.x || piece.el.placement.y !== drag.sent.y)) {
+      // Only where the element is now and the server has not been told: a click that moved
+      // nothing, or a move already sent, would be a step of its own for an undo to reverse.
       sendMove(piece);
     }
     drag = null;
