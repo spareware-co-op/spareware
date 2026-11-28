@@ -2,7 +2,7 @@
 //! sorting, written as an element record of the schedules category and read back strictly.
 
 use crate::error::ScheduleError;
-use crate::field::{Basis, Field};
+use crate::field::{Basis, Field, QUANTITIES, Quantity};
 use crate::filter::{Comparison, Filter};
 use construct_categories::{CategoryId, SCHEDULES};
 use construct_model::element::{Element, Placement};
@@ -193,19 +193,31 @@ impl Schedule {
     /// # Errors
     /// The first thing that does not stand, as a [`ScheduleError`].
     pub fn check(&self, basis: &Basis<'_>) -> Result<(), ScheduleError> {
+        self.check_among(basis, &QUANTITIES)
+    }
+
+    /// [`Schedule::check`], a category's quantities being those among `quantities`.
+    ///
+    /// # Errors
+    /// The first thing that does not stand, as a [`ScheduleError`].
+    pub fn check_among(
+        &self,
+        basis: &Basis<'_>,
+        quantities: &[Quantity],
+    ) -> Result<(), ScheduleError> {
         basis.listable(self.lists)?;
         for (at, field) in self.fields.iter().enumerate() {
-            basis.require(self.lists, field)?;
+            basis.require_among(quantities, self.lists, field)?;
             if self.fields.iter().take(at).any(|before| before == field) {
                 return Err(ScheduleError::DuplicateField(field.key()));
             }
         }
         for filter in &self.filters {
-            let definition = basis.require(self.lists, &filter.field)?;
+            let definition = basis.require_among(quantities, self.lists, &filter.field)?;
             filter.check(&definition)?;
         }
         for (at, sort) in self.sorting.iter().enumerate() {
-            basis.require(self.lists, &sort.field)?;
+            basis.require_among(quantities, self.lists, &sort.field)?;
             if self
                 .sorting
                 .iter()

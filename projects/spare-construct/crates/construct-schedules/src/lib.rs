@@ -39,9 +39,14 @@ mod schedule;
 mod schedules;
 
 pub use error::ScheduleError;
-pub use field::{Basis, Field, QUANTITIES, Quantity};
+pub use field::{
+    Basis, FLOOR_AREA, FLOOR_MASS, FLOOR_PERIMETER, FLOOR_THICKNESS, FLOOR_VOLUME, Field,
+    QUANTITIES, Quantity, ROOF_AREA, ROOF_MASS, ROOF_RIDGE_HEIGHT, ROOF_SLOPE_AREA, ROOF_THICKNESS,
+    ROOF_VOLUME, ROOM_AREA, ROOM_PERIMETER, ROOM_STATE, ROOM_VOLUME, WALL_AREA, WALL_LENGTH,
+    WALL_VOLUME,
+};
 pub use filter::{Comparison, Filter, order, text_order};
-pub use rows::{Cell, Column, Reading, Row, Subject, columns, rows};
+pub use rows::{Cell, Column, Reading, Row, Subject, columns, columns_among, rows, rows_among};
 pub use schedule::{
     CATEGORY_KEY, FIELDS_KEY, FILTERS_KEY, LISTS_KEY, SCHEDULE_KIND, SORTING_KEY, STAGING_KEY,
     Schedule, Sort, schedule_recipe,
