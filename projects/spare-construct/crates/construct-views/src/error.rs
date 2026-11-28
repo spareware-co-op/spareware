@@ -89,6 +89,34 @@ pub enum ViewError {
     FillOnProjection,
     /// A transparency above 100 percent.
     TransparencyAbove(u8),
+    /// A view of this kind draws no model through a window of its own, so it has no crop.
+    NoCropOnKind {
+        /// The kind, in words.
+        kind: String,
+    },
+    /// A crop outline with fewer than three corners.
+    CropFewCorners {
+        /// The corners given.
+        count: usize,
+    },
+    /// A crop rectangle whose lower left corner is not below and left of its upper right.
+    CropEmptyRectangle,
+    /// A crop outline that gives a corner twice in a row (counting the last then the first).
+    CropRepeatedCorner {
+        /// The corner, counted from 1, that equals the next.
+        corner: usize,
+    },
+    /// A crop outline with two edges that cross, touch or lie along each other.
+    CropSelfCrossing {
+        /// The first edge, counted from 1 (edge n runs from corner n to the next).
+        first: usize,
+        /// The second edge.
+        second: usize,
+    },
+    /// A crop outline that encloses no area.
+    CropNoArea,
+    /// A view with no crop to show, hide or switch.
+    NoCrop(Id),
 }
 
 impl fmt::Display for ViewError {
@@ -158,6 +186,27 @@ impl fmt::Display for ViewError {
                 "Transparency is a percentage from 0 to {}, not {n}.",
                 crate::graphics::MOST_TRANSPARENCY
             ),
+            Self::NoCropOnKind { kind } => write!(
+                f,
+                "A {kind} view has no crop: only plans, sections and elevations are cropped."
+            ),
+            Self::CropFewCorners { count } => write!(
+                f,
+                "A crop outline needs at least three corners, not {count}."
+            ),
+            Self::CropEmptyRectangle => write!(
+                f,
+                "A crop rectangle needs its lower left corner below and left of its upper right."
+            ),
+            Self::CropRepeatedCorner { corner } => {
+                write!(f, "A crop outline gives corner {corner} twice in a row.")
+            }
+            Self::CropSelfCrossing { first, second } => write!(
+                f,
+                "A crop outline must not cross itself: edges {first} and {second} meet."
+            ),
+            Self::CropNoArea => write!(f, "A crop outline must enclose an area above zero."),
+            Self::NoCrop(id) => write!(f, "The view {id} has no crop."),
         }
     }
 }

@@ -33,6 +33,10 @@
 //!   label are joined back into one.
 //! - **Areas.** A loop turning counter-clockwise is an outline; each clockwise loop is a hole of
 //!   the smallest outline holding it.
+//! - **Window.** A crop window (`Window`, for `crate::crop`) clips a segment to a simple closed outline: the
+//!   segment is cut at every crossing and each piece is kept when the winding number just to either side
+//!   of its middle is above zero (a piece along the outline stays); an arc is kept or dropped whole when
+//!   its circle is clear of the outline, by exact distances squared, and not answered otherwise.
 //! - **Clip.** A straight line's pieces inside an area are where the winding number is above zero
 //!   just to both sides of the line, so a line along an edge, or touching a corner, gives nothing.
 //!
@@ -211,9 +215,43 @@ fn before(i: usize, n: usize) -> usize {
     i.checked_sub(1).unwrap_or_else(|| n.saturating_sub(1))
 }
 
+/// The parameters `t` (strictly between 0 and 1) along `e`, whose direction is `r` and squared
+/// length `rr`, where one of `others` crosses it, touches it, or starts or ends on it.
+fn cuts_of<'a>(
+    e: &Edge,
+    r: &Pt,
+    rr: &Q,
+    others: impl Iterator<Item = &'a Edge>,
+) -> Result<Vec<Q>, DrawingError> {
+    let (zero, one) = (Q::whole(0), Q::whole(1));
+    let mut cuts: Vec<Q> = Vec::new();
+    for f in others {
+        let s = f.b.minus(&f.a);
+        let ca = f.a.minus(&e.a);
+        let den = r.cross(&s);
+        if den.is_zero() {
+            if ca.cross(r).is_zero() {
+                // In one line: where the other's ends fall on this one.
+                for q in [&f.a, &f.b] {
+                    let t = q.minus(&e.a).dot(r).over(rr)?;
+                    if t > zero && t < one {
+                        cuts.push(t);
+                    }
+                }
+            }
+        } else {
+            let t = ca.cross(&s).over(&den)?;
+            let u = ca.cross(r).over(&den)?;
+            if t > zero && t < one && u >= zero && u <= one {
+                cuts.push(t);
+            }
+        }
+    }
+    Ok(cuts)
+}
+
 /// Every edge cut at every point another edge crosses or touches it, or starts or ends on it.
 fn split(edges: &[Edge]) -> Result<Vec<Edge>, DrawingError> {
-    let (zero, one) = (Q::whole(0), Q::whole(1));
     let mut out = Vec::new();
     for (i, e) in edges.iter().enumerate() {
         let r = e.b.minus(&e.a);
@@ -221,32 +259,12 @@ fn split(edges: &[Edge]) -> Result<Vec<Edge>, DrawingError> {
         if rr.is_zero() {
             return Err(zero_division());
         }
-        let mut cuts: Vec<Q> = Vec::new();
-        for (j, f) in edges.iter().enumerate() {
-            if i == j {
-                continue;
-            }
-            let s = f.b.minus(&f.a);
-            let ca = f.a.minus(&e.a);
-            let den = r.cross(&s);
-            if den.is_zero() {
-                if ca.cross(&r).is_zero() {
-                    // In one line: where the other's ends fall on this one.
-                    for q in [&f.a, &f.b] {
-                        let t = q.minus(&e.a).dot(&r).over(&rr)?;
-                        if t > zero && t < one {
-                            cuts.push(t);
-                        }
-                    }
-                }
-            } else {
-                let t = ca.cross(&s).over(&den)?;
-                let u = ca.cross(&r).over(&den)?;
-                if t > zero && t < one && u >= zero && u <= one {
-                    cuts.push(t);
-                }
-            }
-        }
+        let others = edges
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .map(|(_, f)| f);
+        let mut cuts = cuts_of(e, &r, &rr, others)?;
         cuts.sort();
         cuts.dedup();
         let mut from = e.a.clone();
@@ -601,6 +619,118 @@ impl Overlay {
             k = k.checked_add(1).ok_or(DrawingError::TooBig)?;
         }
         Ok(out)
+    }
+}
+
+/// A crop window: a simple closed outline a picture is clipped to, exactly. The closed region
+/// counts: a line along the outline stays.
+pub(crate) struct Window {
+    edges: Vec<Edge>,
+}
+
+impl Window {
+    /// The window bounded by `outline` (its corners in order, either way round).
+    ///
+    /// # Errors
+    ///
+    /// [`DrawingError::BadShape`] for fewer than three corners, a corner twice in a row or an
+    /// outline of no area.
+    pub(crate) fn new(outline: &[ViewPoint]) -> Result<Self, DrawingError> {
+        let mut ring: Ring = outline
+            .iter()
+            .map(|&p| Pt::of(p).map(|p| (p, 0)))
+            .collect::<Result<_, _>>()?;
+        if ring.len() < 3 || ring.windows(2).any(|w| w.first() == w.get(1)) {
+            return Err(DrawingError::BadShape(
+                "a crop of fewer than three corners, or a corner twice in a row".to_owned(),
+            ));
+        }
+        match twice_area(&ring).sign() {
+            Ordering::Equal => {
+                return Err(DrawingError::BadShape("a crop of no area".to_owned()));
+            }
+            Ordering::Less => ring.reverse(),
+            Ordering::Greater => {}
+        }
+        Ok(Self {
+            edges: edges_of(&ring),
+        })
+    }
+
+    /// The pieces of the segment from `a` to `b` inside the window or along its outline, in order
+    /// along the segment, neighbouring pieces joined.
+    pub(crate) fn pieces(
+        &self,
+        a: ViewPoint,
+        b: ViewPoint,
+    ) -> Result<Vec<[ViewPoint; 2]>, DrawingError> {
+        let e = Edge {
+            a: Pt::of(a)?,
+            b: Pt::of(b)?,
+            label: 0,
+        };
+        let r = e.b.minus(&e.a);
+        let rr = r.dot(&r);
+        if rr.is_zero() {
+            return Err(zero_division());
+        }
+        let mut cuts = cuts_of(&e, &r, &rr, self.edges.iter())?;
+        cuts.sort();
+        cuts.dedup();
+        let mut stops = vec![Q::whole(0)];
+        stops.extend(cuts);
+        stops.push(Q::whole(1));
+        let half = Q::fraction(1, 2)?;
+        let v = r.left();
+        let mut out: Vec<[Pt; 2]> = Vec::new();
+        for pair in stops.windows(2) {
+            let (Some(t0), Some(t1)) = (pair.first(), pair.get(1)) else {
+                continue;
+            };
+            let p0 = e.a.plus(&r.scaled(t0));
+            let p1 = e.a.plus(&r.scaled(t1));
+            let m = p0.plus(&p1).scaled(&half);
+            // Inside to either side: a piece along the outline has the inside on one side only.
+            if winding(&self.edges, &m, &v)? > 0 || winding(&self.edges, &m, &v.negated())? > 0 {
+                match out.last_mut() {
+                    Some(last) if last[1] == p0 => last[1] = p1,
+                    _ => out.push([p0, p1]),
+                }
+            }
+        }
+        out.into_iter()
+            .map(|[p0, p1]| Ok([p0.view()?, p1.view()?]))
+            .collect()
+    }
+
+    /// Whether the arc about `centre` starting at `start` lies inside the window: `Some(true)`
+    /// wholly inside, `Some(false)` wholly outside, `None` when its circle meets the outline, where
+    /// an exact clip of the arc would be a point that is not a fraction of the grid.
+    pub(crate) fn arc(
+        &self,
+        centre: ViewPoint,
+        start: ViewPoint,
+    ) -> Result<Option<bool>, DrawingError> {
+        let (c, s) = (Pt::of(centre)?, Pt::of(start)?);
+        let squared = |p: &Pt| {
+            let d = p.minus(&c);
+            d.dot(&d)
+        };
+        let radius = squared(&s);
+        let (zero, one) = (Q::whole(0), Q::whole(1));
+        for e in &self.edges {
+            let r = e.b.minus(&e.a);
+            let rr = r.dot(&r);
+            let t = c.minus(&e.a).dot(&r).over(&rr)?;
+            let t = t.max(zero.clone()).min(one.clone());
+            let near = squared(&e.a.plus(&r.scaled(&t)));
+            let far = squared(&e.a).max(squared(&e.b));
+            if near <= radius && radius <= far {
+                return Ok(None);
+            }
+        }
+        let along_x = Pt { x: one, y: zero };
+        Ok(Some(winding(&self.edges, &s, &along_x)? > 0))
     }
 }
 

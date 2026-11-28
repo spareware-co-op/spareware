@@ -22,6 +22,22 @@
 //! | `floor.defaults` | none (`{}`) | Each of construct-slabs' default floor types the document lacks (by ID, or by name among its floor types), as `floor.type.create` makes one; nothing when it lacks none |
 //! | `floor.create` | `element`, `name` (default the ID), `type`, `level`, `offset` (default `0`), `boundary` | A new floor |
 //! | `floor.boundary` | `element`, `boundary` | The floor: its boundary |
+//! | `floor.dimension` | `element`, `constraint` (its number in the sketch), `value` (typed length) | The floor: a sketched outline's dimension changed and the outline solved again |
+//! | `floor.slope` | `element`, `slope`: `{"tail":[x, y],"head":[x, y],"at_tail":len}` and `"at_head":len` or `"gradient":{"rise":n,"run":n}` | The floor: its slope arrow, set or changed |
+//! | `floor.slope.clear` | `element` | The floor: its slope taken away |
+//! | `floor.edge` | `element`, `edge` (a boundary edge's ID), `profile`: `{"kind":"thickened","width","foot","depth"}` or `{"kind":"downturn","width","depth"}` | The floor: a slab edge on that edge, added or changed |
+//! | `floor.edge.remove` | `element`, `edge` | The floor: the slab edge on that edge taken away |
+//!
+//! A sketched outline (job 5.2): `boundary` may also hold `constraints`, a list of objects with a
+//! `kind` (`coincident`, `horizontal`, `vertical`, `parallel`, `perpendicular`, `equal_length`,
+//! `distance`, `point_line_distance`, `fixed`, `point_on_line`) and the numbers of the points and
+//! lines it relates (corner `k`, outer loop first and then each hole, is point `k` and the edge
+//! from it is line `k`); a `distance` and a `point_line_distance` give `value`, typed text. The
+//! floor's corners are the sketch as the solver solves it; `floor.dimension` changes one of its
+//! dimensions by the constraint's number (its place in the list, from 0). Every refusal of the
+//! slope, the slab edges and the sketch is construct-slabs' words after the floor's name (a slope
+//! and slab edges on one floor, an edge the floor lacks, a corner off the grid, a sketch the solver
+//! cannot solve), and changes nothing. All five are undone and redone as one step each.
 //!
 //! `layers` is the layers from the top face down, as construct-slabs takes them:
 //! `[{"function":"finish","thickness":"50 mm","material":"screed-cement"}, ...]`; `function` is one
@@ -61,19 +77,21 @@
 //! kernel's sweep takes them (the interim register).
 
 use crate::cloud::elements::write_record;
+use crate::cloud::openings::floor_view;
 use crate::cloud::walls::{MaterialView, materials_view};
 use crate::cloud::{levels, params};
 use construct_categories::{CategoryId, FLOORS};
 use construct_levels::{Length, Tie, parse_length};
 use construct_materials::MaterialId;
 use construct_model::element::Element;
-use construct_params::Units;
+use construct_params::{Slope, Units};
 use construct_regen::floor_plan::{self, FloorPlan};
 use construct_regen::levels as placing;
 use construct_regen::parameters::{self as records, At, Context, TYPE_KIND};
 use construct_slabs::{
-    Boundary, FloorLayer, Function, Layers, SlabError, area, default_floor_types, floor_record,
-    is_floor, layers_of, new_floor_type, with_boundary, with_layers,
+    Boundary, ConstraintId, EdgeProfile, FloorLayer, Function, Layers, Point, Rise, SlabEdge,
+    SlabError, SlopeArrow, area, default_floor_types, floor_record, is_floor, layers_of,
+    new_floor_type, shape_of, with_boundary, with_edges, with_layers, with_slope,
 };
 use construct_types::{ElementType, TypeError, Types};
 use kit_core::Id;
@@ -84,9 +102,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value as Json, json};
 
 /// Every command here.
-pub const COMMANDS: [&str; 8] = [
+pub const COMMANDS: [&str; 13] = [
     "floor.create",
     "floor.boundary",
+    "floor.dimension",
+    "floor.slope",
+    "floor.slope.clear",
+    "floor.edge",
+    "floor.edge.remove",
     "floor.defaults",
     "floor.type.create",
     "floor.type.layers",
@@ -114,6 +137,14 @@ struct Args {
     level: Option<Json>,
     offset: Option<String>,
     boundary: Option<BoundaryArgs>,
+    slope: Option<SlopeArgs>,
+    /// A slab edge: the ID of the boundary edge it runs along.
+    edge: Option<String>,
+    profile: Option<ProfileArgs>,
+    /// A sketch's constraint, by its number.
+    constraint: Option<u32>,
+    /// Typed text: a dimension's new length.
+    value: Option<String>,
 }
 
 /// One layer as a person sends it.
@@ -133,6 +164,9 @@ pub(super) struct BoundaryArgs {
     pub(super) outer: Vec<CornerArgs>,
     #[serde(default)]
     pub(super) holes: Vec<Vec<CornerArgs>>,
+    /// A sketched outline's constraints (a floor's only; see [`plain_constraints`]).
+    #[serde(default)]
+    pub(super) constraints: Vec<Json>,
 }
 
 /// One corner as a person sends it: where it is, as typed text, and the ID of the edge that
@@ -216,7 +250,34 @@ pub(super) fn plain_boundary(sent: BoundaryArgs) -> Result<Json, String> {
         .into_iter()
         .map(corners)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(json!({ "outer": outer, "holes": holes }))
+    let constraints = plain_constraints(sent.constraints)?;
+    if constraints.is_empty() {
+        return Ok(json!({ "outer": outer, "holes": holes }));
+    }
+    Ok(json!({ "outer": outer, "holes": holes, "constraints": constraints }))
+}
+
+/// A sketched outline's constraints in construct-slabs' plain form: each an object with a `kind`
+/// (`coincident`, `horizontal`, `vertical`, `parallel`, `perpendicular`, `equal_length`,
+/// `distance`, `point_line_distance`, `fixed`, `point_on_line`) and the numbers of the points and
+/// lines it relates (corner `k` of the loops in order, the outer loop first and then each hole, is
+/// point `k`, and the edge from it is line `k`); a `distance` and a `point_line_distance` give
+/// their length as `value`, typed text, and construct-slabs reads the rest.
+fn plain_constraints(sent: Vec<Json>) -> Result<Vec<Json>, String> {
+    sent.into_iter()
+        .map(|mut constraint| {
+            let Some(object) = constraint.as_object_mut() else {
+                return Err("A constraint is an object with a kind.".to_owned());
+            };
+            if let Some(value) = object.remove("value") {
+                let text = value
+                    .as_str()
+                    .ok_or_else(|| "A constraint's value is typed text.".to_owned())?;
+                object.insert("steps".to_owned(), json!(length(text)?.steps()));
+            }
+            Ok(constraint)
+        })
+        .collect()
 }
 
 /// What a command is run against: the store, where, who, and when the orderer says it is.
@@ -419,6 +480,11 @@ pub async fn apply<T: Txn>(
         "floor.defaults" => defaults(&mut run, &document).await,
         "floor.create" => create(&mut run, &document, args).await,
         "floor.boundary" => set_boundary(&mut run, args).await,
+        "floor.dimension" => set_dimension(&mut run, args).await,
+        "floor.slope" => set_slope(&mut run, args, false).await,
+        "floor.slope.clear" => set_slope(&mut run, args, true).await,
+        "floor.edge" => set_edge(&mut run, args, false).await,
+        "floor.edge.remove" => set_edge(&mut run, args, true).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
 }
@@ -613,6 +679,231 @@ async fn set_boundary<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     run.put_claimed(&record).await
 }
 
+/// A slope arrow as a person sends it: where it starts and ends in plan (typed lengths), the top
+/// face's height at its tail above the floor's tied height, and either its height at the head or a
+/// rise over a run along the arrow.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SlopeArgs {
+    tail: [String; 2],
+    head: [String; 2],
+    at_tail: String,
+    #[serde(default)]
+    at_head: Option<String>,
+    #[serde(default)]
+    gradient: Option<GradientArgs>,
+}
+
+/// A rise over a run, whole numbers (a fall of 1 in 60 is `{"rise": -1, "run": 60}`).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GradientArgs {
+    rise: i64,
+    run: i64,
+}
+
+/// A slab edge's profile as a person sends it.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileArgs {
+    /// `thickened` or `downturn`.
+    kind: String,
+    width: String,
+    /// A thickened edge's width at its bottom; a downturn has none.
+    #[serde(default)]
+    foot: Option<String>,
+    depth: String,
+}
+
+/// A slope arrow from what a person sent.
+fn slope_arrow(sent: SlopeArgs) -> Result<SlopeArrow, String> {
+    let point = |at: &[String; 2]| -> Result<Point, String> {
+        Ok(Point {
+            x: length(&at[0])?.steps(),
+            y: length(&at[1])?.steps(),
+        })
+    };
+    let rise = match (sent.at_head, sent.gradient) {
+        (Some(_), Some(_)) => {
+            return Err(
+                "A slope is its height at the head or a rise over a run, not both.".to_owned(),
+            );
+        }
+        (None, None) => {
+            return Err("A slope needs its height at the head or a rise over a run.".to_owned());
+        }
+        (Some(at_head), None) => Rise::Heights {
+            at_head: length(&at_head)?,
+        },
+        (None, Some(gradient)) => Rise::Gradient {
+            slope: Slope::new(gradient.rise, gradient.run)
+                .ok_or_else(|| "A slope's run cannot be zero.".to_owned())?,
+        },
+    };
+    SlopeArrow::new(
+        point(&sent.tail)?,
+        point(&sent.head)?,
+        length(&sent.at_tail)?,
+        rise,
+    )
+    .map_err(why)
+}
+
+/// A slab edge's profile from what a person sent.
+fn edge_profile(sent: &ProfileArgs) -> Result<EdgeProfile, String> {
+    let width = length(&sent.width)?;
+    let depth = length(&sent.depth)?;
+    match (sent.kind.as_str(), &sent.foot) {
+        ("thickened", Some(foot)) => Ok(EdgeProfile::Thickened {
+            width,
+            foot: length(foot)?,
+            depth,
+        }),
+        ("thickened", None) => Err("A thickened edge needs its foot.".to_owned()),
+        ("downturn", None) => Ok(EdgeProfile::Downturn { width, depth }),
+        ("downturn", Some(_)) => Err("A downturn has a width and a depth, and no foot.".to_owned()),
+        (other, _) => Err(format!(
+            "A slab edge is thickened or a downturn, not {other:?}."
+        )),
+    }
+}
+
+/// A floor of the document, its record, and its name, or why not.
+async fn floor_of<T: Txn>(
+    run: &mut Run<'_, T>,
+    id: Option<Id>,
+) -> Result<Result<Element, String>, StoreError> {
+    let id = match need(id, "an element") {
+        Ok(id) => id,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let Some((_, before)) = run.current(&id).await? else {
+        return Ok(Err("That element no longer exists.".to_owned()));
+    };
+    if !is_floor(&before) {
+        return Ok(Err(format!("{} is not a floor.", before.name)));
+    }
+    Ok(Ok(before))
+}
+
+/// Writes a floor's changed record if the builders take it, claimed by this person.
+async fn put_floor<T: Txn>(
+    run: &mut Run<'_, T>,
+    changed: Result<Element, SlabError>,
+    what: &str,
+    name: &str,
+) -> Answer {
+    let record = match changed {
+        Ok(record) => record,
+        Err(e) => return Ok(Err(format!("{name}'s {what}: {e}"))),
+    };
+    if let Err(refusal) = run.buildable(&record).await? {
+        return Ok(Err(refusal));
+    }
+    if let Ok(shape) = shape_of(&record.recipe)
+        && !shape.is_plain()
+    {
+        let view = floor_view(run.txn, run.project, run.document, &record).await?;
+        if !view.cuts.is_empty() {
+            let keys: Vec<&str> = view.cuts.iter().map(|cut| cut.key.as_str()).collect();
+            let shaped = if shape.slope().is_some() {
+                "a slope"
+            } else {
+                "slab edges"
+            };
+            return Ok(Err(format!(
+                "{name}'s {what}: {} cut{} through this floor, and a floor with {shaped} is not cut by openings and shafts yet: take {} away first",
+                keys.join(", "),
+                if keys.len() == 1 { "s" } else { "" },
+                if keys.len() == 1 { "it" } else { "them" },
+            )));
+        }
+    }
+    run.put_claimed(&record).await
+}
+
+async fn set_slope<T: Txn>(run: &mut Run<'_, T>, args: Args, clear: bool) -> Answer {
+    let before = match floor_of(run, args.element.clone()).await? {
+        Ok(before) => before,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let name = before.name.clone();
+    let slope = if clear {
+        None
+    } else {
+        match need(args.slope, "a slope").and_then(slope_arrow) {
+            Ok(arrow) => Some(arrow),
+            Err(refusal) => return Ok(Err(format!("{name}'s slope: {refusal}"))),
+        }
+    };
+    let changed = with_slope(before, slope);
+    put_floor(run, changed, "slope", &name).await
+}
+
+async fn set_edge<T: Txn>(run: &mut Run<'_, T>, args: Args, remove: bool) -> Answer {
+    let before = match floor_of(run, args.element.clone()).await? {
+        Ok(before) => before,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let name = before.name.clone();
+    let edge = match need(args.edge, "an edge") {
+        Ok(text) => match Id::parse(&text) {
+            Ok(edge) => edge,
+            Err(_) => return Ok(Err(format!("{text:?} is not an edge's ID."))),
+        },
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let mut edges = match shape_of(&before.recipe) {
+        Ok(shape) => shape.edges().to_vec(),
+        Err(e) => return Ok(Err(format!("{name}'s slab edge: {e}"))),
+    };
+    if remove {
+        let kept = edges.len();
+        edges.retain(|held| held.edge != edge);
+        if edges.len() == kept {
+            return Ok(Err(format!("{name} has no slab edge on {edge}.")));
+        }
+    } else {
+        let profile = match need(args.profile, "a profile").and_then(|sent| edge_profile(&sent)) {
+            Ok(profile) => profile,
+            Err(refusal) => return Ok(Err(format!("{name}'s slab edge: {refusal}"))),
+        };
+        match edges.iter_mut().find(|held| held.edge == edge) {
+            Some(held) => held.profile = profile,
+            None => edges.push(SlabEdge { edge, profile }),
+        }
+    }
+    let changed = with_edges(before, edges);
+    put_floor(run, changed, "slab edge", &name).await
+}
+
+/// A sketched outline's dimension changed: the constraint's number in the sketch and its new
+/// length, typed. The outline is solved again, so it moves, and every edge keeps its ID.
+async fn set_dimension<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let before = match floor_of(run, args.element.clone()).await? {
+        Ok(before) => before,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let name = before.name.clone();
+    let sent = (|| {
+        let constraint = need(args.constraint, "a constraint")?;
+        let value = length(&need(args.value, "a length")?)?;
+        Ok::<_, String>((constraint, value))
+    })();
+    let (constraint, value) = match sent {
+        Ok(sent) => sent,
+        Err(refusal) => return Ok(Err(format!("{name}'s boundary: {refusal}"))),
+    };
+    let moved = shape_of(&before.recipe)
+        .and_then(|shape| {
+            shape
+                .boundary()
+                .with_dimension(ConstraintId(constraint), value.steps())
+        })
+        .and_then(|boundary| with_boundary(before, &boundary));
+    put_floor(run, moved, "boundary", &name).await
+}
+
 /// The words for a floor command that should have been used.
 fn use_instead(what: &str, command: &str) -> String {
     format!("{what} with {command}, which checks it as a floor.")
@@ -662,9 +953,9 @@ pub async fn generic_rules<T: Txn>(
                 return Ok(Ok(()));
             };
             match records::read_element(txn, project, document, id).await? {
-                Some((_, record)) if is_floor(&record) => Err(use_instead(
-                    &format!("{}'s boundary is changed", record.name),
-                    "floor.boundary",
+                Some((_, record)) if is_floor(&record) => Err(format!(
+                    "{}'s boundary, slope and slab edges are changed with floor.boundary, floor.dimension, floor.slope or floor.edge, which check it as a floor.",
+                    record.name
                 )),
                 Some(_) if a_floor_recipe => Err(use_instead("A floor is made", "floor.create")),
                 _ => Ok(()),

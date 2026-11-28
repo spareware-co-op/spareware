@@ -28,9 +28,19 @@
 //!   ([`crate::room_plan`]).
 //! - `column`: one solid, its ring extruded from its base up to its height, in the child module
 //!   `column` (job 14.7); its lengths are construct-params' steps ([`crate::column_plan`]).
+//! - `stair`: one solid per piece, each the solid construct-stairs worked out for it (a run's side
+//!   profile lofted across its width, a landing's outline extruded up), in the child module
+//!   `stair` (job 6.7); its points are construct-params' steps ([`crate::stair_plan`]).
 //! - `door.single`: a box in the wall's thickness, extruded the same way: a simple solid placed in
 //!   its opening, the old door kept for the documents that hold it. [`Extrusion::door`] is the one
-//!   place its shape is decided.
+//!   place its shape is decided. In a wall at an angle it comes seated (construct-regen's
+//!   `hosting`, piece A83), and is built laid along its own x, each corner put through its seat, in
+//!   the child module `seated`.
+//! - `wall.curtain` (job 14.1, CON-A4-F6-P1): a curtain wall, one solid per glazed or solid
+//!   panel and per mullion, each its quadrilateral in plan ([`crate::curtain_plan`]) extruded
+//!   straight up, and each door panel its family's solids through the recipe evaluator, in the
+//!   child module `curtain`; it hosts nothing, and a wall it is embedded in cuts its opening as a
+//!   plain opening's ([`crate::hosting::cut_of`]).
 //! - `family.instance` (job 6.4, CON-A7-F3-P2): a placed family, its solids made by the recipe
 //!   evaluator (`construct_families::evaluate_turned`) through this builder's engine, turned as
 //!   the family stands, each meshed and drawn as a part with its material, in the child module
@@ -102,16 +112,20 @@
 //!   kernel's grid and the engine is the kernel's exact one.
 
 mod column;
+mod curtain;
 mod family;
 mod floor;
 mod layered;
 pub mod opening;
 mod roof;
 mod room;
+mod seated;
+mod stair;
 
 pub use opening::Hosted;
 
 use crate::families::{self, FamilySource};
+use crate::seating;
 use crate::wall_plan::{self, Layered};
 use construct_families::CacheKey;
 
@@ -385,6 +399,31 @@ impl Units {
         }
     }
 
+    /// `steps` of this engine in the building's grid steps ([`construct_params::Length`]'s unit),
+    /// rounded down, or up when `up`: exact whenever the engine's step is a whole number of the
+    /// building's (the kernel's own is), and widening a stretch outward when it is not.
+    ///
+    /// # Errors
+    ///
+    /// `TooBig` beyond a 64-bit integer.
+    pub fn to_q0(self, steps: i64, up: bool) -> Result<i64, GeometryError> {
+        let per = i128::from(construct_params::Length::STEPS_PER_MM);
+        let product = i128::from(steps).checked_mul(per).ok_or_else(too_big)?;
+        let each = i128::from(self.per_mm);
+        let (Some(whole), Some(rest)) = (
+            product.checked_div_euclid(each),
+            product.checked_rem_euclid(each),
+        ) else {
+            return Err(too_big());
+        };
+        let rounded = if up && rest != 0 {
+            whole.checked_add(1).ok_or_else(too_big)?
+        } else {
+            whole
+        };
+        i64::try_from(rounded).map_err(|_| too_big())
+    }
+
     /// `steps` to the nearest whole millimetre, a half away from zero, and whether that is
     /// exact: how a display in whole millimetres holds a point that is not on one.
     #[must_use]
@@ -512,6 +551,23 @@ impl Extrusion {
                 along: 0,
             }
         })
+    }
+
+    /// The same shape laid along x: a linear element's length along x and its thickness along y,
+    /// with the roles walking it along +x gives; anything else as it is. How a seated box lies in
+    /// its own frame (the child module `seated`).
+    fn along_x(&self) -> Extrusion {
+        if self.along == 0 {
+            return self.clone();
+        }
+        let (long, across) = self.long_and_across();
+        Extrusion {
+            size: [long, across],
+            height: self.height,
+            caps: self.caps,
+            sides: ["exterior", "end1", "interior", "end0"],
+            along: 0,
+        }
     }
 
     /// Its length along its axis and its thickness across it, in millimetres.
@@ -687,8 +743,16 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
         let plan = crate::column_plan::ColumnPlan::of(recipe)?;
         return column::names(op_id(recipe)?, &plan);
     }
+    if crate::stair_plan::is_stair(recipe) {
+        let plan = crate::stair_plan::StairPlan::of(recipe)?;
+        return stair::names(op_id(recipe)?, &plan);
+    }
     if wall_plan::is_layered(recipe) {
         return layered::names(recipe, &Layered::of(recipe)?);
+    }
+    if crate::curtain_plan::is_curtain(recipe) {
+        crate::curtain_plan::CurtainPlan::of(recipe)?;
+        return curtain::names(recipe);
     }
     let shape = Extrusion::of(recipe)?;
     let op = op_id(recipe)?;
@@ -775,6 +839,82 @@ pub fn fits_with(
     opening::plan(host, &shape, &on_grid(units, hosted)?, units, band).map(|_| ())
 }
 
+/// Where one opening lies in the wall that hosts it, as the builder's own rules place it
+/// ([`openings`]): in the building's grid steps, exact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Opened {
+    /// The hosted element's permanent ID.
+    pub key: String,
+    /// What it is called in a sentence: `door`, `opening` or `family`.
+    pub noun: &'static str,
+    /// The plan axis its wall's line runs along: 0 for x, 1 for y.
+    pub axis: usize,
+    /// Where the opening starts along that axis, in plan, relative to the wall's placement.
+    pub low: i64,
+    /// Where it ends.
+    pub high: i64,
+    /// Its foot, up from the wall's base.
+    pub foot: i64,
+    /// Its head, up from the wall's base.
+    pub head: i64,
+}
+
+/// Where the elements `hosted` cut openings in `host`, one [`Opened`] each, in the order of their
+/// keys, asked without the engine by the rules [`fits`] applies, so what is read here is what is
+/// built. A host that is not a wall, or nothing hosted, gives none. Positions are relative to the
+/// host's placement.
+///
+/// # Errors
+///
+/// As [`fits`]: [`opening`]'s refusals, each naming the door and why.
+pub fn openings(
+    edition: &Edition,
+    host: &Recipe,
+    hosted: &[HostedAt<'_>],
+    families: &dyn FamilySource,
+) -> Result<Vec<Opened>, GeometryError> {
+    let (units, band) = if let Some(report) = &edition.report {
+        let units = Units::of_steps_per_mm(report.steps_per_mm)?;
+        let tolerances = report
+            .tolerances
+            .iter()
+            .filter_map(|t| t.value.parse::<f64>().ok().map(|v| (t.unit.as_str(), v)));
+        (units, units.band_over(tolerances))
+    } else {
+        let units = Units::on(STEP)?;
+        (units, units.band_over(std::iter::empty()))
+    };
+    if hosted.is_empty() || crate::floor_plan::is_floor(host) {
+        return Ok(Vec::new());
+    }
+    if wall_plan::is_layered(host) {
+        return layered::opened(
+            &Layered::of(host)?,
+            &on_grid(units, hosted)?,
+            units,
+            band,
+            families,
+        );
+    }
+    let shape = Extrusion::of(host)?;
+    let axis = shape.along;
+    opening::plan(host, &shape, &on_grid(units, hosted)?, units, band)?
+        .iter()
+        .map(|cut| {
+            let ([from, to], [foot, head]) = cut.stretch();
+            Ok(Opened {
+                key: cut.key().to_owned(),
+                noun: cut.noun(),
+                axis,
+                low: units.to_q0(from, false)?,
+                high: units.to_q0(to, true)?,
+                foot: units.to_q0(foot, false)?,
+                head: units.to_q0(head, true)?,
+            })
+        })
+        .collect()
+}
+
 /// The builder over an engine: every shape is made by `E` through the kernel's engine seam.
 pub struct Kernel<E> {
     engine: Mutex<E>,
@@ -846,7 +986,10 @@ impl<E: Engine> Kernel<E> {
         let unavailable = || fault("EngineUnavailable", "an earlier build stopped part way");
         let instance = families::Instance::of(host)?;
         let resolved = families::resolve(&*self.families, &instance)?;
-        let key = CacheKey::turned(&resolved.recipe, &resolved.values, instance.turn);
+        let key = match &instance.seat {
+            Some(seat) => CacheKey::seated(&resolved.recipe, &resolved.values, seat),
+            None => CacheKey::turned(&resolved.recipe, &resolved.values, instance.turn),
+        };
         let mut kept = self.family_shapes.lock().map_err(|_| unavailable())?;
         if let Some(built) = kept.0.get(&key) {
             return Ok(built.clone());
@@ -874,8 +1017,9 @@ impl<E: Engine> Kernel<E> {
         self.band
     }
 
-    /// A floor, a roof, a placed family, a room or a column, each built by its own builder; `None`
-    /// for any other recipe, which [`Kernel::build_hosting`] builds as a wall or a box.
+    /// A floor, a roof, a stair, a placed family, a room, a column or a box seated in a wall at an angle,
+    /// each built by its own builder; `None` for any other recipe, which [`Kernel::build_hosting`]
+    /// builds as a wall or a box.
     fn build_other_kind(
         &self,
         host: &Recipe,
@@ -887,6 +1031,9 @@ impl<E: Engine> Kernel<E> {
         if crate::roof_plan::is_roof(host) {
             return Some(self.build_roof(host, hosted.len()));
         }
+        if crate::stair_plan::is_stair(host) {
+            return Some(self.build_stair(host, hosted.len()));
+        }
         if families::is_instance(host) {
             return Some(self.build_family(host, hosted));
         }
@@ -896,7 +1043,49 @@ impl<E: Engine> Kernel<E> {
         if crate::column_plan::is_column(host) {
             return Some(self.build_column(host, hosted.len()));
         }
+        if crate::curtain_plan::is_curtain(host) {
+            return Some(self.build_curtain(host, hosted));
+        }
+        if host.args.contains_key(seating::SEAT_ARG) {
+            return Some(self.build_seated(host, hosted));
+        }
         None
+    }
+
+    /// A curtain wall ([`curtain::build`]); it hosts nothing.
+    fn build_curtain(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        if let Some(first) = hosted.first() {
+            return Err(fault(
+                "NotAHost",
+                format!("{}: a curtain wall hosts nothing", first.key),
+            ));
+        }
+        let plan = crate::curtain_plan::CurtainPlan::of(host)?;
+        let mut engine = self
+            .engine
+            .lock()
+            .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+        curtain::build(&mut *engine, host, &plan, self.units, &*self.families)
+    }
+
+    /// A box seated in a wall at an angle ([`seated::build`]); it hosts nothing.
+    fn build_seated(&self, host: &Recipe, hosted: &[Hosted<'_>]) -> Result<Built, GeometryError> {
+        if let Some(first) = hosted.first() {
+            return Err(fault(
+                "NotAHost",
+                format!("{}: a seated {} hosts nothing", first.key, host.op),
+            ));
+        }
+        let (stored, seat) = seating::unseated(host)?;
+        let shape = Extrusion::of(&stored)?;
+        let Some(seat) = seat else {
+            return Err(fault("BadSeat", "a seated box with no seat"));
+        };
+        let mut engine = self
+            .engine
+            .lock()
+            .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+        seated::build(&mut *engine, &stored, &shape, &seat, self.units)
     }
 
     /// Builds `host` with an opening cut through it for each element in `hosted`: the host's
@@ -1024,6 +1213,14 @@ impl<E: Engine> Kernel<E> {
     ///
     /// What [`Geometry::build`] gives for a recipe it cannot build, and the engine's errors.
     pub fn solid(&self, recipe: &Recipe) -> Result<KernelSolid<E::Solid>, GeometryError> {
+        if let (stored, Some(seat)) = seating::unseated(recipe)? {
+            let shape = Extrusion::of(&stored)?;
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            return seated::solid(&mut *engine, &stored, &shape, &seat, self.units);
+        }
         let shape = Extrusion::of(recipe)?;
         let units = self.units;
         let corners = shape.corners();
@@ -1087,7 +1284,8 @@ impl<E: Engine> Kernel<E> {
     }
 
     /// The solids of `recipe` for a drawing to cut: one for each layer of a layered wall (a layer
-    /// of no thickness has none), each with its material and the plane of each named face, and
+    /// of no thickness has none), one for each panel with a slab and each mullion of a curtain wall
+    /// ([`curtain::solids`]), each with its material and the plane of each named face, and
     /// for any other recipe the one [`Kernel::solid`] makes, with no material. A wall's openings
     /// are not cut in them.
     ///
@@ -1102,6 +1300,14 @@ impl<E: Engine> Kernel<E> {
                 .lock()
                 .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
             return layered::solids(&mut *engine, recipe, &wall, self.units);
+        }
+        if crate::curtain_plan::is_curtain(recipe) {
+            let plan = crate::curtain_plan::CurtainPlan::of(recipe)?;
+            let mut engine = self
+                .engine
+                .lock()
+                .map_err(|_| fault("EngineUnavailable", "an earlier build stopped part way"))?;
+            return curtain::solids(&mut *engine, recipe, &plan, self.units);
         }
         Ok(vec![LayerSolid {
             function: String::new(),

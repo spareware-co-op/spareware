@@ -38,8 +38,9 @@
 //! when it wrote a type or the parameter table every record of the document is read again; a
 //! failure is `"That can't be undone: "` and the reader's own words. So is leaving an element
 //! without its host: one it writes whose host is gone, or one hosted on a piece it deletes
-//! ([`crate::cloud::hosting::undo_rules`]). Every tie of what it wrote must name a level still
-//! in the model, and when it wrote or took away a level, every element of the document is
+//! ([`crate::cloud::hosting::undo_rules`]), or a placed family without the version of its family
+//! it names ([`crate::cloud::loading::undo_rules`]). Every tie of what it wrote must name a level
+//! still in the model, and when it wrote or took away a level, every element of the document is
 //! checked so (`levels::ties_hold`), and a view it wrote must still stand on its levels, phases
 //! and options ([`crate::cloud::views::undo_rules`]).
 //!
@@ -54,8 +55,8 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::{
-    columns, families, floors, grids, hosting, levels, openings, params, roofs, rooms, sheets,
-    views, walls,
+    columns, curtains, dimensions, families, floors, grids, hosting, levels, loading, openings,
+    params, roofs, rooms, schedules, sheets, stairs, views, walls,
 };
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
@@ -112,9 +113,13 @@ pub fn is_step(cmd: &str) -> bool {
         || floors::is_command(cmd)
         || roofs::is_command(cmd)
         || columns::is_command(cmd)
+        || curtains::is_command(cmd)
         || rooms::is_command(cmd)
+        || stairs::is_command(cmd)
         || views::is_command(cmd)
+        || schedules::is_command(cmd)
         || sheets::is_command(cmd)
+        || dimensions::is_command(cmd)
         || is_command(cmd)
 }
 
@@ -504,6 +509,10 @@ pub async fn apply<T: Txn>(
     if let Err(why) = hosting::undo_rules(txn, project, document, &written, &deleted).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
+    // Nor a placed family without the version of its family it names.
+    if let Err(why) = loading::undo_rules(txn, project, document, &written, &deleted).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
     // An undo may not leave an element tied to a level that is no longer in the model.
     if let Err(why) = levels::ties_hold(txn, project, document, &written, whole).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
@@ -512,8 +521,16 @@ pub async fn apply<T: Txn>(
     if let Err(why) = views::undo_rules(txn, project, document, &written, whole).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
+    // Nor a schedule whose category or fields the document no longer has.
+    if let Err(why) = schedules::undo_rules(txn, project, document, &written).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
     // Nor a sheet without its viewports' views, or a view placed twice.
     if let Err(why) = sheets::undo_rules(txn, project, document, &written, &deleted).await? {
+        return Ok(Err(format!("{CANNOT}{why}")));
+    }
+    // Nor a dimension in a view that is not a plan there.
+    if let Err(why) = dimensions::undo_rules(txn, project, document, &written, &deleted).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     Ok(Ok(Applied {

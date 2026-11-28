@@ -31,9 +31,88 @@ pub enum SlabError {
     },
     /// Every layer is 0 thick, so the floor would have no solid.
     NoThickness,
-    /// The sketch holds constraints; a floor's sketch is solved by a later job (5.2), so for now
-    /// its points are the floor's corners as they stand.
-    Constrained,
+    /// The floor's sketch holds constraints the solver cannot solve; the text is the solver's
+    /// reason (over-constrained with the constraints that conflict, not converged, out of work,
+    /// refused at rounding).
+    NotSolved {
+        /// The solver's reason.
+        why: String,
+    },
+    /// A dimension change named a constraint the sketch lacks, or one that holds no length.
+    NotADimension {
+        /// The constraint's number in the sketch.
+        constraint: u32,
+    },
+    /// A slope arrow's tail and head are one point, so it has no direction.
+    SlopeNoDirection,
+    /// A slope given as a rise over a run along an arrow that is not a whole number of grid steps
+    /// long, so no height along it is exact.
+    SlopeArrowNotWhole,
+    /// The slope puts this corner of the floor's top face at a height that is not a whole grid
+    /// step (156.25 nm), so the sloped face cannot be built exactly on the grid.
+    SlopeOffGrid {
+        /// The loop.
+        ring: Ring,
+        /// The edge that starts at the corner.
+        segment: Id,
+    },
+    /// A floor with both a slope and slab edges: the edges' tops would follow the sloped
+    /// underside, which is not built yet.
+    SlopeWithEdges,
+    /// A slab edge names no edge of the floor's boundary.
+    EdgeUnknown {
+        /// The edge it names.
+        edge: Id,
+    },
+    /// Two slab edges run along one edge of the floor.
+    EdgeTwice {
+        /// The edge.
+        edge: Id,
+    },
+    /// A slab edge's profile is not one that can be built: the text says why.
+    EdgeProfile {
+        /// The edge.
+        edge: Id,
+        /// Why.
+        why: String,
+    },
+    /// A slab edge's inner face does not land on whole grid steps along this edge (its width
+    /// across a sloped edge, or its mitre with the next edge, falls between steps).
+    EdgeOffGrid {
+        /// The edge.
+        edge: Id,
+    },
+    /// Two slab edges of different profiles meet at a corner; their pieces cannot be mitred.
+    EdgesMeet {
+        /// The edge that ends at the corner.
+        first: Id,
+        /// The edge that starts there.
+        second: Id,
+    },
+    /// A slab edge ends square at a corner sharper than a right angle, so its end would stand
+    /// outside the floor.
+    EdgeEndOutside {
+        /// The edge.
+        edge: Id,
+    },
+    /// A slab edge is too wide for its floor: its inner face reaches another side of the floor,
+    /// or its ends cross.
+    EdgeTooWide {
+        /// The edge.
+        edge: Id,
+    },
+    /// Two slab edges that do not meet at a corner overlap.
+    EdgesOverlap {
+        /// The earlier edge.
+        first: Id,
+        /// The later edge.
+        second: Id,
+    },
+    /// A slab edge's volume is not a whole number of cubic grid steps, so it has no exact value.
+    EdgeVolumeNotExact {
+        /// The edge.
+        edge: Id,
+    },
     /// An edge names a line or curve the sketch does not have.
     UnknownEntity {
         /// The loop.
@@ -169,9 +248,10 @@ impl fmt::Display for SlabError {
                 write!(f, "the layers up to layer {layer} add up to more than 10 m")
             }
             Self::NoThickness => write!(f, "a floor type needs a layer thicker than 0"),
-            Self::Constrained => write!(
+            Self::NotSolved { why } => write!(f, "the floor's sketch cannot be solved: {why}"),
+            Self::NotADimension { constraint } => write!(
                 f,
-                "a floor's sketch holds no constraints yet: floors sketched with the solver come later"
+                "constraint {constraint} of the floor's sketch is not a dimension to change"
             ),
             Self::UnknownEntity { ring, segment } => {
                 write!(f, "edge {segment} of {ring} names nothing in the sketch")
@@ -248,6 +328,69 @@ impl fmt::Display for SlabError {
             Self::Material(error) => error.fmt(f),
             Self::Type(error) => error.fmt(f),
             Self::Malformed(why) => write!(f, "not a stored floor: {why}"),
+            shaped => shaped.shape_text(f),
+        }
+    }
+}
+
+impl SlabError {
+    /// The words of a refusal about a floor's slope or slab edges (job 5.2); nothing for any
+    /// other, which [`fmt::Display`] words itself.
+    fn shape_text(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SlopeNoDirection => write!(
+                f,
+                "the slope arrow's tail and head are one point, so it points nowhere"
+            ),
+            Self::SlopeArrowNotWhole => write!(
+                f,
+                "a slope given as a rise over a run needs an arrow a whole number of grid steps \
+                 long (along x or y, or a whole length such as 3, 4, 5): give the heights at its \
+                 tail and head instead"
+            ),
+            Self::SlopeOffGrid { ring, segment } => write!(
+                f,
+                "the slope puts the start of edge {segment} of {ring} at a height between two grid \
+                 steps: move the arrow or change a height"
+            ),
+            Self::SlopeWithEdges => write!(
+                f,
+                "a floor cannot have both a slope and slab edges yet: slab edges under a sloped \
+                 floor are not built"
+            ),
+            Self::EdgeUnknown { edge } => {
+                write!(f, "slab edge {edge} names no edge of the floor")
+            }
+            Self::EdgeTwice { edge } => write!(f, "edge {edge} has two slab edges"),
+            Self::EdgeProfile { edge, why } => write!(f, "slab edge {edge}: {why}"),
+            Self::EdgeOffGrid { edge } => write!(
+                f,
+                "slab edge {edge}'s inner face falls between grid steps: give it a width that \
+                 lands on the grid across its edge"
+            ),
+            Self::EdgesMeet { first, second } => write!(
+                f,
+                "slab edges {first} and {second} meet at a corner with different profiles, and \
+                 cannot be mitred"
+            ),
+            Self::EdgeEndOutside { edge } => write!(
+                f,
+                "slab edge {edge} ends square at a corner sharper than a right angle, outside the \
+                 floor: give the next edge the same slab edge so they mitre"
+            ),
+            Self::EdgeTooWide { edge } => write!(
+                f,
+                "slab edge {edge} is too wide for the floor: it reaches another side, or its ends \
+                 cross"
+            ),
+            Self::EdgesOverlap { first, second } => {
+                write!(f, "slab edges {first} and {second} overlap")
+            }
+            Self::EdgeVolumeNotExact { edge } => write!(
+                f,
+                "slab edge {edge}'s volume falls between two cubic steps of the length unit"
+            ),
+            _ => Ok(()),
         }
     }
 }

@@ -654,7 +654,7 @@ async fn a_floor_is_drawn_from_a_closed_boundary_with_holes() {
         (
             "element.set",
             json!({ "element": "F-1", "recipe": recipe }),
-            "First floor's boundary is changed with floor.boundary, which checks it as a floor.",
+            "First floor's boundary, slope and slab edges are changed with floor.boundary, floor.dimension, floor.slope or floor.edge, which check it as a floor.",
         ),
     ] {
         let refused = stack.edit(cmd, args).await.unwrap_err();
@@ -898,4 +898,401 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
     let incremental = stack.derived().await;
     stack.regen.rebuild(&i("p")).await.unwrap();
     assert_eq!(stack.derived().await, incremental);
+}
+
+/// A 4 m by 3 m floor `F-1` on First, of the 200 mm concrete type.
+async fn plain_floor(stack: &Stack) {
+    two_levels(stack).await;
+    stack.edit("floor.defaults", json!({})).await.unwrap();
+    stack
+        .edit(
+            "floor.create",
+            create("F-1", CONCRETE, &rectangle(4000, 3000)),
+        )
+        .await
+        .unwrap();
+}
+
+/// A slope falling 40 mm along x over the floor's 4 m.
+fn fall() -> Value {
+    json!({ "element": "F-1", "slope": { "tail": ["0", "0"], "head": ["4000", "0"],
+                                         "at_tail": "0", "at_head": "-40 mm" } })
+}
+
+/// A 300 mm wide downturn 400 mm deep on edge `edge` of `F-1`.
+fn downturn(edge: &str) -> Value {
+    json!({ "element": "F-1", "edge": edge,
+            "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } })
+}
+
+/// A floor's slope is set, changed and cleared by its own commands, one step each; the floor is
+/// built from it (its lowest point 40 mm down, 240 mm with the type's thickness); a slope the
+/// builders cannot take, both ways of rising at once and none, are refused in words and change
+/// nothing.
+#[tokio::test]
+async fn a_floors_slope_is_set_changed_and_cleared_by_its_own_commands() {
+    let stack = Stack::new().await;
+    plain_floor(&stack).await;
+    let flat = stack.record("F-1").await.unwrap();
+    assert_eq!(flat.recipe.op_version, 1);
+    undone_and_redone(&stack, "floor.slope", fall()).await;
+    let sloped = stack.record("F-1").await.unwrap();
+    assert_eq!(sloped.recipe.op_version, 2);
+    assert!(sloped.recipe.args.contains_key("slope"));
+    assert_eq!(
+        stack.bounds("F-1").await,
+        Ok(([0, 0, -240], [4000, 3000, 0]))
+    );
+
+    // Changed: a gradient of 1 in 100 down along a 4 m arrow along x is 40 mm again.
+    let gradient = json!({ "element": "F-1", "slope": { "tail": ["0", "0"], "head": ["4000", "0"],
+                           "at_tail": "0", "gradient": { "rise": -1, "run": 100 } } });
+    stack.edit("floor.slope", gradient).await.unwrap();
+    assert_eq!(
+        stack.bounds("F-1").await,
+        Ok(([0, 0, -240], [4000, 3000, 0]))
+    );
+    // Cleared: the floor is its plain self again, byte for byte.
+    undone_and_redone(&stack, "floor.slope.clear", json!({ "element": "F-1" })).await;
+    assert_eq!(stack.record("F-1").await.unwrap(), flat);
+
+    let slope = |tail: [&str; 2], head: [&str; 2], rest: Value| {
+        let mut slope = json!({ "tail": tail, "head": head, "at_tail": "0" });
+        slope
+            .as_object_mut()
+            .unwrap()
+            .extend(rest.as_object().unwrap().clone());
+        json!({ "element": "F-1", "slope": slope })
+    };
+    let before = stack.rows("piece").await;
+    for (args, words) in [
+        (
+            slope(["0", "0"], ["0", "0"], json!({ "at_head": "-40 mm" })),
+            "F-1's slope: ",
+        ),
+        (
+            slope(
+                ["0", "0"],
+                ["3000", "1000"],
+                json!({ "gradient": { "rise": 1, "run": 100 } }),
+            ),
+            "F-1's slope: ",
+        ),
+        (
+            slope(
+                ["0", "0"],
+                ["4000", "0"],
+                json!({ "at_head": "-40 mm", "gradient": { "rise": 1, "run": 100 } }),
+            ),
+            "F-1's slope: A slope is its height at the head or a rise over a run, not both.",
+        ),
+        (
+            slope(["0", "0"], ["4000", "0"], json!({})),
+            "F-1's slope: A slope needs its height at the head or a rise over a run.",
+        ),
+        (
+            slope(
+                ["0", "0"],
+                ["4000", "0"],
+                json!({ "gradient": { "rise": 1, "run": 0 } }),
+            ),
+            "F-1's slope: A slope's run cannot be zero.",
+        ),
+        (
+            slope(["0", "x"], ["4000", "0"], json!({ "at_head": "1 mm" })),
+            "F-1's slope: ",
+        ),
+        (
+            json!({ "element": "F-1" }),
+            "F-1's slope: This command needs a slope.",
+        ),
+        (
+            json!({ "element": "L-1", "slope": fall()["slope"] }),
+            "First is not a floor.",
+        ),
+        (
+            json!({ "element": "F-none", "slope": fall()["slope"] }),
+            "That element no longer exists.",
+        ),
+    ] {
+        let refused = stack.edit("floor.slope", args.clone()).await.unwrap_err();
+        assert!(refused.starts_with(words), "{args}: {refused}");
+    }
+    assert_eq!(
+        stack.rows("piece").await,
+        before,
+        "a refusal changes nothing"
+    );
+}
+
+/// Slab edges are added, changed and removed on chosen edges by their own commands, one step each,
+/// and the floor is built from them (a downturn 400 mm below the 200 mm slab); a slope and slab
+/// edges on one floor are refused both ways round; an edge the floor lacks, a profile that is not
+/// one, an edge never added and a width that reaches the other side are refused in words.
+#[tokio::test]
+async fn slab_edges_are_added_changed_and_removed_by_their_own_commands() {
+    let stack = Stack::new().await;
+    plain_floor(&stack).await;
+    undone_and_redone(&stack, "floor.edge", downturn("r0")).await;
+    assert_eq!(
+        stack.bounds("F-1").await,
+        Ok(([0, 0, -600], [4000, 3000, 0]))
+    );
+    // Changed: the same edge, a thickened profile 500 mm deep.
+    let thickened = json!({ "element": "F-1", "edge": "r0", "profile": { "kind": "thickened",
+                            "width": "400 mm", "foot": "200 mm", "depth": "500 mm" } });
+    undone_and_redone(&stack, "floor.edge", thickened).await;
+    assert_eq!(
+        stack.bounds("F-1").await,
+        Ok(([0, 0, -700], [4000, 3000, 0]))
+    );
+    let shape = construct_slabs::shape_of(&stack.record("F-1").await.unwrap().recipe).unwrap();
+    assert_eq!(shape.edges().len(), 1, "changed, not added");
+    // A second, on the opposite side.
+    stack.edit("floor.edge", downturn("r2")).await.unwrap();
+    let shape = construct_slabs::shape_of(&stack.record("F-1").await.unwrap().recipe).unwrap();
+    assert_eq!(shape.edges().len(), 2);
+    // A slope on a floor with edges is refused by name.
+    let refused = stack.edit("floor.slope", fall()).await.unwrap_err();
+    assert!(refused.starts_with("F-1's slope: "), "{refused}");
+    undone_and_redone(
+        &stack,
+        "floor.edge.remove",
+        json!({ "element": "F-1", "edge": "r2" }),
+    )
+    .await;
+    let shape = construct_slabs::shape_of(&stack.record("F-1").await.unwrap().recipe).unwrap();
+    assert_eq!(shape.edges().len(), 1);
+    stack
+        .edit(
+            "floor.edge.remove",
+            json!({ "element": "F-1", "edge": "r0" }),
+        )
+        .await
+        .unwrap();
+    let shape = construct_slabs::shape_of(&stack.record("F-1").await.unwrap().recipe).unwrap();
+    assert!(shape.is_plain(), "no edges left: a plain floor again");
+    // Edges on a sloped floor, the other way round.
+    stack.edit("floor.slope", fall()).await.unwrap();
+    let refused = stack.edit("floor.edge", downturn("r0")).await.unwrap_err();
+    assert!(refused.starts_with("F-1's slab edge: "), "{refused}");
+
+    stack
+        .edit("floor.slope.clear", json!({ "element": "F-1" }))
+        .await
+        .unwrap();
+    let before = stack.rows("piece").await;
+    let nonsense = |profile: Value| json!({ "element": "F-1", "edge": "r1", "profile": profile });
+    for (args, words) in [
+        (downturn("zz"), "F-1's slab edge: "),
+        (
+            nonsense(json!({ "kind": "ramp", "width": "300 mm", "depth": "400 mm" })),
+            "F-1's slab edge: A slab edge is thickened or a downturn, not \"ramp\".",
+        ),
+        (
+            nonsense(json!({ "kind": "thickened", "width": "300 mm", "depth": "400 mm" })),
+            "F-1's slab edge: A thickened edge needs its foot.",
+        ),
+        (
+            nonsense(
+                json!({ "kind": "downturn", "width": "300 mm", "foot": "100 mm",
+                             "depth": "400 mm" }),
+            ),
+            "F-1's slab edge: A downturn has a width and a depth, and no foot.",
+        ),
+        (
+            nonsense(
+                json!({ "kind": "thickened", "width": "300 mm", "foot": "400 mm",
+                             "depth": "400 mm" }),
+            ),
+            "F-1's slab edge: ",
+        ),
+        (
+            nonsense(json!({ "kind": "downturn", "width": "0", "depth": "400 mm" })),
+            "F-1's slab edge: ",
+        ),
+        (
+            nonsense(json!({ "kind": "downturn", "width": "4 m", "depth": "400 mm" })),
+            "F-1's slab edge: ",
+        ),
+        (
+            json!({ "element": "F-1", "edge": "r1" }),
+            "F-1's slab edge: This command needs a profile.",
+        ),
+        (json!({ "element": "F-1" }), "This command needs an edge."),
+    ] {
+        let refused = stack.edit("floor.edge", args.clone()).await.unwrap_err();
+        assert!(refused.starts_with(words), "{args}: {refused}");
+    }
+    let refused = stack
+        .edit(
+            "floor.edge.remove",
+            json!({ "element": "F-1", "edge": "r1" }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(refused, "F-1 has no slab edge on r1.");
+    assert_eq!(stack.rows("piece").await, before);
+}
+
+/// The generic commands are no way round them: a floor's recipe set by `element.set`, and a
+/// floor made by `element.create` with a shaped recipe, are refused naming the floor commands.
+#[tokio::test]
+async fn the_generic_commands_are_no_way_round_the_shape_commands() {
+    let stack = Stack::new().await;
+    plain_floor(&stack).await;
+    stack.edit("floor.slope", fall()).await.unwrap();
+    let shaped = stack.record("F-1").await.unwrap();
+    let before = stack.rows("piece").await;
+    let refused = stack
+        .edit(
+            "element.set",
+            json!({ "element": "F-1", "recipe": shaped.recipe }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        refused,
+        "F-1's boundary, slope and slab edges are changed with floor.boundary, floor.dimension, floor.slope or floor.edge, which check it as a floor."
+    );
+    let made = json!({ "element": "F-2", "kind": "floor", "name": "F-2", "level": 0,
+                       "placement": { "x": 0, "y": 0, "z": 0 }, "recipe": shaped.recipe });
+    let refused = stack.edit("element.create", made).await.unwrap_err();
+    assert_eq!(
+        refused,
+        "A floor is made with floor.create, which checks it as a floor."
+    );
+    assert_eq!(stack.rows("piece").await, before);
+}
+
+/// A sketched outline: a rough four-sided sketch held square, its first corner fixed, 4 m along x
+/// and 3 m up, is the 4 m by 3 m rectangle; `floor.dimension` changes the 3 m to 5 m and the
+/// outline moves with every edge keeping its ID; a dimension that is none, a sketch the solver
+/// cannot solve and a constraint of no kind are refused in words.
+#[tokio::test]
+async fn a_sketched_outline_is_made_from_a_sketch_and_changed_by_its_dimension() {
+    let stack = Stack::new().await;
+    two_levels(&stack).await;
+    stack.edit("floor.defaults", json!({})).await.unwrap();
+    let rough = |constraints: Value| {
+        json!({ "outer": [at("s0", 0, 0), at("s1", 4100, 100), at("s2", 3900, 3100),
+                          at("s3", -50, 2900)],
+                "constraints": constraints })
+    };
+    let held = json!([
+        { "kind": "fixed", "point": 0 },
+        { "kind": "horizontal", "line": 0 },
+        { "kind": "vertical", "line": 1 },
+        { "kind": "horizontal", "line": 2 },
+        { "kind": "vertical", "line": 3 },
+        { "kind": "distance", "a": 0, "b": 1, "value": "4 m" },
+        { "kind": "distance", "a": 1, "b": 2, "value": "3 m" },
+    ]);
+    let corners = |record: &Element| -> Vec<(String, i64, i64)> {
+        let boundary = boundary_of(&record.recipe).unwrap();
+        boundary
+            .corners(construct_slabs::Ring::Outer)
+            .unwrap()
+            .into_iter()
+            .map(|(id, at)| (id.to_string(), at.x / 6400, at.y / 6400))
+            .collect()
+    };
+    undone_and_redone(
+        &stack,
+        "floor.create",
+        create("F-1", CONCRETE, &rough(held.clone())),
+    )
+    .await;
+    let floor = stack.record("F-1").await.unwrap();
+    assert_eq!(
+        corners(&floor),
+        [
+            ("s0".to_owned(), 0, 0),
+            ("s1".to_owned(), 4000, 0),
+            ("s2".to_owned(), 4000, 3000),
+            ("s3".to_owned(), 0, 3000),
+        ]
+    );
+    assert_eq!(
+        stack.bounds("F-1").await,
+        Ok(([0, 0, -200], [4000, 3000, 0]))
+    );
+    // The seventh constraint, 3 m, becomes 5 m.
+    let wider = json!({ "element": "F-1", "constraint": 6, "value": "5 m" });
+    undone_and_redone(&stack, "floor.dimension", wider).await;
+    let floor = stack.record("F-1").await.unwrap();
+    assert_eq!(
+        corners(&floor),
+        [
+            ("s0".to_owned(), 0, 0),
+            ("s1".to_owned(), 4000, 0),
+            ("s2".to_owned(), 4000, 5000),
+            ("s3".to_owned(), 0, 5000),
+        ]
+    );
+    assert_eq!(
+        stack.bounds("F-1").await,
+        Ok(([0, 0, -200], [4000, 5000, 0]))
+    );
+    // A slope on it, then its dimension again: the slope stays, checked on the new outline.
+    stack.edit("floor.slope", fall()).await.unwrap();
+    let back = json!({ "element": "F-1", "constraint": 6, "value": "3 m" });
+    stack.edit("floor.dimension", back).await.unwrap();
+    let shape = construct_slabs::shape_of(&stack.record("F-1").await.unwrap().recipe).unwrap();
+    assert!(shape.slope().is_some());
+
+    let before = stack.rows("piece").await;
+    for (args, words) in [
+        (
+            json!({ "element": "F-1", "constraint": 0, "value": "1 m" }),
+            "F-1's boundary: constraint 0 of the floor's sketch is not a dimension to change",
+        ),
+        (
+            json!({ "element": "F-1", "constraint": 99, "value": "1 m" }),
+            "F-1's boundary: constraint 99 of the floor's sketch is not a dimension to change",
+        ),
+        (
+            json!({ "element": "F-1", "constraint": 6 }),
+            "F-1's boundary: This command needs a length.",
+        ),
+        (
+            json!({ "element": "F-1", "value": "1 m" }),
+            "F-1's boundary: This command needs a constraint.",
+        ),
+        (
+            json!({ "element": "L-1", "constraint": 6, "value": "1 m" }),
+            "First is not a floor.",
+        ),
+    ] {
+        let refused = stack
+            .edit("floor.dimension", args.clone())
+            .await
+            .unwrap_err();
+        assert!(refused.starts_with(words), "{args}: {refused}");
+    }
+    assert_eq!(stack.rows("piece").await, before);
+    // A sketch the solver cannot solve (two distances that cannot both hold) is refused with the
+    // solver's reason; so is a constraint of a kind there is none of.
+    let mut conflicting = held.as_array().unwrap().clone();
+    conflicting.push(json!({ "kind": "distance", "a": 0, "b": 1, "value": "3 m" }));
+    let refused = stack
+        .edit(
+            "floor.create",
+            create("F-2", CONCRETE, &rough(json!(conflicting))),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        refused.starts_with("F-2's boundary: the floor's sketch cannot be solved"),
+        "{refused}"
+    );
+    let refused = stack
+        .edit(
+            "floor.create",
+            create("F-2", CONCRETE, &rough(json!([{ "kind": "wobbly" }]))),
+        )
+        .await
+        .unwrap_err();
+    assert!(refused.starts_with("F-2's boundary: "), "{refused}");
+    assert!(stack.record("F-2").await.is_none());
 }

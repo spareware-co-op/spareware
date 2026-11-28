@@ -891,3 +891,85 @@ async fn replaying_the_log_from_empty_gives_the_same_records() {
         .unwrap();
     assert_eq!(after, entries);
 }
+
+/// A type and the parameter table are claimed by the commands that make them, and nothing else
+/// gives the claim back before it runs out: so the person who holds one can let go of it, and
+/// another person cannot, as for an element.
+#[tokio::test]
+async fn the_holder_lets_go_of_a_type_and_the_parameter_table_and_no_one_else_can() {
+    let stack = Stack::new(Arc::new(Boxes)).await;
+    doors(&stack).await;
+    stack
+        .edit(
+            "type.duplicate",
+            json!({ "type": "T-820", "new": "T-900", "name": "Single 900" }),
+        )
+        .await
+        .unwrap();
+    let define = |id: &str| def(id, "Rebate", "length", "instance");
+    assert_eq!(
+        stack
+            .edit_as("ben", "parameter.define", define("P-rebate"))
+            .await,
+        Err("anna is working on this.".to_owned()),
+        "while Anna holds the table, Ben's change is turned back"
+    );
+
+    for record in ["T-900", "parameters"] {
+        let release = json!({ "element": record });
+        assert_eq!(
+            stack
+                .edit_as("ben", "element.release", release.clone())
+                .await,
+            Err("anna is working on this.".to_owned()),
+            "{record}: another person cannot let go of it"
+        );
+        stack
+            .edit("element.release", release)
+            .await
+            .unwrap_or_else(|why| panic!("{record}: the holder lets go: {why}"));
+    }
+
+    // The parameter table was held by Anna, which turned Ben's change back; now it stands.
+    stack
+        .edit_as("ben", "parameter.define", define("P-rebate"))
+        .await
+        .unwrap();
+    assert!(stack.exists("T-900").await);
+}
+
+#[tokio::test]
+async fn letting_go_of_a_record_that_does_not_exist_is_refused() {
+    let stack = Stack::new(Arc::new(Boxes)).await;
+    doors(&stack).await;
+    assert_eq!(
+        stack
+            .edit("element.release", json!({ "element": "T-none" }))
+            .await,
+        Err("That element no longer exists.".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn every_other_command_on_a_record_with_no_shape_is_still_refused() {
+    let stack = Stack::new(Arc::new(Boxes)).await;
+    doors(&stack).await;
+    for record in ["T-820", "parameters"] {
+        for (cmd, args) in [
+            ("element.claim", json!({ "element": record })),
+            ("element.delete", json!({ "element": record })),
+            ("element.set", json!({ "element": record, "name": "x" })),
+            (
+                "element.move",
+                json!({ "element": record, "placement": { "x": 0, "y": 0, "z": 0 } }),
+            ),
+        ] {
+            let refused = stack.edit(cmd, args).await.unwrap_err();
+            assert_eq!(
+                refused,
+                "Types, levels and the parameter table are changed by their own commands, not as elements.",
+                "{cmd} on {record}"
+            );
+        }
+    }
+}

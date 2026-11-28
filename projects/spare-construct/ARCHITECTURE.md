@@ -382,6 +382,7 @@ A family is a recipe written as data: parameters, a constrained sketch and solid
 - Nested families are recipes inside recipes, with linked parameters. Shared nested families are placed as their own elements.
 - Hosted families declare their host (wall, floor, ceiling, face) and the void they cut.
 - Geometry per type is computed once and cached; 2,000 instances of one door type reuse one solid.
+- A project document holds every family placed in it (its recipe, content id and source, one record each), so it opens and builds without the library; families are loaded, reloaded keeping placed instances, swapped and generated through the edit log (`crates/construct-api` `cloud::loading`; note CON-A7-F2-P3-family-load-and-reload).
 
 **Door and window generator**
 

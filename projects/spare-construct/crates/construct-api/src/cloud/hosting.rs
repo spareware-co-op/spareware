@@ -227,8 +227,10 @@ pub(crate) fn is_floor(record: &Element) -> bool {
     construct_regen::floor_plan::is_floor(&record.recipe)
 }
 
-/// Where `element` sits in `host`'s frame, from the records as they are now. The inner error is
-/// the refusal, in the words of what refused it.
+/// Where `element` sits in `host`'s frame, from the records as they are now, and its recipe as its
+/// host's builder is handed it ([`hosting::seat`]: a placed family's turned to face out of its
+/// side, as the regenerator builds it, so a family on a wall along y fits as it is built). The
+/// inner error is the refusal, in the words of what refused it.
 async fn frame_at<T: Txn>(
     txn: &mut T,
     project: &Id,
@@ -246,7 +248,20 @@ async fn frame_at<T: Txn>(
             )));
         }
     };
-    let at = hosting::at(
+    // An embedded curtain wall is fitted as the plain opening it cuts in its host.
+    match hosting::cut_of(
+        &host.edition,
+        &host.record,
+        &host.recipe,
+        element,
+        &recipe,
+        hosting,
+    ) {
+        Ok(Some((at, cut))) => return Ok(Ok((cut, at))),
+        Ok(None) => {}
+        Err(e) => return Ok(Err(e.message)),
+    }
+    let seated = hosting::seat(
         &host.edition,
         &host.record,
         &host.recipe,
@@ -254,7 +269,9 @@ async fn frame_at<T: Txn>(
         &recipe,
         hosting,
     );
-    Ok(at.map(|at| (recipe, at)).map_err(|e| e.message))
+    Ok(seated
+        .map(|(at, recipe)| (recipe, at))
+        .map_err(|e| e.message))
 }
 
 /// Where `element`, hosted on `host`, sits in the model, if it fits there with everything else
@@ -348,7 +365,10 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         return Ok(Err("That element already exists.".to_owned()));
     }
     let kind = args.kind.unwrap_or_else(|| DOOR.to_owned());
-    if kind == records::TYPE_KIND || kind == records::TABLE_KIND || id.as_str() == records::TABLE_ID
+    if kind == records::TYPE_KIND
+        || kind == records::TABLE_KIND
+        || kind == construct_regen::families::RECORD_KIND
+        || id.as_str() == records::TABLE_ID
     {
         return Ok(Err(
             "Types and the parameter table are changed by their own commands, not as elements."

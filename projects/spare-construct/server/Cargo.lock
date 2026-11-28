@@ -659,6 +659,9 @@ dependencies = [
  "construct-categories",
  "construct-clash",
  "construct-columns",
+ "construct-curtain",
+ "construct-dimensions",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -673,14 +676,17 @@ dependencies = [
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-styles",
  "construct-transport",
  "construct-types",
  "construct-versions",
  "construct-views",
  "construct-walls",
+ "construct-warnings",
  "engine-sim",
  "kit-core",
  "kit-mcp",
@@ -724,6 +730,44 @@ dependencies = [
  "libm",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "construct-curtain"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-families",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-dimensions"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-grids",
+ "construct-model",
+ "construct-params",
+ "construct-warnings",
+ "kit-core",
+ "num-bigint",
+]
+
+[[package]]
+name = "construct-doorgen"
+version = "0.0.0"
+dependencies = [
+ "construct-families",
+ "construct-params",
+ "engine-geometry",
+ "kit-core",
 ]
 
 [[package]]
@@ -771,6 +815,7 @@ dependencies = [
  "engine-geometry",
  "hex",
  "kit-core",
+ "num-bigint",
  "serde_json",
  "sha2 0.11.0",
 ]
@@ -884,6 +929,8 @@ version = "0.0.0"
 dependencies = [
  "construct-categories",
  "construct-columns",
+ "construct-curtain",
+ "construct-dimensions",
  "construct-families",
  "construct-formulas",
  "construct-grids",
@@ -894,8 +941,10 @@ dependencies = [
  "construct-params",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-sheets",
  "construct-slabs",
+ "construct-stairs",
  "construct-types",
  "construct-views",
  "construct-walls",
@@ -946,6 +995,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-schedules"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-phases",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-sheets"
 version = "0.0.0"
 dependencies = [
@@ -968,6 +1030,7 @@ dependencies = [
  "construct-solver",
  "construct-types",
  "kit-core",
+ "num-bigint",
  "serde",
  "serde_json",
 ]
@@ -988,6 +1051,21 @@ dependencies = [
  "construct-model",
  "kit-core",
  "rstar",
+]
+
+[[package]]
+name = "construct-stairs"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-roofs",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1055,6 +1133,13 @@ dependencies = [
  "kit-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "construct-warnings"
+version = "0.0.0"
+dependencies = [
+ "kit-core",
 ]
 
 [[package]]
@@ -2378,6 +2463,25 @@ checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "include_dir"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "923d117408f1e49d914f1a379a309cffe4f18c05cf4e3d12e613a15fc81bd0dd"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cab85a7ed0bd5f0e76d93846e0147172bed2e2d3f859bcc33a8d9699cad1a75"
+dependencies = [
+ "proc-macro2",
+ "quote",
 ]
 
 [[package]]
@@ -4402,11 +4506,13 @@ dependencies = [
  "construct-params",
  "construct-regen",
  "construct-styles",
+ "construct-views",
  "engine-geometry",
  "flate2",
  "futures",
  "geom-solidcore",
  "hex",
+ "include_dir",
  "kit-accounts",
  "kit-core",
  "kit-ops",

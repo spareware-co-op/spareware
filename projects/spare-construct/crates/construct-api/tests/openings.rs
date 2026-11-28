@@ -856,3 +856,90 @@ async fn another_persons_claim_turns_an_edit_away() {
     assert!(openings::is_command("shaft.reach"));
     assert!(!openings::is_command("floor.create"));
 }
+
+/// A floor with a slope or slab edges is not cut by openings and shafts yet (job 5.2), and both
+/// ways round it is refused by name where it is made, never built wrongly: an opening or a shaft
+/// that would cut a sloped floor or one with slab edges, and a slope or slab edges on a floor an
+/// opening or a shaft cuts, each in words naming both. A shaft beside the floor in plan cuts
+/// nothing and is made; so is an opening in a floor with a flat outline of its own (a sketched
+/// one), and a slope taken away lets the opening be drawn.
+#[tokio::test]
+async fn a_floor_with_a_slope_or_slab_edges_is_not_cut_and_says_so() {
+    let stack = a_storey().await;
+    let fall = json!({ "element": "F-1", "slope": { "tail": ["0", "0"], "head": ["8000", "0"],
+                       "at_tail": "0", "at_head": "-40 mm" } });
+    stack.edit("floor.slope", fall).await.unwrap();
+    let draw = json!({ "element": "O-1", "host": "F-1", "outline": rect(1000, 1000, 2000, 2000) });
+    let refused = stack.edit("opening.draw", draw.clone()).await.unwrap_err();
+    assert_eq!(
+        refused,
+        "opening O-1: it would be cut through floor F-1, which has a slope, and a floor with a \
+         slope is not cut by openings and shafts yet: put it elsewhere, or take the slope off the \
+         floor"
+    );
+    assert!(stack.record("O-1").await.is_none());
+    let make = json!({ "element": "S-1", "outline": rect(5000, 1000, 6800, 2000), "level": "L-g",
+                       "top": "L-2" });
+    let refused = stack.edit("shaft.create", make).await.unwrap_err();
+    assert_eq!(
+        refused,
+        "shaft S-1: it would be cut through floor F-1, which has a slope, and a floor with a \
+         slope is not cut by openings and shafts yet: put it elsewhere, or take the slope off the \
+         floor"
+    );
+    let beside = json!({ "element": "S-2", "outline": rect(20000, 1000, 21000, 2000),
+                         "level": "L-g", "top": "L-2" });
+    stack.edit("shaft.create", beside).await.unwrap();
+    stack
+        .edit("shaft.delete", json!({ "element": "S-2" }))
+        .await
+        .unwrap();
+
+    // Slab edges.
+    stack
+        .edit("floor.slope.clear", json!({ "element": "F-1" }))
+        .await
+        .unwrap();
+    let edge = json!({ "element": "F-1", "edge": "r0",
+                       "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } });
+    stack.edit("floor.edge", edge.clone()).await.unwrap();
+    let refused = stack.edit("opening.draw", draw.clone()).await.unwrap_err();
+    assert_eq!(
+        refused,
+        "opening O-1: it would be cut through floor F-1, which has slab edges, and a floor with \
+         slab edges is not cut by openings and shafts yet: put it elsewhere, or take the slab \
+         edges off the floor"
+    );
+    assert!(stack.record("O-1").await.is_none());
+
+    // The other way round: the opening first, then the slope or the edges.
+    stack
+        .edit(
+            "floor.edge.remove",
+            json!({ "element": "F-1", "edge": "r0" }),
+        )
+        .await
+        .unwrap();
+    stack.edit("opening.draw", draw).await.unwrap();
+    let before = stack.record("F-1").await.unwrap();
+    let fall = json!({ "element": "F-1", "slope": { "tail": ["0", "0"], "head": ["8000", "0"],
+                       "at_tail": "0", "at_head": "-40 mm" } });
+    let refused = stack.edit("floor.slope", fall).await.unwrap_err();
+    assert_eq!(
+        refused,
+        "F-1's slope: O-1 cuts through this floor, and a floor with a slope is not cut by \
+         openings and shafts yet: take it away first"
+    );
+    let refused = stack.edit("floor.edge", edge).await.unwrap_err();
+    assert_eq!(
+        refused,
+        "F-1's slab edge: O-1 cuts through this floor, and a floor with slab edges is not cut by \
+         openings and shafts yet: take it away first"
+    );
+    assert_eq!(stack.record("F-1").await.unwrap(), before);
+    // The floor is as it was: cut, 47 m2 by 200 mm.
+    assert_eq!(
+        stack.quantities("F-1").await,
+        ("47.00 m²".to_owned(), "9.40 m³".to_owned())
+    );
+}
