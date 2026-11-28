@@ -24,6 +24,7 @@ use crate::error::WallError;
 use crate::layer::Layer;
 use crate::length::{ZERO, difference, half, negated, sum};
 use crate::offsets::{LocationLine, Offsets};
+use crate::wrap::Wrapping;
 use construct_materials::Materials;
 use construct_params::Length;
 
@@ -61,13 +62,15 @@ pub enum Zone {
     InteriorShell,
 }
 
-/// A wall type's layers in order from the exterior face to the interior face, and its core.
-/// Every value of this type has passed every check.
+/// A wall type's layers in order from the exterior face to the interior face, its core, and how
+/// it wraps at its free ends and at its inserts ([`Wrapping`], none unless set). Every value of
+/// this type has passed every check.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assembly {
     layers: Vec<Layer>,
     exterior: usize,
     interior: usize,
+    wrapping: Wrapping,
     /// The depth of every layer face from the exterior finish face: `n + 1` of them.
     depths: Vec<Length>,
 }
@@ -130,8 +133,35 @@ impl Assembly {
             layers,
             exterior,
             interior,
+            wrapping: Wrapping::default(),
             depths,
         })
+    }
+
+    /// The same type wrapping as `wrapping` says at its free ends and its inserts. Every choice
+    /// fits every type: a side with no wrapping layer turns nothing.
+    #[must_use]
+    pub fn with_wrapping(&self, wrapping: Wrapping) -> Self {
+        Self {
+            wrapping,
+            ..self.clone()
+        }
+    }
+
+    /// How it wraps at its free ends and at its inserts.
+    #[must_use]
+    pub fn wrap(&self) -> Wrapping {
+        self.wrapping
+    }
+
+    /// [`Assembly::new`] keeping this type's wrapping: what every edit of the layers gives.
+    fn rebuilt(
+        &self,
+        layers: Vec<Layer>,
+        exterior: usize,
+        interior: usize,
+    ) -> Result<Self, WallError> {
+        Self::new(layers, exterior, interior).map(|made| made.with_wrapping(self.wrapping))
     }
 
     /// The layers, from the exterior face to the interior face.
@@ -175,7 +205,8 @@ impl Assembly {
         self.zone(at) == Some(Zone::Core)
     }
 
-    /// The indices of the layers that wrap at free ends and opening sides, ascending.
+    /// The indices of the layers whose flag says they wrap, ascending: they turn where the type's
+    /// [`Wrapping`] (or a wall's own choice over it) wraps their side.
     #[must_use]
     pub fn wrapping(&self) -> Vec<usize> {
         self.layers
@@ -284,7 +315,7 @@ impl Assembly {
                 boundary
             }
         };
-        Self::new(
+        self.rebuilt(
             layers,
             shift(self.exterior, self.exterior >= at),
             shift(self.interior, self.interior > at),
@@ -307,7 +338,7 @@ impl Assembly {
                 boundary
             }
         };
-        Self::new(layers, close(self.exterior), close(self.interior))
+        self.rebuilt(layers, close(self.exterior), close(self.interior))
     }
 
     /// The same type with the layer at `from` moved so it lies at index `to`; the boundaries
@@ -321,7 +352,7 @@ impl Assembly {
         let mut layers = self.layers.clone();
         let layer = layers.remove(from);
         layers.insert(to, layer);
-        Self::new(layers, self.exterior, self.interior)
+        self.rebuilt(layers, self.exterior, self.interior)
     }
 
     /// The same type with the layer at `at` replaced by `layer`.
@@ -334,7 +365,7 @@ impl Assembly {
         if let Some(slot) = layers.get_mut(at) {
             *slot = layer;
         }
-        Self::new(layers, self.exterior, self.interior)
+        self.rebuilt(layers, self.exterior, self.interior)
     }
 
     /// The same type with one core boundary set to `at`, a count of layers on its exterior side.
@@ -346,7 +377,7 @@ impl Assembly {
             Side::Exterior => (at, self.interior),
             Side::Interior => (self.exterior, at),
         };
-        Self::new(self.layers.clone(), exterior, interior)
+        self.rebuilt(self.layers.clone(), exterior, interior)
     }
 
     /// Refuses an index with no layer.

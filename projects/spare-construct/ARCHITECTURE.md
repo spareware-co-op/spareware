@@ -394,6 +394,10 @@ A family is a recipe written as data: parameters, a constrained sketch and solid
 
 Built so far: `crates/construct-doorgen` (steps 1 to 4 for the single swing, fixed and sliding templates; note CON-A7-F4-P1-door-window-generator).
 
+**Content beyond doors and windows**
+
+Built so far (piece A90, note CON-A7-F5-content-library): a starter library of our own designs (`library`: a desk, chair, bed, sofa, base and wall cabinet, WC pan, basin, shower tray, ceiling light, tree and a generic box, three types each), placed through the family commands. A family that is hosted on nothing stands on a level at a point with a turn and an offset; one hosted on a face hangs against a wall's face and cuts nothing. The page's Component tool places them. Interim: only quarter turns are built (any angle waits for the any-angle rule).
+
 **Low level**
 
 - Format: text-based (JSON or a small typed language), so diffs, reviews and AI edits work in git.

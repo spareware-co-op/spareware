@@ -56,13 +56,15 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::hosting::{self, Host, Which, fit, length};
+use crate::cloud::levels;
 use crate::cloud::loading;
 use construct_categories::{CategoryId, CategoryTable, DOORS, GENERIC_MODELS, WINDOWS};
-use construct_families::{ContentId, Key, Recipe as FamilyRecipe};
-use construct_model::element::Element;
+use construct_families::{ContentId, Hosting as FamilyHosting, Key, Recipe as FamilyRecipe};
+use construct_levels::Tie;
+use construct_model::element::{Element, Placement};
 use construct_model::geometry::Recipe;
-use construct_params::Units;
-use construct_regen::families::{self, Instance, Library};
+use construct_params::{Definition, Holder, Kind, Units, Value};
+use construct_regen::families::{self, Heading, Instance, Library};
 use construct_regen::hosting::{self as placing, Hosting};
 use construct_regen::parameters::At;
 use construct_regen::parameters::{self as records, CATEGORY_KEY};
@@ -75,7 +77,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// Every command here.
-pub const COMMANDS: [&str; 6] = [PLACE, RETYPE, MOVE, FLIP, SET, DELETE];
+pub const COMMANDS: [&str; 7] = [PLACE, RETYPE, MOVE, FLIP, TURN, SET, DELETE];
 /// Puts a new placed family on a side of a wall.
 pub const PLACE: &str = "family.place";
 /// Changes a placed family to another type of its family.
@@ -84,6 +86,8 @@ pub const RETYPE: &str = "family.retype";
 pub const MOVE: &str = "family.move";
 /// Puts a placed family on the other side of its wall.
 pub const FLIP: &str = "family.flip";
+/// Turns a placed family that stands on a level.
+pub const TURN: &str = "family.turn";
 /// Sets the values a placed family holds itself.
 pub const SET: &str = "family.set";
 /// Deletes a placed family.
@@ -111,6 +115,13 @@ struct Args {
     along: Option<String>,
     up: Option<String>,
     values: Option<BTreeMap<String, Option<String>>>,
+    /// A standing family's point, each a length in whole millimetres.
+    x: Option<String>,
+    y: Option<String>,
+    /// A standing family's turn, an angle.
+    turn: Option<String>,
+    /// A standing family's level: its ID, or an old page's integer.
+    level: Option<serde_json::Value>,
 }
 
 /// The part of a person's row a claim needs.
@@ -327,6 +338,7 @@ pub async fn apply<T: Txn>(
         RETYPE => retype(txn, project, document, &before, &args).await?,
         MOVE => move_to(txn, project, document, &before, &args).await?,
         FLIP => flip(txn, project, document, &before).await?,
+        TURN => turn_to(&before, &args),
         SET => set_values(txn, project, document, &before, &args).await?,
         other => Err(format!("Unknown command {other}.")),
     };
@@ -336,25 +348,27 @@ pub async fn apply<T: Txn>(
     }
 }
 
-/// `family.place`: a new placed family on a side of a wall.
-#[allow(
-    clippy::too_many_lines,
-    reason = "each thing a placed family is checked against, in the order its arguments are read"
-)]
+/// What `family.place` has read and checked of a family before it asks where it goes.
+struct Prepared {
+    id: Id,
+    recipe: Arc<FamilyRecipe>,
+    /// The record's recipe: the family version, the type and the values given.
+    placed: Recipe,
+    category: CategoryId,
+    /// The record of the library's family this entry loads, when the document did not hold it yet:
+    /// the first change, so it is regenerated before the copy that reads it.
+    loaded: Option<Change>,
+}
+
+/// `family.place`: a new placed family: on a side of a wall (a door, a window, casework or a
+/// fixture hung on it), or standing on a level at a point.
 async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> Answer {
     let document = &edit.target;
-    let (Some(id), Some(family), Some(ty), Some(host_id), Some(side), Some(along)) = (
-        args.element,
-        args.family,
-        args.ty,
-        args.host,
-        args.side,
-        args.along,
-    ) else {
+    let (Some(id), Some(family), Some(ty)) =
+        (args.element.clone(), args.family.clone(), args.ty.clone())
+    else {
         return Ok(Err(
-            "A placed family needs an id, a family, a type of it, a wall, a side of the wall and \
-             a position along it."
-                .to_owned(),
+            "A placed family needs an id, a family and a type of it.".to_owned(),
         ));
     };
     if records::read_element(txn, project, document, &id)
@@ -380,6 +394,54 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         Ok(key) => key,
         Err(why) => return Ok(Err(why)),
     };
+    let mut placed = families::of_family(&families::recipe(&stored.content, &key), &stored);
+    match values_in(recipe, &args.values.clone().unwrap_or_default()) {
+        Ok(values) => {
+            for (key, stored) in values {
+                placed = families::with_value(&placed, &key, &stored);
+            }
+        }
+        Err(why) => return Ok(Err(why)),
+    }
+    let category = category_of(recipe);
+    let hosting = recipe.hosting.clone();
+    let prepared = Prepared {
+        id,
+        recipe: Arc::new(stored.recipe.clone()),
+        placed,
+        category,
+        loaded,
+    };
+    match hosting {
+        FamilyHosting::Unhosted => stand(txn, project, edit, &args, prepared).await,
+        FamilyHosting::Wall { .. } | FamilyHosting::Face => {
+            hang(txn, project, edit, &args, prepared).await
+        }
+        FamilyHosting::Floor => Ok(Err(format!(
+            "{} is hosted on a floor, which is not placed yet.",
+            prepared.recipe.name
+        ))),
+    }
+}
+
+/// `family.place` of a family hosted on a wall: on a side of the wall, `along` it from its start.
+async fn hang<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    edit: &Edit,
+    args: &Args,
+    prepared: Prepared,
+) -> Answer {
+    let document = &edit.target;
+    let (Some(host_id), Some(side), Some(along)) =
+        (args.host.clone(), args.side.clone(), args.along.clone())
+    else {
+        return Ok(Err(
+            "A placed family needs an id, a family, a type of it, a wall, a side of the wall and \
+             a position along it."
+                .to_owned(),
+        ));
+    };
     let along = match length("The position along the wall", &along) {
         Ok(length) => length,
         Err(why) => return Ok(Err(why)),
@@ -391,31 +453,24 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         Ok(length) => length,
         Err(why) => return Ok(Err(why)),
     };
-    let mut placed = families::of_family(&families::recipe(&stored.content, &key), &stored);
-    match values_in(recipe, &args.values.unwrap_or_default()) {
-        Ok(values) => {
-            for (key, stored) in values {
-                placed = families::with_value(&placed, &key, &stored);
-            }
-        }
-        Err(why) => return Ok(Err(why)),
-    }
     let host = match hosting::host_for(
         txn,
         project,
         document,
         &host_id,
         Which::Role(&side),
-        "a door or a window",
+        what_hosts(&prepared.recipe),
     )
     .await?
     {
         Ok(host) => host,
         Err(why) => return Ok(Err(why)),
     };
-    let category = category_of(recipe);
     let mut props = BTreeMap::new();
-    props.insert(CATEGORY_KEY.to_owned(), records::write_category(category));
+    props.insert(
+        CATEGORY_KEY.to_owned(),
+        records::write_category(prepared.category),
+    );
     // On its wall's level: tied as the wall's base is, and on no level by number.
     let base = match construct_levels::base_of(&host.record) {
         Ok(base) => base,
@@ -423,13 +478,13 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
     };
     construct_levels::write_base(&mut props, base.as_ref());
     let mut element = Element {
-        id: id.clone(),
+        id: prepared.id.clone(),
         document: document.clone(),
-        kind: kind_of(category).to_owned(),
-        name: args.name.unwrap_or_else(|| id.to_string()),
+        kind: kind_of(prepared.category).to_owned(),
+        name: args.name.clone().unwrap_or_else(|| prepared.id.to_string()),
         level: 0,
         placement: host.record.placement,
-        recipe: placed,
+        recipe: prepared.placed,
         props,
         references: Vec::new(),
     };
@@ -438,16 +493,36 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         Ok(placement) => placement,
         Err(why) => return Ok(Err(why)),
     };
-    let hash = write_record(txn, project, &element).await?;
+    write_new(txn, project, document, &element, prepared.loaded).await
+}
+
+/// What a wall hosts, as a refusal says it: the family's own words for what is hung on it.
+fn what_hosts(recipe: &FamilyRecipe) -> &'static str {
+    if recipe.hosting == FamilyHosting::Face {
+        "casework or a fixture"
+    } else {
+        "a door or a window"
+    }
+}
+
+/// A new element's record written and its pointer put: the whole result of placing it.
+async fn write_new<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    loaded: Option<Change>,
+) -> Answer {
+    let hash = write_record(txn, project, element).await?;
     let pointer = Place::Piece {
         project: project.clone(),
         document: document.clone(),
-        piece: id.clone(),
+        piece: element.id.clone(),
     };
     txn.put(pointer.key(), to_row(&hash.as_str())?).await?;
     let mut changes: Vec<Change> = loaded.into_iter().collect();
     changes.push(Change {
-        piece: id,
+        piece: element.id.clone(),
         before: None,
         after: Some(hash),
     });
@@ -455,6 +530,202 @@ async fn place<T: Txn>(txn: &mut T, project: &Id, edit: &Edit, args: Args) -> An
         changes,
         ..Applied::default()
     }))
+}
+
+/// A typed point's one coordinate in whole millimetres, as a placement holds it.
+fn whole_mm(what: &str, typed: &str) -> Result<i64, String> {
+    let at = length(what, typed)?;
+    at.whole_mm().ok_or_else(|| {
+        format!("{what}, {at}, is not a whole number of millimetres, as every placement is.")
+    })
+}
+
+/// A typed angle, with the metric display settings, as a heading. Interim: only whole quarter
+/// turns are built ([`Heading::quarter_turn`]), so any other angle is refused here in words.
+fn heading_in(typed: &str) -> Result<Heading, String> {
+    let id = Id::parse("family-turn").map_err(|e| e.to_string())?;
+    let definition = Definition::new(id, "The turn", Kind::Angle, Holder::Instance)
+        .map_err(|e| e.to_string())?;
+    let heading = match definition.parse(typed, &units()) {
+        Ok(Value::Angle(angle)) => Heading::of(angle),
+        Ok(_) => return Err("The turn takes an angle.".to_owned()),
+        Err(e) => return Err(e.to_string()),
+    };
+    heading.quarter_turn().map(|_| heading)
+}
+
+/// The level a standing family stands on and its offset above it, as `level` and `offset` say
+/// (a level's ID or an old page's number; a length): the tie, or none for no level. The inner
+/// error is the refusal, in words.
+async fn tie_in<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    level: Option<&serde_json::Value>,
+    offset: Option<&str>,
+) -> Result<Result<Option<Tie>, String>, StoreError> {
+    let base = match levels::tie_of_new(txn, project, document, level).await? {
+        Ok(base) => base,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    Ok(match (base, offset) {
+        (base, None) => Ok(base),
+        (Some(tie), Some(text)) => {
+            length("The offset from the level", text).map(|offset| Some(Tie { offset, ..tie }))
+        }
+        (None, Some(_)) => Err("An offset is measured from a level, and none is given.".to_owned()),
+    })
+}
+
+/// `family.place` of a family that stands on a level: at the point `x`, `y`, turned by `turn`,
+/// on the level `level` at `up` above it.
+async fn stand<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    edit: &Edit,
+    args: &Args,
+    prepared: Prepared,
+) -> Answer {
+    let document = &edit.target;
+    let name = &prepared.recipe.name;
+    if args.host.is_some() || args.side.is_some() || args.along.is_some() {
+        return Ok(Err(format!(
+            "{name} stands on a level: it takes a point (x and y), a turn and a level, not a wall."
+        )));
+    }
+    let (Some(x), Some(y)) = (&args.x, &args.y) else {
+        return Ok(Err(format!(
+            "{name} needs the point it stands at: x and y."
+        )));
+    };
+    let (x, y) = match (whole_mm("The point's x", x), whole_mm("The point's y", y)) {
+        (Ok(x), Ok(y)) => (x, y),
+        (Err(why), _) | (_, Err(why)) => return Ok(Err(why)),
+    };
+    let heading = match args.turn.as_deref().map(heading_in).transpose() {
+        Ok(heading) => heading.unwrap_or_default(),
+        Err(why) => return Ok(Err(why)),
+    };
+    let base = match tie_in(
+        txn,
+        project,
+        document,
+        args.level.as_ref(),
+        args.up.as_deref(),
+    )
+    .await?
+    {
+        Ok(base) => base,
+        Err(why) => return Ok(Err(why)),
+    };
+    let mut props = BTreeMap::new();
+    props.insert(
+        CATEGORY_KEY.to_owned(),
+        records::write_category(prepared.category),
+    );
+    construct_levels::write_base(&mut props, base.as_ref());
+    heading.write(&mut props);
+    let element = Element {
+        id: prepared.id.clone(),
+        document: document.clone(),
+        kind: kind_of(prepared.category).to_owned(),
+        name: args.name.clone().unwrap_or_else(|| prepared.id.to_string()),
+        level: 0,
+        placement: Placement { x, y, z: 0 },
+        recipe: prepared.placed,
+        props,
+        references: Vec::new(),
+    };
+    write_new(txn, project, document, &element, prepared.loaded).await
+}
+
+/// Whether a placed family stands on a level: it is hosted on nothing.
+fn is_standing(element: &Element) -> bool {
+    matches!(placing::read(element), Ok(None))
+}
+
+/// `family.move` of a family that stands on a level: another point, another level, another offset
+/// above it; any of them.
+async fn stand_to<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    before: &Element,
+    args: &Args,
+) -> Result<Result<Element, String>, StoreError> {
+    if args.host.is_some() || args.side.is_some() || args.along.is_some() {
+        return Ok(Err(format!(
+            "{} stands on a level: move it to another point (x and y), level or offset, not along a wall.",
+            before.name
+        )));
+    }
+    if args.x.is_none() && args.y.is_none() && args.up.is_none() && args.level.is_none() {
+        return Ok(Err(
+            "A move needs a point (x and y), a level or an offset above it.".to_owned(),
+        ));
+    }
+    let mut after = before.clone();
+    if let Some(typed) = &args.x {
+        match whole_mm("The point's x", typed) {
+            Ok(mm) => after.placement.x = mm,
+            Err(why) => return Ok(Err(why)),
+        }
+    }
+    if let Some(typed) = &args.y {
+        match whole_mm("The point's y", typed) {
+            Ok(mm) => after.placement.y = mm,
+            Err(why) => return Ok(Err(why)),
+        }
+    }
+    if args.up.is_some() || args.level.is_some() {
+        let current = match construct_levels::base_of(before) {
+            Ok(current) => current,
+            Err(e) => return Ok(Err(e.to_string())),
+        };
+        // Its level as it is, unless another is named; its offset as it is, unless one is given
+        // (a new level starts at none).
+        let level = match (&args.level, &current) {
+            (Some(level), _) => Some(level.clone()),
+            (None, Some(tie)) => Some(serde_json::Value::String(tie.level.to_string())),
+            (None, None) => None,
+        };
+        let offset = match (&args.up, &args.level, &current) {
+            (Some(up), _, _) => Some(up.clone()),
+            (None, None, Some(tie)) => Some(tie.offset.to_string()),
+            _ => None,
+        };
+        let base = match tie_in(txn, project, document, level.as_ref(), offset.as_deref()).await? {
+            Ok(base) => base,
+            Err(why) => return Ok(Err(why)),
+        };
+        construct_levels::write_base(&mut after.props, base.as_ref());
+    }
+    if after == *before {
+        return Ok(Err(format!("{} is already there.", before.name)));
+    }
+    Ok(Ok(after))
+}
+
+/// `family.turn`: a family that stands on a level, turned to `turn` about its z axis.
+fn turn_to(before: &Element, args: &Args) -> Result<Element, String> {
+    if !is_standing(before) {
+        return Err(format!(
+            "{} is hosted on a wall, which turns it: flip it to the wall's other side with family.flip.",
+            before.name
+        ));
+    }
+    let Some(typed) = &args.turn else {
+        return Err("Which turn? Give the angle it should face, such as 90 degrees.".to_owned());
+    };
+    let heading = heading_in(typed)?;
+    let current = Heading::read(before)?;
+    let (new, old) = (heading.quarter_turn()?, current.quarter_turn()?);
+    if new == old {
+        return Err(format!("{} already faces that way.", before.name));
+    }
+    let mut after = before.clone();
+    heading.write(&mut after.props);
+    Ok(after)
 }
 
 /// A placed family's instance and its family recipe: the document's family it names, or for a
@@ -507,6 +778,19 @@ fn hosted_on(
     }
 }
 
+/// What the wall `element` is hosted on hosts, as a refusal says it, by its family's hosting; the
+/// door and window words when its family is not known.
+async fn what_of<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+) -> Result<&'static str, StoreError> {
+    Ok(instance_of(txn, project, document, element)
+        .await?
+        .map_or("a door or a window", |(_, recipe)| what_hosts(&recipe)))
+}
+
 /// `family.retype`: another type of the family.
 async fn retype<T: Txn>(
     txn: &mut T,
@@ -544,12 +828,16 @@ async fn move_to<T: Txn>(
     before: &Element,
     args: &Args,
 ) -> Result<Result<Element, String>, StoreError> {
+    if is_standing(before) {
+        return stand_to(txn, project, document, before, args).await;
+    }
     if args.along.is_none() && args.up.is_none() && args.host.is_none() && args.side.is_none() {
         return Ok(Err(
             "A move needs a position along the wall, a height, another wall or another side."
                 .to_owned(),
         ));
     }
+    let what = what_of(txn, project, document, before).await?;
     let (host_id, face, along, up) = match hosted_on(before) {
         Ok(found) => found,
         Err(why) => return Ok(Err(why)),
@@ -581,26 +869,10 @@ async fn move_to<T: Txn>(
     };
     let host = match role {
         Some(role) => {
-            hosting::host_for(
-                txn,
-                project,
-                document,
-                &new_host,
-                Which::Role(&role),
-                "a door or a window",
-            )
-            .await?
+            hosting::host_for(txn, project, document, &new_host, Which::Role(&role), what).await?
         }
         None => {
-            hosting::host_for(
-                txn,
-                project,
-                document,
-                &new_host,
-                Which::Name(&face),
-                "a door or a window",
-            )
-            .await?
+            hosting::host_for(txn, project, document, &new_host, Which::Name(&face), what).await?
         }
     };
     let host = match host {
@@ -619,6 +891,7 @@ async fn flip<T: Txn>(
     document: &Id,
     before: &Element,
 ) -> Result<Result<Element, String>, StoreError> {
+    let what = what_of(txn, project, document, before).await?;
     let (host_id, face, along, up) = match hosted_on(before) {
         Ok(found) => found,
         Err(why) => return Ok(Err(why)),
@@ -629,7 +902,7 @@ async fn flip<T: Txn>(
         document,
         &host_id,
         Which::Name(&face),
-        "a door or a window",
+        what,
     )
     .await?
     {
@@ -641,15 +914,8 @@ async fn flip<T: Txn>(
         .find(|side| **side != current.face.role)
         .copied()
         .unwrap_or("interior");
-    let host = match hosting::host_for(
-        txn,
-        project,
-        document,
-        &host_id,
-        Which::Role(other),
-        "a door or a window",
-    )
-    .await?
+    let host = match hosting::host_for(txn, project, document, &host_id, Which::Role(other), what)
+        .await?
     {
         Ok(host) => host,
         Err(why) => return Ok(Err(why)),
@@ -697,19 +963,16 @@ async fn refit<T: Txn>(
     document: &Id,
     after: Element,
 ) -> Result<Result<Element, String>, StoreError> {
+    if is_standing(&after) {
+        return Ok(Ok(after));
+    }
+    let what = what_of(txn, project, document, &after).await?;
     let (host_id, face, _, _) = match hosted_on(&after) {
         Ok(found) => found,
         Err(why) => return Ok(Err(why)),
     };
-    let host = match hosting::host_for(
-        txn,
-        project,
-        document,
-        &host_id,
-        Which::Name(&face),
-        "a door or a window",
-    )
-    .await?
+    let host = match hosting::host_for(txn, project, document, &host_id, Which::Name(&face), what)
+        .await?
     {
         Ok(host) => host,
         Err(why) => return Ok(Err(why)),
@@ -810,6 +1073,9 @@ pub struct FamilyView {
     pub category: u32,
     /// Its category's name.
     pub category_name: String,
+    /// What a placed one is put on: `unhosted` (it stands on a level), `wall` (a door or a window,
+    /// cutting an opening), `face` (casework or a fixture hung against a wall's face) or `floor`.
+    pub hosting: String,
     /// Its types, in the order its recipe names them.
     pub types: Vec<TypeView>,
     /// The values each placed one holds, with their defaults.
@@ -857,6 +1123,16 @@ pub struct ChoiceView {
     pub label: String,
 }
 
+/// What a family is placed on, as the page names it.
+fn hosting_name(hosting: &FamilyHosting) -> &'static str {
+    match hosting {
+        FamilyHosting::Unhosted => "unhosted",
+        FamilyHosting::Wall { .. } => "wall",
+        FamilyHosting::Floor => "floor",
+        FamilyHosting::Face => "face",
+    }
+}
+
 /// The library's families, with their types and the values each instance holds, in the order of
 /// their content ids. Interim as the baked library is (construct-regen's `families`).
 #[must_use]
@@ -880,6 +1156,7 @@ pub(crate) fn view_of(content: &ContentId, recipe: &FamilyRecipe) -> FamilyView 
         kind: kind_of(category).to_owned(),
         category: category.0,
         category_name: table.get(category).map(|c| c.name).unwrap_or_default(),
+        hosting: hosting_name(&recipe.hosting).to_owned(),
         types: recipe
             .named_types()
             .iter()

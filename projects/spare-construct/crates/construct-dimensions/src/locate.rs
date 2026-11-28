@@ -9,8 +9,36 @@
 
 use crate::reference::Reference;
 use construct_grids::Point;
-use construct_params::Length;
+use construct_params::{Angle, Length};
 use std::collections::BTreeMap;
+
+/// Which part of its circle a curve is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sweep {
+    /// The whole circle.
+    Full,
+    /// An arc, anticlockwise from `from` to `to` (angles from `+x`, anticlockwise, in `[0, 360)`
+    /// degrees, not equal): a grid arc's own angles.
+    Between {
+        /// Where it starts.
+        from: Angle,
+        /// Where it finishes.
+        to: Angle,
+    },
+}
+
+/// A curve a radial, diameter or arc length dimension measures: a circle's arc, as an element
+/// draws it in plan. A curved grid line is one today; a curved wall's faces and line (job 14.4)
+/// answer with one too, so its dimensions need nothing new.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Curve {
+    /// The circle's centre.
+    pub centre: Point,
+    /// Its radius, above zero.
+    pub radius: Length,
+    /// Which part of the circle it is.
+    pub sweep: Sweep,
+}
 
 /// Where a reference is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,13 +47,17 @@ pub enum Locus {
     Point(Point),
     /// A straight line, through `through` (a point of the reference as drawn, where its witness
     /// line starts) and running `direction` (a vector of steps, not zero): a dimension reads where
-    /// it meets its offset line.
+    /// it meets its offset line, and an angular one the angle it makes with another line. Its
+    /// direction is the way the element draws it (a wall from its start to its end, a grid from
+    /// its first point to its second).
     Line {
         /// A point of the reference.
         through: Point,
         /// The vector it runs along, in steps.
         direction: [i64; 2],
     },
+    /// A curve: a radial, diameter or arc length dimension reads it; a line dimension cannot.
+    Arc(Curve),
 }
 
 impl Locus {

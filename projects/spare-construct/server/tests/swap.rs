@@ -204,6 +204,19 @@ async fn a_second_generator_runs_the_whole_server_and_changes_only_the_shapes() 
     assert_ne!((plain_bodies, bodies), (0, 0));
 }
 
+/// Every file under `folder`, in its folders too, so that a module split into a folder of its own
+/// is read like any other file.
+fn files_under(folder: &std::path::Path, files: &mut Vec<String>) {
+    for entry in std::fs::read_dir(folder).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files_under(&path, files);
+        } else {
+            files.push(path.display().to_string());
+        }
+    }
+}
+
 /// Nothing above the interface names the stand-in, so swapping it is the one line in
 /// `construct_regen::geometry`.
 #[test]
@@ -234,10 +247,19 @@ fn only_the_regen_crate_knows_the_stand_in() {
         "crates/construct-api/src/cloud",
         "crates/construct-model/src",
     ] {
-        for entry in std::fs::read_dir(format!("{root}/{folder}")).unwrap() {
-            files.push(entry.unwrap().path().display().to_string());
-        }
+        files_under(
+            std::path::Path::new(&format!("{root}/{folder}")),
+            &mut files,
+        );
     }
+    // The folders are read whole: a module's own folder (construct-api's `cloud/dimensions/`)
+    // is among them.
+    assert!(
+        files
+            .iter()
+            .any(|file| file.ends_with("cloud/dimensions/equalize.rs")),
+        "the files in a module's folder are read too"
+    );
     for file in files {
         let text = std::fs::read_to_string(&file).unwrap();
         for word in ["stand_in", "Boxes", "BoxGeometry", "shape.w", "BoxBody"] {

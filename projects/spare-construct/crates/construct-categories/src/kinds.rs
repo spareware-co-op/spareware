@@ -18,6 +18,7 @@ use crate::{
 const KINDS: &[(&str, CategoryId)] = &[
     ("block", GENERIC_MODELS),
     ("dimension", DIMENSIONS),
+    ("dimension.style", DIMENSIONS),
     ("door.single", DOORS),
     // A placed family (job 6.4): its own category is its family's, which its record carries; by
     // its kind alone it is a generic model.
@@ -37,6 +38,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("sheet", SHEETS),
     ("stair", STAIRS),
     ("view", VIEWS),
+    ("view_template", VIEWS),
     ("viewport", VIEWPORTS),
     ("wall.curtain", CURTAIN_WALLS),
     ("wall.layered", WALLS),

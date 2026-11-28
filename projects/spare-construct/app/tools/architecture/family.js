@@ -82,9 +82,12 @@ function valueInput(value, shown, key, chg = 'stackfamilyvalue') {
   return `<input class="inp" data-chg="${chg}" data-key="${key}" data-a="${esc(value.key)}" value="${esc(shown)}" aria-label="${esc(value.name)}">`;
 }
 
+/** The library's families that cut an opening in a wall: what the family tool offers. */
+const wallFamilies = () => library()?.filter((family) => family.hosting === 'wall') ?? null;
+
 function familyToolHtml() {
   let html = typeSel('family', 'Family', '<b>New door or window</b>');
-  const list = library();
+  const list = wallFamilies();
   if (!list) return `${html}<p class="pad small faint">Loading the library.</p>`;
   const family = chosenFamily(list);
   if (!family) return `${html}<p class="pad small faint">The library has no families.</p>`;
@@ -147,6 +150,9 @@ function swapOptions(family, current) {
   return options;
 }
 
+/** Whether a placed family hangs against its wall's face and cuts nothing (a wall cabinet, a basin). */
+const faceFamily = (record) => familyOf(record)?.hosting === 'face';
+
 /** What the properties palette shows of a selected family: its type, its values, its place, its side. */
 function familyProperties(piece) {
   const { el } = piece;
@@ -164,6 +170,18 @@ function familyProperties(piece) {
   for (const value of family.values) {
     const shown = shownValue(value, el.recipe.args[`value.${value.key}`]);
     html += prow(esc(value.name), mine ? valueInput(value, shown, `family-value:${value.key}`) : esc(shown));
+  }
+  if (isStanding(el)) {
+    const turn = standingTurn(el) * 90;
+    const turns = [0, 90, 180, 270].map((d) => `<option value="${d}"${d === turn ? ' selected' : ''}>${d}°</option>`).join('');
+    html += prow('Turn', mine ? `<select class="inp" data-chg="stackfamilyturn" data-key="family-turn" aria-label="Turn of the family">${turns}</select>` : `${turn}°`);
+    for (const [axis, at] of [['x', el.placement.x], ['y', el.placement.y]]) {
+      html += prow(`Point ${axis}`, mine ? `<input class="inp" data-chg="stackfamilypoint" data-a="${axis}" data-key="family-point-${axis}" value="${at} mm" aria-label="Point ${axis}">` : `${at} mm`);
+    }
+    const offset = el.props?.['@level.offset'];
+    if (offset !== undefined) {
+      html += prow('Offset from the level', mine ? `<input class="inp" data-chg="stackfamilyoffset" data-key="family-offset" value="${storedMm(offset)} mm" aria-label="Offset from the level">` : `${storedMm(offset)} mm`);
+    }
   }
   const along = el.props?.['@host.along'];
   const face = (el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
@@ -188,6 +206,17 @@ CHG.stackfamilyvalue = (input) => {
   manage('family.set', { element: S.sel, values: { [input.dataset.a]: typed === '' ? null : typed } }, `family:${S.sel}`);
   input.blur();
 };
+CHG.stackfamilyturn = (select) => {
+  if (S.sel && canEdit()) manage('family.turn', { element: S.sel, turn: select.value }, `family:${S.sel}`);
+};
+CHG.stackfamilypoint = (input) => {
+  if (S.sel && canEdit()) manage('family.move', { element: S.sel, [input.dataset.a]: input.value }, `family:${S.sel}`);
+  input.blur();
+};
+CHG.stackfamilyoffset = (input) => {
+  if (S.sel && canEdit()) manage('family.move', { element: S.sel, up: input.value }, `family:${S.sel}`);
+  input.blur();
+};
 CHG.stackfamilyalong = (input) => {
   if (S.sel && canEdit()) manage('family.move', { element: S.sel, along: input.value }, `family:${S.sel}`);
   input.blur();
@@ -206,7 +235,7 @@ CHG.stackfamilytoolvalue = (input) => {
  * middle where the click is, as far along the wall from its start (the server checks that it fits).
  */
 function placeFamily(at) {
-  const list = library();
+  const list = wallFamilies();
   const family = list && chosenFamily(list);
   if (!family) {
     say('The library has not come yet.');
@@ -243,12 +272,15 @@ function placeFamily(at) {
  * works it out: its origin on the wall's centre plane, `along` the line from its start, `up` from
  * the wall's base, each to the nearest millimetre, and the turn (0 to 3 quarter turns about z) that
  * points its front out of that side. Null until the wall is filled, and for a wall at an angle,
- * which seats through `seatAtAngle`.
+ * which seats through `seatAtAngle`. A family that hangs against the wall's face (`onFace`: a
+ * wall cabinet, a basin) has its origin on that side's face, not on the centre plane.
  */
-function onFamily(role, host, along, up) {
+function onFamily(role, host, along, up, onFace = false) {
   const line = lineOf(host);
   if (!line || line.axis === null || host.el.recipe.op !== LAYERED) return null;
-  const centre = Math.floor((line.exterior + line.interior) / 2);
+  const centre = onFace
+    ? (role === 'interior' ? line.interior : line.exterior)
+    : Math.floor((line.exterior + line.interior) / 2);
   const [ux, uy] = line.unit;
   const right = [uy, -ux];
   const outwardOfExterior = line.exterior > line.interior ? 1 : -1;
@@ -263,6 +295,17 @@ function onFamily(role, host, along, up) {
 
 const turnedRecipe = (recipe, turn) => ({ ...recipe, args: { ...recipe.args, turn } });
 
+/** Whether a placed family stands on a level: it names no wall. */
+const isStanding = (el) => isFamily(el) && !(el.references || []).some((ref) => ref.kind === 'face' && !ref.doc);
+
+/** The quarter turns (0 to 3) a standing family's record turns it by; 0 for none, or for an angle that is not a quarter. */
+function standingTurn(el) {
+  const stored = el.props?.['@place.turn'];
+  if (stored === undefined) return 0;
+  const quarters = Number(stored.replace('angle:', '')) / 810000000;
+  return Number.isInteger(quarters) ? ((quarters % 4) + 4) % 4 : 0;
+}
+
 /** The recipe a piece is built from before its wall seats it: a family copy's filled recipe holds its family's text. */
 const ownRecipe = (piece) => (isFamily(piece.el) ? piece.fill?.recipe ?? piece.el.recipe : piece.el.recipe);
 
@@ -274,6 +317,7 @@ const ownRecipe = (piece) => (isFamily(piece.el) ? piece.fill?.recipe ?? piece.e
  * wall is here and filled.
  */
 function seatOfPiece(piece, host, builder = C.builder) {
+  if (isStanding(piece.el)) return { at: piece.el.placement, recipe: turnedRecipe(ownRecipe(piece), standingTurn(piece.el)) };
   const hosted = hostOf(piece.el);
   const wall = host ?? hosted?.host;
   const face = hosted?.face ?? (piece.el.references || []).find((ref) => ref.kind === 'face' && !ref.doc);
@@ -284,7 +328,7 @@ function seatOfPiece(piece, host, builder = C.builder) {
   const angled = seatAtAngle(builder, { ...piece.el, recipe: ownRecipe(piece) }, role, wall, along, up);
   if (angled) return angled;
   if (!isFamily(piece.el)) return null;
-  const turned = onFamily(role, wall, along, up);
+  const turned = onFamily(role, wall, along, up, faceFamily(piece.el));
   return turned && { at: turned.at, recipe: turnedRecipe(ownRecipe(piece), turned.turn) };
 }
 
@@ -293,6 +337,8 @@ function seatOfPiece(piece, host, builder = C.builder) {
  * its wall is not here and filled enough to say, as a piece that is hosted but not yet seated.
  */
 function seatWanted(piece) {
+  // A family that stands on a level is turned as its record says, with no wall to seat it.
+  if (isStanding(piece.el)) return { seat: seatOfPiece(piece) };
   const hosted = hostOf(piece.el);
   if (!hosted) return null;
   const { host } = hosted;
@@ -317,7 +363,7 @@ const seatChanged = (piece) => {
 function seatFamilies() {
   if (!C.model || C.viewing) return;
   for (const piece of C.elements.values()) {
-    if (piece.turning || piece.failed || hostIdOf(piece.el) === null) continue;
+    if (piece.turning || piece.failed || (hostIdOf(piece.el) === null && !isStanding(piece.el))) continue;
     const wanted = seatWanted(piece);
     if (!wanted) continue;
     if (seatKey(wanted.seat) !== (piece.seatedKey ?? null)) reseat(piece, wanted.seat);
@@ -355,10 +401,11 @@ register.layers({ id: 'family-seats', order: 10, before: () => seatFamilies() })
 
 // What files loaded before this one use from it, bound once it has loaded.
 provide({
-  get FAMILY_OP() { return FAMILY_OP; }, get isFamily() { return isFamily; },
+  get FAMILY_OP() { return FAMILY_OP; }, get faceFamily() { return faceFamily; },
+  get isFamily() { return isFamily; }, get isStanding() { return isStanding; },
   get library() { return library; }, get onFamily() { return onFamily; },
   get reloadLibrary() { return reloadLibrary; }, get seatChanged() { return seatChanged; },
   get seatFamilies() { return seatFamilies; }, get seatOfPiece() { return seatOfPiece; },
 });
 
-export { isFamily };
+export { isFamily, library, valueInput };

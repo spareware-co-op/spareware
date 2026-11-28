@@ -14,16 +14,25 @@ function selectedCategory() {
   return C.params?.view.element === S.sel ? (C.params.view.category?.id ?? null) : null;
 }
 
-function openManage(which) {
+function openManage(which, extra = {}) {
   if (!C.model) {
     say('Open a model in your team’s WIP first.');
     return;
   }
   const category = which === 'types' ? (selectedCategory() ?? C.manage?.category ?? null) : null;
-  C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0 };
-  if (which === 'graphics') Object.assign(C.manage, { view: C.openView, edge: 'cut' });
-  if (which === 'crop') Object.assign(C.manage, { view: C.openView });
-  const title = { types: 'Types', parameters: 'Project parameters', levels: 'Levels', families: 'Families', graphics: 'View graphics', crop: 'Crop and range' }[which];
+  C.manage = { which, category, open: new Set(), data: null, error: null, shown: false, seq: 0, view: C.openView, template: null, form: {}, ...extra };
+  if (which === 'graphics') C.manage.edge = 'cut';
+  const title = {
+    types: 'Types',
+    parameters: 'Project parameters',
+    levels: 'Levels',
+    families: 'Families',
+    graphics: C.manage.template ? 'View template graphics' : 'View graphics',
+    crop: 'Crop and range',
+    templates: 'View templates',
+    filters: C.manage.template ? 'View template filters' : 'View filters',
+    overrides: 'Element overrides',
+  }[which];
   openDlg(title, `<div id="stack-manage" class="stack-manage" data-which="${which}"><p class="small faint">Loading.</p></div>`, '<button class="btn" data-act="dgclose">Close</button>');
   loadManage();
 }
@@ -53,11 +62,18 @@ async function loadManage() {
       if (m.category === null) m.category = topLevel(C.catalog)[0]?.id ?? null;
       m.data = await api(`${modelUrl(model)}/types${m.category === null ? '' : `?category=${m.category}`}`);
     } else if (m.which === 'graphics') {
-      m.data = await api(`${modelUrl(model)}/views/${encodeURIComponent(m.view)}/graphics`);
+      m.data = await api(`${modelUrl(model)}/${late.ownerPath(m)}/graphics`);
       if (m.category === null) m.category = m.data.looks[0]?.category ?? null;
     } else if (m.which === 'crop') {
       m.data = {}; // read from the list of views, which this page keeps live
       late.modelLevels();
+    } else if (m.which === 'templates') {
+      m.data = { templates: await api(`${modelUrl(model)}/view-templates`) };
+    } else if (m.which === 'filters') {
+      m.data = await api(`${modelUrl(model)}/${late.ownerPath(m)}/filters`);
+    } else if (m.which === 'overrides') {
+      m.data = await api(`${modelUrl(model)}/views/${encodeURIComponent(m.view)}/overrides`);
+      m.graphics = await api(`${modelUrl(model)}/views/${encodeURIComponent(m.view)}/graphics`);
     } else if (m.which === 'levels') {
       m.data = { levels: await api(`${modelUrl(model)}/levels`) };
       late.knowLevels(`${model}/${C.paramsEpoch}`, m.data.levels);
@@ -284,4 +300,4 @@ ACT.stackdefine = () => {
   });
 };
 
-export { loadManage, manageField, redraw, renderManage };
+export { loadManage, manageField, openManage, redraw, renderManage };

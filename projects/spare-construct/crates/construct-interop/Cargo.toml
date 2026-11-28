@@ -7,6 +7,22 @@ publish.workspace = true
 [dependencies]
 construct-model = { path = "../construct-model" }
 construct-elements = { path = "../construct-elements" }
+# A layered wall's and a floor's filled recipes, read as the builders read them (their joined
+# outlines, layers and loops, in the steps of the length grid). Same workspace.
+construct-regen = { path = "../construct-regen" }
+# Lengths: the grid's step is 1/6,400 mm, the one unit a file's millimetres are written from.
+construct-params = { path = "../construct-params" }
+# SHA-256, from which every IFC GlobalId is made: the RustCrypto implementation, as kit-ops and
+# construct-families use it. MIT OR Apache-2.0.
+sha2 = { version = "0.11.0", default-features = false }
+
+[dev-dependencies]
+# Reads our own output back as ISO 10303-21 in a test, so a file that is not well-formed STEP
+# fails here. Apache-2.0. It writes reals from an f64, which cannot hold a length written as an
+# exact decimal, so the writer (src/step.rs) is ours and this is the check on it.
+step-p21 = "=0.1.1"
+# The filled recipes the tests build are JSON. MIT OR Apache-2.0.
+serde_json = "1.0.154"
 
 [lints.rust]
 unsafe_code = "forbid"

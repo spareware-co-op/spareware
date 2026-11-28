@@ -82,6 +82,17 @@ impl Feature {
         Self::ALL.into_iter().find(|feature| feature.key() == key)
     }
 
+    /// What kind of element it is part of, in one word: `wall`, `grid`, `level` or `opening`.
+    #[must_use]
+    pub const fn noun(self) -> &'static str {
+        match self {
+            Self::WallFace(_) | Self::WallLine => "wall",
+            Self::GridLine => "grid",
+            Self::Level => "level",
+            Self::Centre | Self::Edge(_) => "opening",
+        }
+    }
+
     /// What it is called in a sentence.
     #[must_use]
     pub const fn words(self) -> &'static str {

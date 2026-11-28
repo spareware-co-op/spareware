@@ -135,6 +135,12 @@ function connectRibbon(config) {
   set('ins', 'Link', [
     { label: 'Link model', icon: 'link', act: 'stacklink', tip: 'Link a model: live from your team’s WIP, or from a Shared or Consumed folder.', disabled: !C.model },
   ]);
+  config.tabs.find((t) => t.id === 'man')?.panels.push({
+    label: 'Exchange',
+    items: [
+      { label: 'Export IFC', icon: 'down', act: 'stackexportifc', tip: 'Download the open model as an IFC 4.3 file: its levels, walls and floors.', disabled: !C.model },
+    ],
+  });
   set('col', 'Share with other firms', [
     { label: 'Share this model', icon: 'up', act: 'stackshare', a: C.model?.id, tip: 'Publish the open model as the next numbered package in your team’s Shared folder.', disabled: !C.model },
   ]);

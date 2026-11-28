@@ -32,6 +32,17 @@ pub enum DimensionError {
     Unshowable(String),
     /// A record that is not a dimension as written.
     Malformed(String),
+    /// A count of references a dimension of its kind cannot have, or a change of references its
+    /// kind does not take, in words.
+    References(String),
+    /// A place to put a dimension that its references do not allow, in words.
+    CannotPlace(String),
+    /// Segments that cannot be made equal, in words.
+    CannotEqualize(String),
+    /// An override of the shown text that is not one, in words.
+    BadOverride(String),
+    /// A dimension style that is not one, in words.
+    BadStyle(String),
 }
 
 impl fmt::Display for DimensionError {
@@ -68,9 +79,14 @@ impl fmt::Display for DimensionError {
                 f,
                 "Segments of this dimension are held equal: take the equalities away (dimension.equal with none) before changing its references."
             ),
-            Self::WrongLayout(why) | Self::Unshowable(why) | Self::Malformed(why) => {
-                f.write_str(why)
-            }
+            Self::WrongLayout(why)
+            | Self::Unshowable(why)
+            | Self::Malformed(why)
+            | Self::References(why)
+            | Self::BadOverride(why)
+            | Self::BadStyle(why) => f.write_str(why),
+            Self::CannotEqualize(why) => write!(f, "Cannot make the segments equal: {why}."),
+            Self::CannotPlace(why) => write!(f, "Cannot put the dimension there: {why}."),
             Self::Duplicate(id) => write!(f, "There is already a dimension {id}."),
             Self::Unknown(id) => write!(f, "There is no dimension {id} in this model."),
         }

@@ -1,12 +1,15 @@
 //! The plan arithmetic of the joins: exact integers on the kernel's grid steps (a `Length`'s
-//! steps), every step checked. A point is `[x, y]` in steps of the model's plan; a wall along an
-//! axis has a [`Frame`]: its direction `u` and the unit `r` to its right, each a unit vector
-//! along x or y, so going into a wall's frame and back is a choice of coordinate and a sign, and
-//! nothing is rounded.
+//! steps), every step checked. A point is `[x, y]` in steps of the model's plan; a wall's line
+//! runs along its direction `d` (its end less its start, whole steps at any angle), and a point's
+//! place along a wall is [`along`], its dot product with `d`: the true distance times `|d|`, so it
+//! orders points exactly and needs no root. Where a corner is not a grid point it is worked in
+//! [`super::exact`] and rounded once.
 //!
 //! Bounds: every coordinate is within the kernel's grid, `2^40 - 1` steps of the origin
 //! ([`LIMIT`]), so a difference is under `2^41`, a dot or cross product of two differences under
 //! `2^83` and a squared distance times the tolerance's square under `2^96`: all within an `i128`.
+
+use num_bigint::BigInt;
 
 /// The farthest a coordinate may be from the origin, in grid steps: the kernel's grid.
 pub(super) const LIMIT: i64 = 1_099_511_627_775;
@@ -22,11 +25,6 @@ pub(super) fn add(a: i64, b: i64) -> Option<i64> {
     a.checked_add(b)
 }
 
-/// `a - b`.
-pub(super) fn sub(a: i64, b: i64) -> Option<i64> {
-    a.checked_sub(b)
-}
-
 /// `a * s` for a sign `s` of 1 or -1 (or 0).
 pub(super) fn signed(a: i64, s: i64) -> Option<i64> {
     a.checked_mul(s)
@@ -35,7 +33,18 @@ pub(super) fn signed(a: i64, s: i64) -> Option<i64> {
 /// `a - b`, as vectors.
 pub(super) fn less(a: P, b: P) -> Option<P> {
     let ([ax, ay], [bx, by]) = (a, b);
-    Some([sub(ax, bx)?, sub(ay, by)?])
+    Some([ax.checked_sub(bx)?, ay.checked_sub(by)?])
+}
+
+/// `a + b`, as vectors.
+pub(super) fn plus(a: P, b: P) -> Option<P> {
+    let ([ax, ay], [bx, by]) = (a, b);
+    Some([ax.checked_add(bx)?, ay.checked_add(by)?])
+}
+
+/// `-a`.
+pub(super) fn negated([x, y]: P) -> Option<P> {
+    Some([x.checked_neg()?, y.checked_neg()?])
 }
 
 /// `a . b`, wide.
@@ -55,19 +64,52 @@ pub(super) fn cross(a: P, b: P) -> i128 {
         .wrapping_sub(i128::from(ay).wrapping_mul(i128::from(bx)))
 }
 
-/// `a . u` for a unit vector `u` along an axis: a coordinate of `a`, with its sign.
-pub(super) fn along(a: P, u: P) -> Option<i64> {
-    let ([ax, ay], [ux, uy]) = (a, u);
-    add(ax.checked_mul(ux)?, ay.checked_mul(uy)?)
+/// The vector to the right of `d`, as long as it: `(dy, -dx)`.
+pub(super) fn right([dx, dy]: P) -> Option<P> {
+    Some([dy, dx.checked_neg()?])
 }
 
-/// The point `a * u + c * r` of a frame's two unit vectors.
-pub(super) fn point(a: i64, u: P, c: i64, r: P) -> Option<P> {
-    let ([ux, uy], [rx, ry]) = (u, r);
-    Some([
-        add(a.checked_mul(ux)?, c.checked_mul(rx)?)?,
-        add(a.checked_mul(uy)?, c.checked_mul(ry)?)?,
-    ])
+/// The sign of `a . b`: 1, 0 or -1.
+pub(super) fn side(a: P, b: P) -> i64 {
+    match dot(a, b).signum() {
+        1 => 1,
+        -1 => -1,
+        _ => 0,
+    }
+}
+
+/// Where `p` lies along the line from `start` along `d`: `(p - start) . d`, the true distance
+/// times `|d|`.
+pub(super) fn along(p: P, start: P, d: P) -> Option<i128> {
+    Some(dot(less(p, start)?, d))
+}
+
+/// Whether `gap`, a distance along a line along `d` as [`along`] gives it, is more than `tol`
+/// steps: `gap > tol * |d|`, asked of the squares.
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "arbitrary-precision whole numbers, which never overflow"
+)]
+pub(super) fn farther(gap: i128, tol: i64, d: P) -> bool {
+    if gap <= 0 {
+        return false;
+    }
+    let g = BigInt::from(gap);
+    let t = BigInt::from(tol);
+    let dd = BigInt::from(dot(d, d));
+    &g * &g > &t * &t * dd
+}
+
+/// `|d|` rounded up to a whole number of steps.
+pub(super) fn length_up(d: P) -> Option<i128> {
+    let dd = u128::try_from(dot(d, d)).ok()?;
+    let root = dd.isqrt();
+    let up = if root.checked_mul(root)? == dd {
+        root
+    } else {
+        root.checked_add(1)?
+    };
+    i128::try_from(up).ok()
 }
 
 /// Whether the square of `w`'s length is at most `tol * tol`.
@@ -119,28 +161,23 @@ pub(super) fn twice_area(corners: &[P]) -> Option<i128> {
     Some(sum)
 }
 
-/// A wall's frame: its direction and the unit to its right, when it runs along an axis.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct Frame {
-    /// Along the wall, from its start to its end.
-    pub(super) u: P,
-    /// To its right: its exterior side.
-    pub(super) r: P,
-}
-
-impl Frame {
-    /// The frame of the line from `start` to `end`, when it runs along x or y.
-    pub(super) fn of(start: P, end: P) -> Option<Frame> {
-        let [dx, dy] = less(end, start)?;
-        let u = match (dx.signum(), dy.signum()) {
-            (s, 0) if s != 0 => [s, 0],
-            (0, s) if s != 0 => [0, s],
-            _ => return None,
-        };
-        let [ux, uy] = u;
-        Some(Frame {
-            u,
-            r: [uy, ux.checked_neg()?],
+/// Whether a polygon turns left at every corner: strictly convex and counter-clockwise.
+pub(super) fn convex(corners: &[P]) -> bool {
+    let n = corners.len();
+    n >= 3
+        && (0..n).all(|at| {
+            let pick = |k: usize| {
+                at.checked_add(k)
+                    .and_then(|i| i.checked_rem(n))
+                    .and_then(|i| corners.get(i))
+                    .copied()
+            };
+            match (pick(0), pick(1), pick(2)) {
+                (Some(a), Some(b), Some(c)) => match (less(b, a), less(c, b)) {
+                    (Some(ab), Some(bc)) => cross(ab, bc) > 0,
+                    _ => false,
+                },
+                _ => false,
+            }
         })
-    }
 }

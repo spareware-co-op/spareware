@@ -21,8 +21,9 @@ function worked(p) {
   return `${esc(p.shown ?? '')}<div class="f" data-formula="${esc(p.id)}">= ${esc(p.formula)}</div>${reason}`;
 }
 function hasShape(record) {
-  // A schedule, a sheet, a viewport and a dimension are records with no shape too: the plan draws none of them.
-  return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'sheet', 'viewport', 'dimension'].includes(record.kind);
+  // A schedule, a sheet, a viewport, a dimension and a dimension style are records with no shape
+  // too: the plan draws none of them as an element (a dimension is drawn by its own block).
+  return !['type', 'parameters', 'level', 'view', 'family.recipe', 'schedule', 'sheet', 'viewport', 'dimension', 'dimension.style'].includes(record.kind);
 }
 C.params = null; // { key, view } of the selected element
 C.paramsEpoch = 0; // goes up when a type or a parameter changes

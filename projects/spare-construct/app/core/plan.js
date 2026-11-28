@@ -86,6 +86,7 @@ function propertiesPalette() {
     }
     html += prow('Claimed by', claim ? esc(claim.name) : 'Nobody');
     html += '</table>';
+    if (e.recipe.op === LAYERED) html += late.wallJoinsHtml(piece);
     // Rows of the element's own kind (register.properties): every answer.
     for (const entry of entries('properties')) {
       const rows = entry.properties(piece);
@@ -245,6 +246,13 @@ const snap = (value) => Math.round(value / SNAP_MM) * SNAP_MM;
 /** Spare Construct's own operations, by what they make. */
 const recipe = (op, args) => ({ owner: 'construct', schema: 1, op, op_version: 1, args });
 
+/** An element dragged to where its record now says: a family that stands is moved by its own command. */
+function sendMove(piece) {
+  const { id, placement } = piece.el;
+  if (late.isStanding(piece.el)) edit('family.move', { element: id, x: `${placement.x} mm`, y: `${placement.y} mm` });
+  else edit('element.move', { element: id, placement });
+}
+
 function watchThePlan() {
   const canvas = $('#pv-canvas');
   let drag = null;
@@ -278,7 +286,7 @@ function watchThePlan() {
     // A door hosted on a face slides along its wall, and is sent once, when the drag ends.
     const hosted = el.props?.['@host.along'] !== undefined && hostOf(el) !== null;
     // A floor opening and a shaft are moved by their outline in the palette, never dragged.
-    drag = entries('elements').some((entry) => entry.drags && entry.owns(el) && !entry.drags(el, hosted)) ? null : { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted };
+    drag = entries('elements').some((entry) => entry.drags && entry.owns(el) && !entry.drags(el, hosted)) ? null : { id, dx: at.x - placement.x, dy: at.y - placement.y, hosted, sent: { x: placement.x, y: placement.y } };
   });
 
   window.addEventListener('pointermove', (event) => {
@@ -309,7 +317,8 @@ function watchThePlan() {
     const now = performance.now();
     if (now - lastSent >= SEND_EVERY_MS) {
       lastSent = now;
-      edit('element.move', { element: drag.id, placement: piece.el.placement });
+      drag.sent = { x, y };
+      sendMove(piece);
     }
   });
 
@@ -321,8 +330,10 @@ function watchThePlan() {
         const move = entries('elements').find((entry) => entry.move && entry.owns(piece.el))?.move ?? 'hosted.move';
         edit(move, { element: drag.id, along: `${drag.along} mm` });
       }
-    } else if (piece) {
-      edit('element.move', { element: drag.id, placement: piece.el.placement });
+    } else if (piece && (piece.el.placement.x !== drag.sent.x || piece.el.placement.y !== drag.sent.y)) {
+      // Only where the element is now and the server has not been told: a click that moved
+      // nothing, or a move already sent, would be a step of its own for an undo to reverse.
+      sendMove(piece);
     }
     drag = null;
   };

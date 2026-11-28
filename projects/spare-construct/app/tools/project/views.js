@@ -38,9 +38,16 @@ async function loadViews() {
   } catch {
     return;
   }
+  let templates = null;
+  try {
+    templates = await api(`${modelUrl(model)}/view-templates`);
+  } catch {
+    // The names of templates are a nicety of the browser; the views are what matters.
+  }
   if (C.model?.id !== model || seq !== C.viewsSeq) return;
   C.views = list;
   if (C.manage?.which === 'crop') renderManage();
+  C.templates = templates ?? C.templates;
   const open = list.find((view) => view.id === C.openView);
   if (C.openView && !open) leaveView();
   else if (open) {
@@ -53,6 +60,8 @@ async function loadViews() {
   }
   headerView();
   drawBrowser();
+  // The templates dialog says which template the open view follows: it reads the views too.
+  if (C.manage?.which === 'templates') renderManage();
 }
 
 /** Stops showing a model view's plan; the plan pane draws only its live elements again. */
@@ -178,6 +187,10 @@ function modelViews(leaf) {
       html += `<div class="stack-line pad"><input class="inp" data-chg="stackviewrename" data-view="${id}" data-key="view-name:${id}" value="${esc(view.name)}" aria-label="Name of ${esc(view.name)}"${off}>`;
       html += `<button class="btn sm" data-act="stackviewgraphics" data-a="${id}" data-key="view-graphics:${id}" aria-label="Graphics of ${esc(view.name)}">Graphics</button>`;
       html += `<button class="btn sm" data-act="stackviewcrop" data-a="${id}" data-key="view-crop:${id}" aria-label="Crop and range of ${esc(view.name)}">Crop and range</button>`;
+      html += `<button class="btn sm" data-act="stackviewtemplates" data-a="${id}" data-key="view-templates:${id}" aria-label="View templates for ${esc(view.name)}">Templates</button>`;
+      html += `<button class="btn sm" data-act="stackviewfilters" data-a="${id}" data-key="view-filters:${id}" aria-label="Filters of ${esc(view.name)}">Filters</button>`;
+      html += `<button class="btn sm" data-act="stackviewoverrides" data-a="${id}" data-key="view-overrides:${id}" aria-label="Overrides in ${esc(view.name)}">Overrides</button>`;
+      if (view.template) html += `<span class="small faint" data-view-follows="${esc(view.template)}">Follows ${esc(late.templateName(view.template))}</span>`;
       html += `<button class="btn sm" data-act="stackviewdelete" data-a="${id}" data-key="view-delete:${id}" aria-label="Delete ${esc(view.name)}"${off}>Delete</button></div>`;
       html += problem(`view:${view.id}`);
     }

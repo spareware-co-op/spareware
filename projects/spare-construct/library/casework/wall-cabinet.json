@@ -1,0 +1,434 @@
+{
+  "format": 1,
+  "id": "library.casework.wall-cabinet",
+  "name": "Wall cabinet",
+  "category": 1800,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.casework.wall-cabinet.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.casework.wall-cabinet.depth",
+        "name": "Depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:2048000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.casework.wall-cabinet.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:4608000"
+    },
+    {
+      "key": "door_thickness",
+      "definition": {
+        "id": "library.casework.wall-cabinet.door_thickness",
+        "name": "Door thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:115200"
+    },
+    {
+      "key": "gap",
+      "definition": {
+        "id": "library.casework.wall-cabinet.gap",
+        "name": "Door gap",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:12800"
+    },
+    {
+      "key": "carcass_material",
+      "definition": {
+        "id": "library.casework.wall-cabinet.carcass_material",
+        "name": "Carcass material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-loblolly-pine"
+    },
+    {
+      "key": "mount_height",
+      "definition": {
+        "id": "library.casework.wall-cabinet.mount_height",
+        "name": "Height of its underside",
+        "kind": "length",
+        "holder": "instance",
+        "choices": []
+      },
+      "default": "length:q0:9280000"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "carcass1",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "carcass2",
+          "x": "length:q0:1920000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "carcass3",
+          "x": "length:q0:1920000",
+          "y": "length:q0:1932800"
+        },
+        {
+          "key": "carcass4",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:1932800"
+        },
+        {
+          "key": "door1",
+          "x": "length:q0:-1907200",
+          "y": "length:q0:1932800"
+        },
+        {
+          "key": "door2",
+          "x": "length:q0:1907200",
+          "y": "length:q0:1932800"
+        },
+        {
+          "key": "door3",
+          "x": "length:q0:1907200",
+          "y": "length:q0:2048000"
+        },
+        {
+          "key": "door4",
+          "x": "length:q0:-1907200",
+          "y": "length:q0:2048000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "carcass_s",
+          "start": "carcass1",
+          "end": "carcass2"
+        },
+        {
+          "key": "carcass_e",
+          "start": "carcass2",
+          "end": "carcass3"
+        },
+        {
+          "key": "carcass_n",
+          "start": "carcass3",
+          "end": "carcass4"
+        },
+        {
+          "key": "carcass_w",
+          "start": "carcass4",
+          "end": "carcass1"
+        },
+        {
+          "key": "door_s",
+          "start": "door1",
+          "end": "door2"
+        },
+        {
+          "key": "door_e",
+          "start": "door2",
+          "end": "door3"
+        },
+        {
+          "key": "door_n",
+          "start": "door3",
+          "end": "door4"
+        },
+        {
+          "key": "door_w",
+          "start": "door4",
+          "end": "door1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "carcass1",
+          "line": "base"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_on_line",
+          "point": "carcass2",
+          "line": "base"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass3",
+          "line": "base",
+          "length": "depth - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass4",
+          "line": "base",
+          "length": "depth - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door1",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door1",
+          "line": "base",
+          "length": "depth - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door2",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door2",
+          "line": "base",
+          "length": "depth - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door3",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door3",
+          "line": "base",
+          "length": "depth",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door4",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door4",
+          "line": "base",
+          "length": "depth",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "carcass",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "carcass_s",
+        "carcass_e",
+        "carcass_n",
+        "carcass_w"
+      ],
+      "holes": [],
+      "start": "mount_height",
+      "end": "mount_height + height",
+      "subcategory": 1800,
+      "material": {
+        "parameter": "carcass_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "door",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "door_s",
+        "door_e",
+        "door_n",
+        "door_w"
+      ],
+      "holes": [],
+      "start": "mount_height + gap",
+      "end": "mount_height + height - gap",
+      "subcategory": 1800,
+      "material": {
+        "parameter": "carcass_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "carcass_s",
+        "carcass_e",
+        "carcass_n",
+        "carcass_w",
+        "door_s",
+        "door_e",
+        "door_n",
+        "door_w"
+      ],
+      "subcategory": 1800,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "face"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width"
+    ],
+    "rows": [
+      {
+        "key": "w450",
+        "name": "450 wide",
+        "values": [
+          "length:q0:2880000"
+        ]
+      },
+      {
+        "key": "w600",
+        "name": "600 wide",
+        "values": [
+          "length:q0:3840000"
+        ]
+      },
+      {
+        "key": "w900",
+        "name": "900 wide",
+        "values": [
+          "length:q0:5760000"
+        ]
+      }
+    ]
+  }
+}

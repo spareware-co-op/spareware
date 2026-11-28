@@ -375,3 +375,66 @@ async fn clear(store: &Memory) {
     }
     txn.commit().await.unwrap();
 }
+
+/// Where regeneration stands now: the cursor, read without regenerating anything.
+async fn cursor(stack: &Stack) -> u64 {
+    let mut snapshot = stack.store.store.snapshot().await.unwrap();
+    let place = Place::Regenerated {
+        project: i(PROJECT),
+    };
+    read_row(&mut snapshot, &place.key())
+        .await
+        .unwrap()
+        .unwrap_or(0)
+}
+
+/// A pass on its own begins where regeneration stood, builds what is left, and says so.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pass_says_where_it_began() {
+    let stack = Stack::new().await;
+    let before = cursor(&stack).await;
+    let pass = stack.regen.catch_up_alone(&i(PROJECT)).await.unwrap();
+    assert_eq!(pass.from, Some(before));
+    assert!(!pass.overtaken);
+    assert!(pass.through > before);
+    assert!(pass.bodies[&i(DOCUMENT)].contains_key(&i("W-3")));
+    assert_eq!(pass.through, cursor(&stack).await);
+    stack.settled().await;
+}
+
+/// Another server's pass commits inside this one's: this one conflicts and, on its own, stops
+/// where the other left regeneration, holding nothing (it built nothing that stands), so no
+/// checkpoint can name the other's work with this pass's bodies. The server asks again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pass_on_its_own_stops_where_another_overtook_it() {
+    let stack = Stack::new().await;
+    let before = cursor(&stack).await;
+    let other = stack.other();
+    stack.store.before_next_commit(async move {
+        other.catch_up(&i(PROJECT)).await.unwrap();
+    });
+    let pass = stack.regen.catch_up_alone(&i(PROJECT)).await.unwrap();
+    assert!(pass.overtaken);
+    assert_eq!((pass.from, pass.through), (Some(before), before));
+    assert!(pass.bodies.is_empty());
+    let next = stack.regen.catch_up_alone(&i(PROJECT)).await.unwrap();
+    assert!(next.from > Some(before));
+    assert_eq!(next.from, Some(next.through));
+    assert!(!next.overtaken && next.bodies.is_empty());
+    stack.settled().await;
+}
+
+/// The same overlap under `catch_up`, which goes on to the end of the log: it says it was
+/// overtaken.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pass_to_the_end_says_it_was_overtaken() {
+    let stack = Stack::new().await;
+    let other = stack.other();
+    stack.store.before_next_commit(async move {
+        other.catch_up(&i(PROJECT)).await.unwrap();
+    });
+    let pass = stack.regen.catch_up(&i(PROJECT)).await.unwrap();
+    assert!(pass.overtaken);
+    assert_eq!(pass.through, cursor(&stack).await);
+    stack.settled().await;
+}

@@ -22,10 +22,15 @@
 //!   walls category ([`new_wall_type`], [`with_assembly`], [`assembly_of`]); the instance
 //!   parameters [`LOCATION_LINE`] and [`FLIPPED`] ([`parameter_definitions`],
 //!   [`add_parameters`], [`placement`], [`offsets_of`]).
-//! - [`joins`]: wall joins in plan, L and T, by layer priority (job 5.1): [`PlanWall`] and
-//!   [`PlanLayer`] as the rule reads a wall, [`joins::join`] giving each layer's [`Joined`]
-//!   outlines (or why a wall meeting it is left unjoined), and [`lines_meet`], how the walls that
-//!   meet are found. Pure and exact; note CON-A4-F2-P2-wall-joins.
+//! - [`joins`]: wall joins in plan by layer priority, L and T (job 5.1), crosses, any angle and a
+//!   person's choices (job 6.1): [`PlanWall`] and [`PlanLayer`] as the rule reads a wall,
+//!   [`joins::join`] giving each layer's [`Joined`] outlines (or why a wall meeting it is left
+//!   unjoined), [`lines_meet`], how the walls that meet are found, and [`meeting`], how two meet.
+//!   Pure and exact; note CON-A4-F2-P2-wall-joins.
+//! - [`joining`]: a wall's own choices as its record keeps them ([`Joining`], [`Choice`],
+//!   [`JoinKind`], [`OwnWrap`]), a joint's choice kept by the wall of the lower ID ([`keeper`]).
+//! - [`wrap`]: wrapping at free ends and at inserts ([`Wrapping`], [`AtEnds`], [`AtInserts`]),
+//!   and where each turned layer lies ([`turned`]); note CON-A4-F2-P4-wall-wrapping.
 //! - [`defaults`]: a small default metric set ([`default_walls`], [`default_wall_types`]).
 //! - [`error`]: [`WallError`], every refusal as a value, naming the layer where there is one.
 //!
@@ -46,27 +51,30 @@
 //!   geometry.
 //! - The commands that make and change wall types and draw walls through the edit log are
 //!   construct-api's (`cloud::walls`): they check every edit with the functions here.
-//! - Joins: L and T joins are [`joins`] (job 5.1), each pair of meeting layers settled by the
-//!   priority [`join`] gives; construct-regen finds the walls that meet, fills each layered
-//!   wall's recipe with its joined outlines, and builds them. X joins, mitres at any angle and
-//!   joins of more than two walls at a point are job 6.1's.
-//! - Wrapping geometry (job 6.1): which layers wrap is [`Layer::wraps`], with the rule written on
-//!   [`Layer`]; separate answers for ends and for openings would be a new stored version.
+//! - Joins: [`joins`], each pair of meeting layers settled by the priority [`join`] gives;
+//!   construct-regen finds the walls that meet, fills each layered wall's recipe with its joined
+//!   outlines, and builds them. Joins of more than two walls at a point are left unjoined.
+//! - Wrapping: which layers wrap is [`Layer::wraps`]; where the type wraps them is its
+//!   [`Wrapping`], stored with its layers from version 2 of the text; free ends are turned in the
+//!   join rule's pieces, inserts by construct-regen's kernel builder, both by [`turned`].
 
 pub mod assembly;
 pub mod defaults;
 pub mod error;
+pub mod joining;
 pub mod joins;
 pub mod layer;
 mod length;
 pub mod offsets;
 pub mod stored;
 pub mod wall_type;
+pub mod wrap;
 
 pub use assembly::{Assembly, MOST_TOTAL, Side, Zone};
 pub use defaults::{DefaultWall, default_wall_types, default_walls};
 pub use error::WallError;
-pub use joins::{Joined, Outline, PlanLayer, PlanWall, TOLERANCE, lines_meet};
+pub use joining::{Choice, JOINING, JoinKind, Joining, OwnWrap, WRAPPING, WallEnd, keeper};
+pub use joins::{Joined, Meeting, Outline, PlanLayer, PlanWall, TOLERANCE, lines_meet, meeting};
 pub use layer::{Function, Join, Layer, join};
 pub use offsets::{LocationLine, Offsets};
 pub use stored::{FORMAT_VERSION, OWNER};
@@ -74,3 +82,4 @@ pub use wall_type::{
     FLIPPED, LOCATION_LINE, add_parameters, assembly_of, location_line_value, new_wall_type,
     offsets_of, parameter_definitions, placement, with_assembly,
 };
+pub use wrap::{AtEnds, AtInserts, Setback, Turn, Turned, WrapLayer, Wrapping, turned};
