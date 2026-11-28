@@ -399,6 +399,19 @@ The element, parameter, type, hosting, family, level, wall, grid and reference p
 | `view.crop.set` | `view`, and any of `region` (`{"rectangle": {"min": {"x", "y"}, "max": {"x", "y"}}}` or `{"outline": [{"x", "y"}, ...]}`, typed lengths in the view's own coordinates), `annotation` (a region, or `null` for none), `on` | The view's crop ([construct-views' format](../construct-views/FORMAT.md)): made from `region` when the view has none (on and shown), else the parts named change. Refused for a view that holds no crop, a rectangle not below and left of its other corner, and an outline with fewer than three corners, a corner twice in a row, edges that cross, touch or lie along each other, or no area. Nothing at all, and no step, if it already is so |
 | `view.crop.clear` | `view` | The crop goes; nothing at all, and no step, when there is none |
 | `view.crop.show` | `view`, `shown` (true or false) | Whether the crop's outline is shown. Refused for a view with no crop |
+| `view.categories.set` | `view` or `template`, `category`, `shown` | Whether the view (or template) draws the category or subcategory at all; a tied view's change to what its template includes is refused |
+| `view.override.set` | `view`, `element`, `appearance`: any of `pen`, `pattern`, `colour`, `halftone` (a boolean), `shown` (a boolean) | One element's override in the view, merged over what it has; nothing at all when it changes nothing |
+| `view.override.clear` | `view`, `element` (default every override of the view) | The element's override, or all of the view's; nothing at all when there is none |
+| `view.filter.add` | `view` or `template`, `name`, `category`, `parameter` (ID or name), `op` (`equals`, `contains`, `greater_than`), `value` (typed text), `appearance` (as an override's) | A filter, last in the list |
+| `view.filter.set` | `view` or `template`, `filter` (its number), and any of `name`, `category`, `parameter`, `op`, `value`, `appearance` (whole) | The filter changed, in its place |
+| `view.filter.remove`, `view.filter.move` | `view` or `template`, `filter`, and `place` (0 is the first) for the move | The list |
+| `view.template.create` | `template` (the new ID), `name`, `source` (a view to take the settings from; default fresh) | A view template record, every setting included |
+| `view.template.rename`, `view.template.delete` | `template`, and `name` | The template; a delete is refused while a view is tied to it |
+| `view.template.set` | `template`, any of `scale`, `detail`, `included` (`{"scale": false}`: setting key to on or off) | The template |
+| `view.template.update` | `template`, `source` (a view) | The template's settings taken from the view's |
+| `view.template.tie`, `view.template.apply` | `view`, `template` | The view follows the template (and holds the values it shows); or copies the included settings once and stays free |
+| `view.template.untie` | `view` | The view stops following its template and keeps what it showed |
+| `view.graphics.clear` | `view` or `template`, `category`, `edge` (default both) | The rule, or both of the category's rules; nothing at all, and no step, when there is none |
 | `sheet.create` | `sheet`, `number`, `name`; `paper` (a size and orientation, or a width and height; default A1 landscape) | A sheet record ([construct-sheets' format](../construct-sheets/FORMAT.md)), and the parameter table when it lacks the standard sheet parameters. The number is unique among the sheets, case aside |
 | `sheet.set` | `sheet`, and any of `number`, `name`, `paper` | The sheet, its parameter values kept; nothing at all if it already is so. Paper that would leave a viewport's centre off it is refused |
 | `sheet.delete` | `sheet` | The sheet and every viewport on it, in one step |

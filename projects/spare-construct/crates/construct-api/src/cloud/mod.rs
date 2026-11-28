@@ -64,6 +64,7 @@ pub mod spaces;
 pub mod stairs;
 pub mod transaction;
 pub mod undo;
+pub mod view_templates;
 pub mod views;
 pub mod walls;
 pub mod warnings;

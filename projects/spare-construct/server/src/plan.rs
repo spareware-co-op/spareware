@@ -39,7 +39,8 @@
 //! (construct-drawing's note) and the cut (the interim register) are both stand-ins for the
 //! kernel's own, behind the same types.
 
-use construct_api::cloud::views::{World, look_in};
+use construct_api::cloud::views::ElementStyle;
+use construct_api::cloud::views::{World, look_for as resolve_for, look_in};
 use construct_categories::{CategoryId, CategoryTable};
 use construct_drawing::crop::clip;
 use construct_drawing::drawing::{Drawing, LineKind, Shape, ViewPoint};
@@ -63,6 +64,7 @@ use construct_views::Crop;
 use engine_geometry::value::engine::Engine;
 use kit_core::Id;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// One element a plan cuts, as the model holds it.
 #[derive(Clone, Debug)]
@@ -155,31 +157,32 @@ pub trait Drawer: Send + Sync {
 pub struct ViewLooks<'a> {
     world: &'a World,
     view: &'a Id,
+    own: &'a BTreeMap<Id, ElementStyle>,
 }
 
 impl<'a> ViewLooks<'a> {
-    /// The looks of `view` in `world`.
+    /// The looks of `view` in `world`, each element in `own` looking as its filters and its
+    /// overrides in the view say over what its category does.
     #[must_use]
-    pub const fn new(world: &'a World, view: &'a Id) -> Self {
-        Self { world, view }
+    pub const fn new(world: &'a World, view: &'a Id, own: &'a BTreeMap<Id, ElementStyle>) -> Self {
+        Self { world, view, own }
     }
-}
 
-impl std::fmt::Debug for ViewLooks<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ViewLooks")
-            .field("view", &self.view)
-            .finish_non_exhaustive()
-    }
-}
-
-impl Looks for ViewLooks<'_> {
-    fn look(&self, category: CategoryId, kind: LineKind) -> Result<Look, String> {
+    fn answer(
+        &self,
+        own: Option<&ElementStyle>,
+        category: CategoryId,
+        kind: LineKind,
+    ) -> Result<Look, String> {
         let edge = match kind {
             LineKind::Cut => Edge::Cut,
             LineKind::Projected => Edge::Projected,
         };
-        let found = look_in(self.world, self.view, category, edge)?;
+        let found = if own.is_some() {
+            resolve_for(self.world, self.view, category, edge, own)?
+        } else {
+            look_in(self.world, self.view, category, edge)?
+        };
         let rule = found.style;
         Ok(Look {
             shown: rule.shown,
@@ -195,6 +198,28 @@ impl Looks for ViewLooks<'_> {
             halftone: rule.halftone,
             transparency: rule.transparency,
         })
+    }
+}
+
+impl std::fmt::Debug for ViewLooks<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ViewLooks")
+            .field("view", &self.view)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Looks for ViewLooks<'_> {
+    fn look(&self, category: CategoryId, kind: LineKind) -> Result<Look, String> {
+        self.answer(None, category, kind)
+    }
+
+    fn look_for(&self, element: &Id, category: CategoryId, kind: LineKind) -> Result<Look, String> {
+        self.answer(self.own.get(element), category, kind)
+    }
+
+    fn per_element(&self) -> bool {
+        !self.own.is_empty()
     }
 }
 

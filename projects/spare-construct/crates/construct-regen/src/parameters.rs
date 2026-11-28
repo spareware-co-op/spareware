@@ -90,6 +90,7 @@ pub fn has_shape(element: &Element) -> bool {
         && element.kind != construct_levels::LEVEL_KIND
         && element.kind != construct_views::VIEW_KIND
         && !crate::families::is_record(element)
+        && element.kind != construct_views::TEMPLATE_KIND
         && element.kind != construct_schedules::SCHEDULE_KIND
         && element.kind != construct_sheets::SHEET_KIND
         && element.kind != construct_sheets::VIEWPORT_KIND
