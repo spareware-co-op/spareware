@@ -166,7 +166,11 @@ function openSection(id) {
   S.tool = 'select';
   S.pend = null;
   S.sel = id;
-  ACT.view({ dataset: { a: key } });
+  // The demo's own route: the page's ACT.view opens only the level plans.
+  S.view = key;
+  S.zoom = 1;
+  S.zc = null;
+  go(`plan:${key}`);
   loadSection();
 }
 

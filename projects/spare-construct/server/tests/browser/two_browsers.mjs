@@ -4299,8 +4299,8 @@ await svHome(anna);
 await svHome(ben);
 await anna.click('#ribbon [data-act="dtool"][data-a="architecture:wall"]');
 await anna.waitForSelector('#pv-side select[data-key="wall-type"]');
-const svFrom = await onPlan(anna, 4000, 11500);
-const svTo = await onPlan(anna, 10000, 11500);
+const svFrom = await onPlan(anna, 7500, 9200);
+const svTo = await onPlan(anna, 12500, 9200);
 await anna.mouse.click(svFrom.x, svFrom.y);
 await anna.mouse.click(svTo.x, svTo.y);
 const svWallOf = (known) =>
@@ -4323,14 +4323,14 @@ const svDoorAt = await ben.evaluate((id) => {
   const { min, max } = piece.shape.bounds;
   return Math.round((x + (min[0] + max[0]) / 2) / 50) * 50;
 }, svDoor);
-check(svDoorAt > 4000 && svDoorAt < 10000, `Anna's door stands in her wall, its middle at ${svDoorAt} mm along the plan`);
+check(svDoorAt > 7500 && svDoorAt < 12500, `Anna's door stands in her wall, its middle at ${svDoorAt} mm along the plan`);
 
 // The section tool, from the View tab: two picks across the wall, through the door.
 await anna.locator('#ribbon [role="tab"]', { hasText: 'View' }).click();
 await anna.click('#ribbon [data-act="dtool"][data-a="architecture:section"]');
 await anna.waitForSelector('#pv-side select[data-key="section-new-look"]');
-const svA = await onPlan(anna, svDoorAt, 12400);
-const svB = await onPlan(anna, svDoorAt, 10600);
+const svA = await onPlan(anna, svDoorAt, 10200);
+const svB = await onPlan(anna, svDoorAt, 8400);
 await anna.mouse.click(svA.x, svA.y);
 await anna.mouse.click(svB.x, svB.y);
 await anna.keyboard.press('Escape');
@@ -4341,7 +4341,7 @@ const svListed = async (id) =>
   (await asAnna('views')).find((v) => v.id === id);
 const svRecord = await svListed(svId);
 check(
-  svRecord?.kind === 'section' && svRecord.line.look === 'left' && Number.parseFloat(svRecord.line.from.x) === svDoorAt && Number.parseFloat(svRecord.line.to.y) === 10600,
+  svRecord?.kind === 'section' && svRecord.line.look === 'left' && Number.parseFloat(svRecord.line.from.x) === svDoorAt && Number.parseFloat(svRecord.line.to.y) === 8400,
   "Anna's section is a view of the model with her line, looking to the left of it, and is in the server's list",
 );
 for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
@@ -4407,7 +4407,8 @@ if (withKernel) {
 } else {
   for (const page of [anna, ben]) await page.waitForSelector(svNote);
   for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
-    check((await page.locator(svNote).textContent()).includes('without the geometry kernel'), `${name}'s section view says in the server's words that it is not drawn on this build`);
+    await page.waitForFunction((sel) => document.querySelector(sel)?.textContent.includes('without the geometry kernel'), svNote);
+    pass(`${name}'s section view says in the server's words that it is not drawn on this build`);
   }
   pass("(the stand-in draws no sections: the kernel's run checks the cut wall and the opening in it)");
 }
@@ -4422,8 +4423,8 @@ await svBack(ben);
 await anna.locator('#ribbon [role="tab"]', { hasText: 'View' }).click();
 await anna.click('#ribbon [data-act="dtool"][data-a="architecture:section"]');
 await anna.waitForSelector('#pv-side select[data-key="section-new-look"]');
-const svC = await onPlan(anna, svDoorAt - 1500, 13000);
-const svD = await onPlan(anna, svDoorAt + 1500, 12000);
+const svC = await onPlan(anna, svDoorAt - 1500, 10000);
+const svD = await onPlan(anna, svDoorAt + 1500, 9600);
 await anna.mouse.click(svC.x, svC.y);
 await anna.mouse.click(svD.x, svD.y);
 await anna.keyboard.press('Escape');
@@ -4438,7 +4439,8 @@ check(
 if (withKernel) {
   await svOpen(anna, svSlantId);
   await anna.waitForSelector(svNote);
-  check((await anna.locator(svNote).textContent()).includes('along a grid axis'), "opening it, the server says in words that only a line along a grid axis is drawn yet");
+  await anna.waitForFunction((sel) => document.querySelector(sel)?.textContent.includes('along a grid axis'), svNote);
+  pass('opening it, the server says in words that only a line along a grid axis is drawn yet');
   await svBack(anna);
 }
 const svSlantAt = await svHead(anna, svSlantId);
@@ -4474,8 +4476,18 @@ await anna.keyboard.press('Escape');
 
 // Ben opens the north elevation; Anna opens it too.
 const svNorth = svViews.find((v) => v.name === 'North elevation').id;
-await svOpen(ben, svNorth);
-await svOpen(anna, svNorth);
+// An elevation's head can lie off the plan's edge, round the whole building: the project browser's
+// list of model views opens it as well.
+const svFromList = async (page, id) => {
+  await page.evaluate(() => {
+    const group = document.querySelector('#browser details[data-k="Views"]');
+    if (group) group.open = true;
+  });
+  await page.locator(`#browser button.leaf[data-act="stackview"][data-a="${id}"]`).click();
+  await page.waitForFunction((view) => S.view === `sec-${view}`, id);
+};
+await svFromList(ben, svNorth);
+await svFromList(anna, svNorth);
 if (withKernel) {
   for (const page of [anna, ben]) await page.waitForSelector(`${svDrawn} line[data-element]`);
   const outlines = await Promise.all([anna, ben].map((page) => page.locator(svDrawn).innerHTML()));
