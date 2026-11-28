@@ -157,7 +157,7 @@ pub trait Tool {
 
 (The signatures are today's functions, gathered; the job settles the exact types.)
 
-**The one list.** A small declarative macro in `cloud/mod.rs` takes the tools in order and declares their modules: `tools! { walls, floors, roofs, curtains, rooms, stairs, ... }`. It expands to the `pub mod` lines (which Rust needs anyway) and to the dispatch that today is written out by hand:
+**The one list.** A small declarative macro in `cloud/mod.rs` takes the tools in order and declares their modules: `tools! { walls, floors, roofs, curtains, rooms, stairs, ... }`. Its line is the ONLY shared line a new tool adds on the Rust side (the server's own list, for its reads and routes, is the same macro in the server crate, one line per tool that has reads). It expands to the `pub mod` lines (which Rust needs anyway) and to the dispatch that today is written out by hand:
 
 | Today | From the list |
 | --- | --- |
