@@ -336,7 +336,9 @@ static TOOLS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../app/tools");
 /// A module of one of the trees, by its path in it; only `.js` files are served.
 fn module(tree: &'static Dir<'static>, file: &str) -> Response {
     match tree.get_file(file) {
-        Some(found) if file.ends_with(".js") => ([JAVASCRIPT], found.contents()).into_response(),
+        Some(found) if found.path().extension().is_some_and(|e| e == "js") => {
+            ([JAVASCRIPT], found.contents()).into_response()
+        }
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
