@@ -251,6 +251,10 @@ impl From<MaterialError> for SlabError {
 }
 
 impl fmt::Display for SlabError {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one sentence for each refusal, in the order they are declared"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoLayers => write!(f, "a floor type needs at least one layer"),

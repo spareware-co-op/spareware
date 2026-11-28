@@ -178,7 +178,7 @@ impl Grid {
     /// more than [`MOST_TILES`] tiles in its bounding box; [`SlabError::OutOfRange`] when a
     /// number does not fit.
     pub fn tiles(&self, boundary: &Boundary) -> Result<Tiles, SlabError> {
-        if self.angle % 90 != 0 {
+        if !self.angle.is_multiple_of(90) {
             return Err(SlabError::BadGrid(
                 "a turned grid's tiles are not counted exactly yet: only 0 and 90 degrees are"
                     .into(),

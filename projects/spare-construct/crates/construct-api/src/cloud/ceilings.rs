@@ -377,17 +377,16 @@ async fn outline<T: Txn>(
 fn grid_of_args(sent: GridArgs, boundary: &Boundary) -> Result<Grid, String> {
     let width = length(&sent.width)?;
     let depth = length(&sent.depth)?;
-    let origin = match sent.origin {
-        Some([x, y]) => Point {
+    let origin = if let Some([x, y]) = sent.origin {
+        Point {
             x: length(&x)?.steps(),
             y: length(&y)?.steps(),
-        },
-        None => {
-            let corners = boundary.corners(Ring::Outer).unwrap_or_default();
-            Point {
-                x: corners.iter().map(|(_, p)| p.x).min().unwrap_or(0),
-                y: corners.iter().map(|(_, p)| p.y).min().unwrap_or(0),
-            }
+        }
+    } else {
+        let corners = boundary.corners(Ring::Outer).unwrap_or_default();
+        Point {
+            x: corners.iter().map(|(_, p)| p.x).min().unwrap_or(0),
+            y: corners.iter().map(|(_, p)| p.y).min().unwrap_or(0),
         }
     };
     Grid::new(width, depth, origin, sent.angle.unwrap_or(0)).map_err(why)

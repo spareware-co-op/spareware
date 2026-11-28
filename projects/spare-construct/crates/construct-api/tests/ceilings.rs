@@ -306,6 +306,10 @@ const TIMBER: &str = "ceiling-plaster-13-timber-45";
 
 /// `ceiling.create`'s arguments for a ceiling sketched by `boundary`, its exposed face
 /// `offset` above Ground.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "callers hand over the shape they have just built"
+)]
 fn sketched(id: &str, ty: &str, offset: &str, boundary: Value) -> Value {
     json!({ "element": id, "type": ty, "level": "L-g", "offset": offset, "boundary": boundary })
 }
@@ -328,8 +332,8 @@ async fn with_defaults(walls: bool) -> Stack {
     stack
 }
 
-fn length_text(mm: i32) -> Option<String> {
-    Some(construct_params::Value::Length(Length::from_mm(mm)).stored())
+fn length_text(mm: i32) -> String {
+    construct_params::Value::Length(Length::from_mm(mm)).stored()
 }
 
 /// The volume a room reads back, or why it has none.
@@ -446,7 +450,7 @@ async fn a_sketched_ceiling_stands_on_its_exposed_face() {
     // that upper face, 13 mm over the 2700 it was tied at.
     let (low, high) = stack.bounds("C-1").await.unwrap();
     assert_eq!((low[2], high[2]), (-13, 0));
-    assert_eq!(stack.built("C-1").await.elevation, length_text(2713));
+    assert_eq!(stack.built("C-1").await.elevation, Some(length_text(2713)));
     stack
         .edit(
             "ceiling.create",
@@ -456,7 +460,7 @@ async fn a_sketched_ceiling_stands_on_its_exposed_face() {
         .unwrap();
     let (low, high) = stack.bounds("C-2").await.unwrap();
     assert_eq!((low[2], high[2]), (-58, 0));
-    assert_eq!(stack.built("C-2").await.elevation, length_text(2758));
+    assert_eq!(stack.built("C-2").await.elevation, Some(length_text(2758)));
     // The type's layers changed: every ceiling of it stands on its face again.
     stack
         .edit(
@@ -468,7 +472,7 @@ async fn a_sketched_ceiling_stands_on_its_exposed_face() {
         .unwrap();
     let (low, high) = stack.bounds("C-1").await.unwrap();
     assert_eq!((low[2], high[2]), (-20, 0));
-    assert_eq!(stack.built("C-1").await.elevation, length_text(2720));
+    assert_eq!(stack.built("C-1").await.elevation, Some(length_text(2720)));
     // The tie moved: the exposed face follows it.
     stack
         .edit(
@@ -477,7 +481,7 @@ async fn a_sketched_ceiling_stands_on_its_exposed_face() {
         )
         .await
         .unwrap();
-    assert_eq!(stack.built("C-1").await.elevation, length_text(2620));
+    assert_eq!(stack.built("C-1").await.elevation, Some(length_text(2620)));
     // Tied to First, 300 mm under it, it stands at 3 m less 300 mm.
     stack
         .edit(
@@ -486,7 +490,7 @@ async fn a_sketched_ceiling_stands_on_its_exposed_face() {
         )
         .await
         .unwrap();
-    assert_eq!(stack.built("C-1").await.elevation, length_text(2720));
+    assert_eq!(stack.built("C-1").await.elevation, Some(length_text(2720)));
     // A new outline is checked and rebuilt.
     stack
         .edit(
@@ -1076,7 +1080,7 @@ async fn a_ceiling_no_walls_enclose_is_a_warning() {
         .edit("ceiling.create", clicked("C-1", "2700 mm", 2000, 1500))
         .await
         .unwrap();
-    assert!(warnings(&stack).await.is_empty());
+    assert_eq!(warnings(&stack).await.len(), 0);
     stack
         .edit(
             "ceiling.create",
