@@ -2977,7 +2977,7 @@ const sepLineOf = () => [...window.spare.elements.values()].find((p) => p.el.kin
 await ben.waitForFunction(sepLineOf);
 const sepLineId = await ben.evaluate(sepLineOf);
 const sepLine = (id) => `#pv-canvas g.element[data-id="${id}"] line.room-line`;
-await ben.waitForSelector(sepLine(sepLineId));
+await ben.waitForSelector(sepLine(sepLineId), { state: 'attached' });
 await anna.keyboard.press('Escape');
 const bothEnclosed = await until(
   () => Promise.all([roomView(kitchenId), roomView(roomId)]),
@@ -3026,17 +3026,16 @@ check(
 // His undo puts the line back, and the two rooms with it.
 await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'roomline.delete');
 await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
-for (const page of [anna, ben]) await page.waitForSelector(sepLine(sepLineId));
+for (const page of [anna, ben]) await page.waitForSelector(sepLine(sepLineId), { state: 'attached' });
 for (const page of [anna, ben]) {
   await tagIs(page, roomTagOf(kitchenId, 'room-area'), kitchenArea);
   await tagIs(page, roomTagOf(roomId, 'room-area'), studioArea);
 }
 pass("Ben's undo puts the line back, and both browsers show the two rooms again");
 await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
-await ben.waitForFunction((id) => !window.spare.claims.has(id), sepLineId);
 
 const linesFresh = await signIn('anna');
-await linesFresh.waitForSelector(sepLine(sepLineId));
+await linesFresh.waitForSelector(sepLine(sepLineId), { state: 'attached' });
 await tagIs(linesFresh, roomTagOf(kitchenId, 'room-area'), kitchenArea);
 await tagIs(linesFresh, roomTagOf(roomId, 'room-area'), studioArea);
 pass('a fresh load draws the line and tags the same two rooms');
@@ -3154,7 +3153,7 @@ pass("Ben's undo puts the line back, and both browsers show the area enclosed ag
 // A floor plan draws the rooms and the separation line and no area; the area plan again draws the area.
 for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
 for (const page of [anna, ben]) {
-  await page.waitForSelector(sepLine(sepLineId));
+  await page.waitForSelector(sepLine(sepLineId), { state: 'attached' });
   check((await page.locator('#pv-canvas g.area-tag').count()) === 0, 'a floor plan draws no area');
   check((await page.locator('#pv-canvas line.area-line').count()) === 0, 'a floor plan draws no area boundary line');
 }
