@@ -21,25 +21,27 @@ use crate::http::{ApiError, Me, Shared};
 use crate::recent;
 use crate::replay::{self, engine_of};
 use crate::service::{Access, Refusal};
+use axum::Json;
 use axum::Router;
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
 use axum::routing::{get, post};
-use axum::Json;
 use construct_api::cloud::Target;
 use construct_model::geometry::Geometry;
 use construct_model::keys::Place;
 use construct_model::rows::{Model, PARAMETER_TABLE, Reads};
 use construct_regen::parameters as records;
 use construct_report::{
-    ANOTHER, Failure, Invalid, Issue, Kind, Listed, MAX_EDITS, MAX_ELEMENTS, MAX_LINES, Part, Program,
-    Report, SENDER, Step, Stored, Topic, Where, by_topic, other, public_issue,
+    ANOTHER, Failure, Invalid, Issue, Kind, Listed, MAX_EDITS, MAX_ELEMENTS, MAX_LINES, Part,
+    Program, Report, SENDER, Step, Stored, Topic, Where, by_topic, other, public_issue,
 };
 use kit_accounts::rows::Person;
 use kit_core::Id;
 use kit_ops::Entry;
-use kit_store::{Key, Kv, Place as KitPlace, Reader, Scope, StoreError, Txn, read_row, scan_rows,
-    table, table_prefix, to_row};
+use kit_store::{
+    Key, Kv, Place as KitPlace, Reader, Scope, StoreError, Txn, read_row, scan_rows, table,
+    table_prefix, to_row,
+};
 use kit_sync::{Clock, read_log};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -238,7 +240,9 @@ impl<K: Kv> Reports<K> {
         {
             Ok(())
         } else {
-            Err(Refusal::Refused("You don't have access to this.".to_owned()))
+            Err(Refusal::Refused(
+                "You don't have access to this.".to_owned(),
+            ))
         }
     }
 
@@ -265,8 +269,8 @@ impl<K: Kv> Reports<K> {
             else {
                 continue;
             };
-            let value = serde_json::to_value(&record)
-                .map_err(|e| StoreError::Damaged(e.to_string()))?;
+            let value =
+                serde_json::to_value(&record).map_err(|e| StoreError::Damaged(e.to_string()))?;
             if depth < DEPTH {
                 let next = depth.saturating_add(1);
                 let place = Place::Reads {
@@ -326,7 +330,11 @@ impl<K: Kv> Reports<K> {
                 && client.as_ref() == Some(&entry.client)
                 && ask.counter == Some(entry.counter)
         });
-        let mut roots: Vec<Id> = ask.elements.iter().filter_map(|e| Id::parse(e).ok()).collect();
+        let mut roots: Vec<Id> = ask
+            .elements
+            .iter()
+            .filter_map(|e| Id::parse(e).ok())
+            .collect();
         if let Some(entry) = failing {
             roots.extend(ids_in(&entry.args));
         }
@@ -470,9 +478,13 @@ impl<K: Kv> Reports<K> {
         report.scrub(&names).map_err(bad)?;
         let mut stored = self.keep(person, self.clock.now_ms(), &report).await?;
         if stored.report.kind == Kind::Problem {
-            let found =
-                replay::replay(&self.kv, self.geometry.as_ref(), stored.number, &stored.report)
-                    .await;
+            let found = replay::replay(
+                &self.kv,
+                self.geometry.as_ref(),
+                stored.number,
+                &stored.report,
+            )
+            .await;
             match found {
                 Ok(found) => {
                     stored.replayed(found);
@@ -673,6 +685,8 @@ async fn one(
     Me(person): Me,
     Path(number): Path<String>,
 ) -> Result<Json<Stored>, ApiError> {
-    let number = number.parse::<u64>().map_err(|_| ApiError(Refusal::NotFound))?;
+    let number = number
+        .parse::<u64>()
+        .map_err(|_| ApiError(Refusal::NotFound))?;
     Ok(Json(app.service.reports.one(&person, number).await?))
 }

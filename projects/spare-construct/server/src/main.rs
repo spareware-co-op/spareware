@@ -16,9 +16,9 @@ use kit_store_tikv::{Files, Tikv};
 use kit_sync::{Clock, Orderers, SystemClock, verify_log};
 use spare_server::directory::DirectoryCommands;
 use spare_server::http::{self, App, Shared};
+use spare_server::report::Reports;
 use spare_server::service::{Access, Service};
 use spare_server::settings::Settings;
-use spare_server::report::Reports;
 use spare_server::{backup, seed};
 use std::sync::Arc;
 use std::time::Duration;
@@ -242,7 +242,10 @@ async fn report(reports: &Reports<Tikv>, action: ReportAction) -> Result<(), Str
                 for step in replay.differing() {
                     let then = step.then.as_deref().unwrap_or("applied");
                     let now = step.now.as_deref().unwrap_or("applied");
-                    println!("  edit {} {}: then {then}; in the replay {now}", step.seq, step.cmd);
+                    println!(
+                        "  edit {} {}: then {then}; in the replay {now}",
+                        step.seq, step.cmd
+                    );
                 }
                 if let Some(note) = &replay.note {
                     println!("  {note}");
@@ -262,9 +265,12 @@ async fn report(reports: &Reports<Tikv>, action: ReportAction) -> Result<(), Str
         }
         ReportAction::Issue { number } => {
             let issue = reports.issue(number).await?;
-            println!("{}
+            println!(
+                "{}
 
-{}", issue.title, issue.body);
+{}",
+                issue.title, issue.body
+            );
         }
         ReportAction::Linked { number, issue } => {
             println!("{}", reports.linked(number, &issue).await?.line());

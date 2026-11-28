@@ -391,7 +391,10 @@ fn one_line(what: &str, text: &str, most: usize, required: bool) -> Result<(), I
         return invalid(format!("Give {what}."));
     }
     if text.chars().count() > most {
-        return invalid(format!("{} is longer than {most} characters.", capital(what)));
+        return invalid(format!(
+            "{} is longer than {most} characters.",
+            capital(what)
+        ));
     }
     if text.chars().any(char::is_control) {
         return invalid(format!("{} is one line.", capital(what)));
@@ -414,7 +417,10 @@ fn id(what: &str, text: &str) -> Result<(), Invalid> {
 
 fn lines(what: &str, list: &[String]) -> Result<(), Invalid> {
     if list.len() > MAX_LINES {
-        return invalid(format!("{} holds more than {MAX_LINES} lines.", capital(what)));
+        return invalid(format!(
+            "{} holds more than {MAX_LINES} lines.",
+            capital(what)
+        ));
     }
     for line in list {
         one_line(what, line, MAX_LINE_CHARS, false)?;
@@ -508,9 +514,7 @@ impl Report {
 
     fn check_elements(&self) -> Result<(), Invalid> {
         if self.elements.len() > MAX_ELEMENTS {
-            return invalid(format!(
-                "A report names at most {MAX_ELEMENTS} elements."
-            ));
+            return invalid(format!("A report names at most {MAX_ELEMENTS} elements."));
         }
         let mut seen = BTreeSet::new();
         for part in &self.elements {
@@ -544,9 +548,15 @@ impl Report {
             }
             let plain = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.';
             if step.cmd.is_empty() || step.cmd.len() > 64 || !step.cmd.chars().all(plain) {
-                return invalid(format!("Edit {} has no command this server knows.", step.seq));
+                return invalid(format!(
+                    "Edit {} has no command this server knows.",
+                    step.seq
+                ));
             }
-            if NOT_REPLAYED.iter().any(|family| step.cmd.starts_with(family)) {
+            if NOT_REPLAYED
+                .iter()
+                .any(|family| step.cmd.starts_with(family))
+            {
                 return invalid(format!(
                     "Edit {} is {}: a report replays a model's own edits only.",
                     step.seq, step.cmd
@@ -619,7 +629,11 @@ impl Report {
                 replace(failed);
             }
         }
-        for line in self.page_errors.iter_mut().chain(self.server_log.iter_mut()) {
+        for line in self
+            .page_errors
+            .iter_mut()
+            .chain(self.server_log.iter_mut())
+        {
             replace(line);
         }
         Ok(())

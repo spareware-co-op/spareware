@@ -70,9 +70,14 @@ async fn quiet(stack: &Stack) {
 /// them for its own edit.
 async fn last_turned_back(stack: &Stack, person: &str) -> (String, u64) {
     let mut snapshot = stack.store.snapshot().await.unwrap();
-    let log = read_log(&mut snapshot, &Scope::Project(i("example-1")), 0, u64::MAX - 1)
-        .await
-        .unwrap();
+    let log = read_log(
+        &mut snapshot,
+        &Scope::Project(i("example-1")),
+        0,
+        u64::MAX - 1,
+    )
+    .await
+    .unwrap();
     let entry = log
         .iter()
         .rev()
@@ -98,9 +103,15 @@ async fn sill(stack: &Stack) {
     let (ben, project, model) = (i("ben"), i("example-1"), i("arch-model"));
     let definition = json!({ "id": "P-sill", "name": "Sill height", "kind": "length",
                              "holder": "instance", "choices": [] });
-    s.edit(&ben, &project, &model, "parameter.define", json!({ "definition": definition }))
-        .await
-        .unwrap();
+    s.edit(
+        &ben,
+        &project,
+        &model,
+        "parameter.define",
+        json!({ "definition": definition }),
+    )
+    .await
+    .unwrap();
     let bind = json!({ "parameter": "P-sill", "categories": [300], "default": "0" });
     s.edit(&ben, &project, &model, "parameter.bind", bind)
         .await
@@ -130,24 +141,58 @@ async fn a_report_of_a_refused_edit_replays_to_the_same_failure_code() {
         counter: Some(counter),
         requests: Vec::new(),
     };
-    let draft = s.reports.draft(&anna, &project, &model, &ask).await.unwrap();
+    let draft = s
+        .reports
+        .draft(&anna, &project, &model, &ask)
+        .await
+        .unwrap();
 
     // The server's parts: the door and the table its value is read through, every edit that
     // touched them by stand-in, the failing edit last, and the program.
-    let ids: Vec<&str> = draft.report.elements.iter().map(|p| p.id.as_str()).collect();
-    assert!(ids.contains(&"D-103") && ids.contains(&"parameters"), "{ids:?}");
+    let ids: Vec<&str> = draft
+        .report
+        .elements
+        .iter()
+        .map(|p| p.id.as_str())
+        .collect();
+    assert!(
+        ids.contains(&"D-103") && ids.contains(&"parameters"),
+        "{ids:?}"
+    );
     let failing = draft.failing.unwrap();
     let last = draft.report.edits.last().unwrap();
-    assert_eq!((last.seq, last.by.as_str(), last.cmd.as_str()), (failing, SENDER, "element.param"));
+    assert_eq!(
+        (last.seq, last.by.as_str(), last.cmd.as_str()),
+        (failing, SENDER, "element.param")
+    );
     assert_eq!(last.failed.as_deref(), Some(words.as_str()));
-    assert!(draft.report.edits.iter().any(|e| e.cmd == "parameter.define" && e.by.starts_with(OTHER)));
-    assert!(draft.report.edits.iter().all(|e| e.by == SENDER || e.by.starts_with(OTHER)));
+    assert!(
+        draft
+            .report
+            .edits
+            .iter()
+            .any(|e| e.cmd == "parameter.define" && e.by.starts_with(OTHER))
+    );
+    assert!(
+        draft
+            .report
+            .edits
+            .iter()
+            .all(|e| e.by == SENDER || e.by.starts_with(OTHER))
+    );
     let failure = draft.report.failure.clone().unwrap();
     assert_eq!(failure, Failure::refused("element.param", words.clone()));
-    assert_eq!(draft.report.program.as_ref().unwrap().engine, "construct.stand-in 1");
+    assert_eq!(
+        draft.report.program.as_ref().unwrap().engine,
+        "construct.stand-in 1"
+    );
     assert_eq!(draft.left_out, 0);
 
-    let report = from_draft(draft.report, "Turned back: a weight for a sill height", "Ben saw it too.");
+    let report = from_draft(
+        draft.report,
+        "Turned back: a weight for a sill height",
+        "Ben saw it too.",
+    );
     let listed = s.reports.send(&anna, report).await.unwrap();
     assert_eq!(listed.state, State::Reproduced);
     assert_eq!(listed.shown, "Reproduced");
@@ -162,10 +207,16 @@ async fn a_report_of_a_refused_edit_replays_to_the_same_failure_code() {
     // The words of the person's own report name nobody else either.
     assert_eq!(stored.report.words, "another person saw it too.");
     assert_eq!(stored.sender, "anna");
-    assert!(stored.line().starts_with(&format!("#{} reproduced | refused.element.param: ", listed.number)));
+    assert!(stored.line().starts_with(&format!(
+        "#{} reproduced | refused.element.param: ",
+        listed.number
+    )));
 
     // It is Anna's alone.
-    assert!(matches!(s.reports.one(&ben, listed.number).await, Err(Refusal::NotFound)));
+    assert!(matches!(
+        s.reports.one(&ben, listed.number).await,
+        Err(Refusal::NotFound)
+    ));
     assert_eq!(s.reports.mine(&anna).await.unwrap(), vec![listed.clone()]);
     assert_eq!(s.reports.mine(&ben).await.unwrap(), Vec::new());
     // The co-op's side reads it, makes the generic issue, and marks it fixed.
@@ -180,9 +231,15 @@ async fn a_report_names_people_only_by_stand_ins_and_its_replay_keeps_them() {
     let stack = seeded().await;
     let s = &stack.service;
     let (anna, ben, project, model) = (i("anna"), i("ben"), i("example-1"), i("arch-model"));
-    s.edit(&ben, &project, &model, "element.claim", json!({ "element": "D-101" }))
-        .await
-        .unwrap();
+    s.edit(
+        &ben,
+        &project,
+        &model,
+        "element.claim",
+        json!({ "element": "D-101" }),
+    )
+    .await
+    .unwrap();
     let moved = json!({ "element": "D-101", "placement": { "x": 1, "y": 1, "z": 0 } });
     let Err(Refusal::Refused(words)) = s.edit(&anna, &project, &model, "element.move", moved).await
     else {
@@ -196,8 +253,17 @@ async fn a_report_names_people_only_by_stand_ins_and_its_replay_keeps_them() {
         counter: Some(counter),
         requests: Vec::new(),
     };
-    let draft = s.reports.draft(&anna, &project, &model, &ask).await.unwrap();
-    let claim = draft.report.edits.iter().find(|e| e.cmd == "element.claim").unwrap();
+    let draft = s
+        .reports
+        .draft(&anna, &project, &model, &ask)
+        .await
+        .unwrap();
+    let claim = draft
+        .report
+        .edits
+        .iter()
+        .find(|e| e.cmd == "element.claim")
+        .unwrap();
     assert!(claim.by.starts_with(OTHER));
     let failure = draft.report.failure.clone().unwrap();
     assert_eq!(failure.words, format!("{} is working on this.", claim.by));
@@ -205,7 +271,11 @@ async fn a_report_names_people_only_by_stand_ins_and_its_replay_keeps_them() {
     for name in ["Ben", "ben", "Anna", "anna"] {
         assert!(!names(&text, name), "the draft names {name}: {text}");
     }
-    let report = from_draft(draft.report, "Turned back while someone else works on it", "");
+    let report = from_draft(
+        draft.report,
+        "Turned back while someone else works on it",
+        "",
+    );
     let listed = s.reports.send(&anna, report).await.unwrap();
     let stored = s.reports.one(&anna, listed.number).await.unwrap();
     assert_eq!(stored.state, State::Reproduced, "{:?}", stored.replay);
@@ -215,7 +285,8 @@ async fn a_report_names_people_only_by_stand_ins_and_its_replay_keeps_them() {
 
 /// Whether `text` holds `name` as a word of its own.
 fn names(text: &str, name: &str) -> bool {
-    text.split(|c: char| !c.is_alphanumeric()).any(|word| word == name)
+    text.split(|c: char| !c.is_alphanumeric())
+        .any(|word| word == name)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -232,13 +303,20 @@ async fn a_build_failure_replays_to_the_same_code_and_nothing_of_a_replay_lands(
         .await
         .unwrap();
     s.regenerate(&project).await.unwrap();
-    let shape = s.shape(&anna, &project, &model, &i("B-1"), None).await.unwrap();
+    let shape = s
+        .shape(&anna, &project, &model, &i("B-1"), None)
+        .await
+        .unwrap();
     let BuiltResult::Failed { code, message } = shape.built.result else {
         panic!("a block with no width does not build");
     };
     quiet(&stack).await;
     let outside = |store: &Memory| -> Vec<String> {
-        store.keys().into_iter().filter(|k| !k.starts_with("rpt/")).collect()
+        store
+            .keys()
+            .into_iter()
+            .filter(|k| !k.starts_with("rpt/"))
+            .collect()
     };
     let before = outside(&stack.store);
 
@@ -246,7 +324,11 @@ async fn a_build_failure_replays_to_the_same_code_and_nothing_of_a_replay_lands(
         elements: vec!["B-1".to_owned()],
         ..Ask::default()
     };
-    let draft = s.reports.draft(&anna, &project, &model, &ask).await.unwrap();
+    let draft = s
+        .reports
+        .draft(&anna, &project, &model, &ask)
+        .await
+        .unwrap();
     assert!(draft.failing.is_none() && draft.report.failure.is_none());
     let report = Report {
         failure: Some(Failure::build(&code, message.clone(), "B-1")),
@@ -262,7 +344,12 @@ async fn a_build_failure_replays_to_the_same_code_and_nothing_of_a_replay_lands(
     // The replay ran in a transaction that was never committed: the store holds the report, under
     // its own keys, and not one key more.
     assert_eq!(outside(&stack.store), before);
-    let mine: Vec<String> = stack.store.keys().into_iter().filter(|k| k.starts_with("rpt/")).collect();
+    let mine: Vec<String> = stack
+        .store
+        .keys()
+        .into_iter()
+        .filter(|k| k.starts_with("rpt/"))
+        .collect();
     assert_eq!(
         mine,
         [
@@ -299,7 +386,10 @@ async fn a_report_is_checked_and_belongs_to_its_sender_and_their_project() {
     let stored = s.reports.one(&anna, listed.number).await.unwrap();
     assert!(stored.replay.is_none());
     assert_eq!(stored.report.words, "another person asked for this too.");
-    assert_eq!(s.reports.feedback().await.unwrap()[&Topic::Modelling], vec![listed.number]);
+    assert_eq!(
+        s.reports.feedback().await.unwrap()[&Topic::Modelling],
+        vec![listed.number]
+    );
 
     let two_lines = Report {
         summary: "one\ntwo".to_owned(),
@@ -312,16 +402,29 @@ async fn a_report_is_checked_and_belongs_to_its_sender_and_their_project() {
 
     // Dan cannot see the Architecture team's model, so he can neither draft nor send a report of it.
     assert!(matches!(
-        s.reports.draft(&dan, &project, &model, &Ask::default()).await,
+        s.reports
+            .draft(&dan, &project, &model, &Ask::default())
+            .await,
         Err(Refusal::Refused(_))
     ));
     let draft = s
         .reports
-        .draft(&anna, &project, &model, &Ask { elements: vec!["D-101".to_owned()], ..Ask::default() })
+        .draft(
+            &anna,
+            &project,
+            &model,
+            &Ask {
+                elements: vec!["D-101".to_owned()],
+                ..Ask::default()
+            },
+        )
         .await
         .unwrap();
     let theirs = from_draft(draft.report, "Something about a door", "");
-    assert!(matches!(s.reports.send(&dan, theirs).await, Err(Refusal::Refused(_))));
+    assert!(matches!(
+        s.reports.send(&dan, theirs).await,
+        Err(Refusal::Refused(_))
+    ));
     // A field the shape does not name is refused before it is ever read.
     let mut extra = serde_json::to_value(idea_like()).unwrap();
     extra["project"] = Value::String("everything".to_owned());

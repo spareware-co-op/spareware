@@ -17,8 +17,8 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
-use tracing::Instrument;
 use tokio::sync::mpsc;
+use tracing::Instrument;
 
 /// How often a connection re-asks Cedar whether its person may still read what it's watching.
 const RECHECK: Duration = Duration::from_secs(15);
@@ -45,20 +45,23 @@ pub async fn upgrade(
         .unwrap_or("")
         .to_owned();
     let span = tracing::info_span!("live", request = request.as_str(), person = person.as_str());
-    Ok(socket.on_upgrade(move |socket| async move {
-        let orderer = app.service.orderer(&project).await;
-        let live = Live {
-            app,
-            person,
-            project,
-            orderer,
-            watcher: Watcher::new(),
-            request,
-        };
-        if let Err(e) = live.run(socket).await {
-            tracing::debug!("connection closed: {e}");
+    Ok(socket.on_upgrade(move |socket| {
+        async move {
+            let orderer = app.service.orderer(&project).await;
+            let live = Live {
+                app,
+                person,
+                project,
+                orderer,
+                watcher: Watcher::new(),
+                request,
+            };
+            if let Err(e) = live.run(socket).await {
+                tracing::debug!("connection closed: {e}");
+            }
         }
-    }.instrument(span)))
+        .instrument(span)
+    }))
 }
 
 struct Live {

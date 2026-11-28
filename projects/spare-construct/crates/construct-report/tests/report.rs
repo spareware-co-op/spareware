@@ -53,8 +53,20 @@ fn problem() -> Report {
             record: json!({ "id": "D-9", "kind": "door", "recipe": { "op": "box" } }),
         }],
         edits: vec![
-            step(3, other(1).as_str(), "element.create", json!({ "element": "D-9" }), None),
-            step(7, SENDER, "element.claim", json!({ "element": "D-9" }), Some("Ben is working on this.")),
+            step(
+                3,
+                other(1).as_str(),
+                "element.create",
+                json!({ "element": "D-9" }),
+                None,
+            ),
+            step(
+                7,
+                SENDER,
+                "element.claim",
+                json!({ "element": "D-9" }),
+                Some("Ben is working on this."),
+            ),
             step(
                 9,
                 SENDER,
@@ -117,7 +129,9 @@ fn a_full_report_is_kept_and_reads_back_to_the_same_bytes() {
 fn a_report_holds_only_the_parts_it_names() {
     let mut value = serde_json::to_value(problem()).unwrap();
     value["project_data"] = json!({ "walls": [] });
-    let read = serde_json::from_value::<Report>(value).unwrap_err().to_string();
+    let read = serde_json::from_value::<Report>(value)
+        .unwrap_err()
+        .to_string();
     assert!(read.contains("unknown field `project_data`"), "{read}");
     // Nor can a part carry more than its own fields: a person's name on an edit, say.
     let mut value = serde_json::to_value(problem()).unwrap();
@@ -173,12 +187,16 @@ fn a_report_over_its_caps_is_refused_in_words() {
     big.elements[0].record["recipe"]["text"] = json!("x".repeat(MAX_RECORD_BYTES));
     let words = refusal(&big);
     assert!(
-        words.starts_with("This report is 25") && words.ends_with("KB without its screenshot; the most is 256 KB. Leave a part out."),
+        words.starts_with("This report is 25")
+            && words.ends_with("KB without its screenshot; the most is 256 KB. Leave a part out."),
         "{words}"
     );
     let mut lines = problem();
     lines.page_errors = vec!["e".to_owned(); 201];
-    assert_eq!(refusal(&lines), "The page's errors holds more than 200 lines.");
+    assert_eq!(
+        refusal(&lines),
+        "The page's errors holds more than 200 lines."
+    );
 }
 
 #[test]
@@ -188,7 +206,10 @@ fn edits_are_a_models_own_in_log_order_by_stand_ins() {
     assert!(refusal(&named).starts_with("Edit 3 is by \"ben\""));
     let mut backwards = problem();
     backwards.edits.swap(0, 1);
-    assert_eq!(refusal(&backwards), "The edits are in the order of the log, each once.");
+    assert_eq!(
+        refusal(&backwards),
+        "The edits are in the order of the log, each once."
+    );
     let mut adds_a_model = problem();
     adds_a_model.edits[0].cmd = "model.add".to_owned();
     assert_eq!(
@@ -197,7 +218,10 @@ fn edits_are_a_models_own_in_log_order_by_stand_ins() {
     );
     let mut nowhere = problem();
     nowhere.place = None;
-    assert_eq!(refusal(&nowhere), "Elements and edits come with the model they are from.");
+    assert_eq!(
+        refusal(&nowhere),
+        "Elements and edits come with the model they are from."
+    );
     let mut twice = problem();
     twice.elements.push(twice.elements[0].clone());
     assert_eq!(refusal(&twice), "Element D-9 is in the report twice.");
@@ -248,9 +272,17 @@ fn a_screenshot_is_a_picture_within_its_cap() {
         ..problem()
     };
     with("image/png", PNG).check().unwrap();
-    with("image/jpeg", &[0xFF, 0xD8, 0xFF, 0xE0]).check().unwrap();
-    assert_eq!(refusal(&with("image/jpeg", PNG)), "A screenshot is a PNG or a JPEG picture.");
-    assert_eq!(refusal(&with("text/html", b"<p>")), "A screenshot is a PNG or a JPEG picture.");
+    with("image/jpeg", &[0xFF, 0xD8, 0xFF, 0xE0])
+        .check()
+        .unwrap();
+    assert_eq!(
+        refusal(&with("image/jpeg", PNG)),
+        "A screenshot is a PNG or a JPEG picture."
+    );
+    assert_eq!(
+        refusal(&with("text/html", b"<p>")),
+        "A screenshot is a PNG or a JPEG picture."
+    );
     let mut huge = PNG.to_vec();
     huge.resize(MAX_SCREENSHOT_BYTES + 1, 0);
     assert_eq!(
@@ -266,7 +298,9 @@ fn a_screenshot_is_a_picture_within_its_cap() {
 #[test]
 fn other_peoples_names_are_taken_out_as_whole_words() {
     let mut report = problem();
-    report.server_log.push("Anna asked; BEN answered; Bench seat".to_owned());
+    report
+        .server_log
+        .push("Anna asked; BEN answered; Bench seat".to_owned());
     report
         .scrub(&[
             ("Ben".to_owned(), other(1)),
@@ -274,9 +308,18 @@ fn other_peoples_names_are_taken_out_as_whole_words() {
             ("Anna".to_owned(), ANOTHER.to_owned()),
         ])
         .unwrap();
-    assert_eq!(report.edits[1].failed.as_deref(), Some("other-1 is working on this."));
-    assert_eq!(report.words, "I typed a weight by mistake, and other-1 said it should say why.");
-    assert_eq!(report.server_log[1], "another person asked; other-1 answered; Bench seat");
+    assert_eq!(
+        report.edits[1].failed.as_deref(),
+        Some("other-1 is working on this.")
+    );
+    assert_eq!(
+        report.words,
+        "I typed a weight by mistake, and other-1 said it should say why."
+    );
+    assert_eq!(
+        report.server_log[1],
+        "another person asked; other-1 answered; Bench seat"
+    );
     // The model's inputs are left as they are: a replay needs them.
     assert_eq!(report.edits[2].args, problem().edits[2].args);
     assert_eq!(report.elements, problem().elements);
@@ -346,7 +389,10 @@ fn a_stored_report_keeps_its_screenshot_apart_and_moves_on_in_states() {
         "Report 7 is already fixed in version 0.2.0."
     );
     let text = serde_json::to_string(&stored).unwrap();
-    assert!(text.contains(r#""state":{"fixed":{"version":"0.2.0"}}"#), "{text}");
+    assert!(
+        text.contains(r#""state":{"fixed":{"version":"0.2.0"}}"#),
+        "{text}"
+    );
     assert_eq!(serde_json::from_str::<Stored>(&text).unwrap(), stored);
     let listed = serde_json::to_value(reproduced(8).listed()).unwrap();
     assert_eq!(listed["state"], "reproduced");
@@ -361,19 +407,48 @@ fn a_fixer_reads_one_line_first() {
          | 3 edits; the replay on stand-in 1 reproduced it | stand-in 1 | version 0.1.0"
     );
     let (idea, _) = Stored::received(8, "anna", 5_000, feedback(Topic::Views));
-    assert_eq!(idea.line(), "#8 received | feedback (Views and sheets): Snap to grid crossings");
+    assert_eq!(
+        idea.line(),
+        "#8 received | feedback (Views and sheets): Snap to grid crossings"
+    );
 }
 
 #[test]
 fn a_reproduced_fault_becomes_a_public_issue_with_no_project_data() {
     let stored = reproduced(7);
     let issue = public_issue(&stored).unwrap();
-    assert_eq!(issue.title, "Reproduced from report 7: refused.element.param");
-    for held in ["D-9", "P-sill", "3 kg", "Sill height", "arch-model", "example-1", "anna", "Ben", "mistake"] {
-        assert!(!issue.body.contains(held), "the issue holds {held:?}: {}", issue.body);
+    assert_eq!(
+        issue.title,
+        "Reproduced from report 7: refused.element.param"
+    );
+    for held in [
+        "D-9",
+        "P-sill",
+        "3 kg",
+        "Sill height",
+        "arch-model",
+        "example-1",
+        "anna",
+        "Ben",
+        "mistake",
+    ] {
+        assert!(
+            !issue.body.contains(held),
+            "the issue holds {held:?}: {}",
+            issue.body
+        );
     }
-    for said in ["`element.create`, `element.claim`, `element.param`", "`door`", "`stand-in 1`", "number 7"] {
-        assert!(issue.body.contains(said), "the issue lacks {said:?}: {}", issue.body);
+    for said in [
+        "`element.create`, `element.claim`, `element.param`",
+        "`door`",
+        "`stand-in 1`",
+        "number 7",
+    ] {
+        assert!(
+            issue.body.contains(said),
+            "the issue lacks {said:?}: {}",
+            issue.body
+        );
     }
     let (unreplayed, _) = Stored::received(9, "anna", 5_000, problem());
     assert!(public_issue(&unreplayed).is_err());
@@ -381,7 +456,8 @@ fn a_reproduced_fault_becomes_a_public_issue_with_no_project_data() {
 
 #[test]
 fn feedback_is_grouped_by_topic() {
-    let numbered = |number: u64, topic: Topic| Stored::received(number, "anna", 0, feedback(topic)).0;
+    let numbered =
+        |number: u64, topic: Topic| Stored::received(number, "anna", 0, feedback(topic)).0;
     let all = [
         numbered(4, Topic::Speed),
         numbered(2, Topic::Speed),

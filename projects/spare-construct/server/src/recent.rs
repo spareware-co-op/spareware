@@ -100,9 +100,7 @@ pub fn lines_for(person: &str, requests: &[String], most: usize) -> Vec<String> 
     let lines = LINES.lock().unwrap_or_else(PoisonError::into_inner);
     let mine: Vec<String> = lines
         .iter()
-        .filter(|line| {
-            line.person.as_deref() == Some(person) && requests.contains(&line.request)
-        })
+        .filter(|line| line.person.as_deref() == Some(person) && requests.contains(&line.request))
         .map(|line| format!("{} {}", line.request, line.text))
         .collect();
     let skip = mine.len().saturating_sub(most);

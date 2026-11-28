@@ -162,7 +162,8 @@ impl Stored {
     /// [`Invalid`] when `version` is not one line, or the report is already marked fixed.
     pub fn fixed(&mut self, version: &str) -> Result<(), Invalid> {
         let version = version.trim();
-        if version.is_empty() || version.chars().count() > 100 || version.contains(char::is_control) {
+        if version.is_empty() || version.chars().count() > 100 || version.contains(char::is_control)
+        {
             return Err(Invalid("A version is one short line.".to_owned()));
         }
         if let State::Fixed { version: was } = &self.state {
@@ -300,7 +301,11 @@ pub fn public_issue(stored: &Stored) -> Result<Issue, Invalid> {
     );
     if !commands.is_empty() {
         let listed: Vec<String> = commands.iter().map(|c| format!("`{c}`")).collect();
-        let _ = writeln!(body, "- Commands replayed, by first use: {}.", listed.join(", "));
+        let _ = writeln!(
+            body,
+            "- Commands replayed, by first use: {}.",
+            listed.join(", ")
+        );
     }
     if !kinds.is_empty() {
         let listed: Vec<String> = kinds.iter().map(|k| format!("`{k}`")).collect();

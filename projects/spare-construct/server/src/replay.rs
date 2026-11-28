@@ -105,7 +105,10 @@ pub async fn replay<K: Kv>(
     };
     let project = id(&format!("{REPLAY}.{number}"))?;
     let mut snapshot = kv.snapshot().await?;
-    let taken = !snapshot.scan(&kit_list::project(&project)).await?.is_empty()
+    let taken = !snapshot
+        .scan(&kit_list::project(&project))
+        .await?
+        .is_empty()
         || snapshot
             .get(&Place::Project(project.clone()).key())
             .await?
@@ -194,7 +197,10 @@ async fn step<K: Kv>(
     Ok(failed)
 }
 
-#[allow(clippy::too_many_arguments, reason = "one replay's parts, each read once")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one replay's parts, each read once"
+)]
 async fn run<K: Kv>(
     txn: &mut K::Txn,
     kv: &K,
@@ -251,15 +257,18 @@ async fn run<K: Kv>(
         Source::Build => built(txn, geometry, project, model, report).await?,
         _ => refused(report, &steps),
     };
-    let reproduced = report
-        .failure
-        .as_ref()
-        .is_some_and(|f| code.as_deref() == Some(f.code.as_str()) && words.as_deref() == Some(f.words.as_str()));
+    let reproduced = report.failure.as_ref().is_some_and(|f| {
+        code.as_deref() == Some(f.code.as_str()) && words.as_deref() == Some(f.words.as_str())
+    });
     let differing = steps.iter().filter(|s| s.then != s.now).count();
     let note = match (note, differing) {
         (note, 0) => note,
-        (Some(note), n) => Some(format!("{note} {n} edits ended otherwise than when they were made.")),
-        (None, n) => Some(format!("{n} edits ended otherwise than when they were made.")),
+        (Some(note), n) => Some(format!(
+            "{note} {n} edits ended otherwise than when they were made."
+        )),
+        (None, n) => Some(format!(
+            "{n} edits ended otherwise than when they were made."
+        )),
     };
     Ok(Replay {
         engine: String::new(),
