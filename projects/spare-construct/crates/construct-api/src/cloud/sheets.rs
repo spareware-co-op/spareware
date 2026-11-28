@@ -43,7 +43,9 @@
 //! viewport and `element.set`, `element.move` or `element.delete` of one are refused, naming the
 //! command to use.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use crate::cloud::views::{Shaped, World as ViewWorld, listing_of};
 use construct_categories::{SHEETS, VIEWPORTS};
 use construct_levels::parse_length;
@@ -86,6 +88,45 @@ pub const DEFAULT_PAPER: Paper = Paper::Standard {
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The sheet tool ([`Tool`]): sheets, the viewports on them and their alignments.
+pub struct SheetTool;
+
+impl Tool for SheetTool {
+    const NAME: &'static str = "sheet";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const UNDO_ORDER: u16 = 60;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        deleted: &[Id],
+        _whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written, deleted).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.
