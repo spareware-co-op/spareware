@@ -7077,6 +7077,8 @@
    * its wall is not here and filled enough to say, as a piece that is hosted but not yet seated.
    */
   function seatWanted(piece) {
+    // A family that stands on a level is turned as its record says, with no wall to seat it.
+    if (isStanding(piece.el)) return { seat: seatOfPiece(piece) };
     const hosted = hostOf(piece.el);
     if (!hosted) return null;
     const { host } = hosted;
@@ -7101,7 +7103,7 @@
   function seatFamilies() {
     if (!C.model || C.viewing) return;
     for (const piece of C.elements.values()) {
-      if (piece.turning || piece.failed || hostIdOf(piece.el) === null) continue;
+      if (piece.turning || piece.failed || (hostIdOf(piece.el) === null && !isStanding(piece.el))) continue;
       const wanted = seatWanted(piece);
       if (!wanted) continue;
       if (seatKey(wanted.seat) !== (piece.seatedKey ?? null)) reseat(piece, wanted.seat);
