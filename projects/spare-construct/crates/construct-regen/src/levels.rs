@@ -112,13 +112,26 @@ pub async fn level_at<R: Reader>(
 pub struct Placed {
     /// The ID of the level its base is tied to; `None` on no level.
     pub level: Option<Id>,
-    /// Its base's height above the project's zero ([`height_of`]); `None` on no level.
+    /// Its base's height above the project's zero ([`height_of`]); `None` on no level. A
+    /// ceiling's is where the builders put its slab's upper face: its exposed face's height
+    /// ([`Placed::underside`]) and its type's total thickness more.
     pub elevation: Option<Length>,
+    /// A ceiling's type's total thickness, which its upper face stands above its exposed face
+    /// (job A101); `None` for any other element, or when it names no type that reads.
+    pub rise: Option<Length>,
     base: Option<(Level, Length)>,
     top: Option<(Level, Length)>,
 }
 
 impl Placed {
+    /// A ceiling's exposed face, the height its tie gives (what a room under it is bounded by):
+    /// its [`Placed::elevation`] less its [`Placed::rise`]. `None` for any other element.
+    #[must_use]
+    pub fn underside(&self) -> Option<Length> {
+        let (up, rise) = (self.elevation?, self.rise?);
+        up.steps().checked_sub(rise.steps()).map(Length::from_steps)
+    }
+
     /// The elevation in construct-params' stored length text, as a built row holds it.
     #[must_use]
     pub fn stored_elevation(&self) -> Option<String> {
@@ -179,6 +192,9 @@ pub async fn placed<R: Reader>(
             Err(e) => return Ok(Err(bad(e))),
         };
         placed.base = Some((level, offset));
+        if element.kind == construct_slabs::CEILING_KIND {
+            lift_ceiling(reader, project, document, element, at, &mut placed).await?;
+        }
     }
     if reads_top(&element.recipe) {
         let top = match top_of(element) {
@@ -197,6 +213,41 @@ pub async fn placed<R: Reader>(
         };
     }
     Ok(Ok(placed))
+}
+
+/// A ceiling's tie is its exposed face, and the builders put a slab's upper face at its element's
+/// elevation: lift `placed.elevation` by the total thickness of the ceiling's type, kept in
+/// `placed.rise`. A type that does not read leaves it where it is; building says why.
+async fn lift_ceiling<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    element: &Element,
+    at: At,
+    placed: &mut Placed,
+) -> Result<(), StoreError> {
+    let Some(type_id) = crate::parameters::type_of(element) else {
+        return Ok(());
+    };
+    let Ok(context) = crate::parameters::read_context_at(reader, project, document, at).await?
+    else {
+        return Ok(());
+    };
+    let Ok(ty) =
+        crate::parameters::read_type_at(reader, project, document, &type_id, &context, at).await?
+    else {
+        return Ok(());
+    };
+    let Ok(layers) = construct_slabs::slab_layers_of(&ty) else {
+        return Ok(());
+    };
+    let rise = layers.total();
+    placed.elevation = placed
+        .elevation
+        .and_then(|up| up.steps().checked_add(rise.steps()))
+        .map(Length::from_steps);
+    placed.rise = Some(rise);
+    Ok(())
 }
 
 /// A height as the number a stand-in recipe takes: whole millimetres. Interim (see the module

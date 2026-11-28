@@ -7,7 +7,7 @@
 //!
 //! - [`warnings`]: the one function. It takes a [`Model`], the elements of a document as they
 //!   stand (its walls as [`Wall`]s, its rooms as [`Room`]s, the doors and windows hosted in its
-//!   walls as [`Insert`]s), and gives the warnings now, in a
+//!   walls as [`Insert`]s, its ceilings as [`Ceiling`]s), and gives the warnings now, in a
 //!   stated order. Nothing is stored: the list is worked out each time it is asked, so after any
 //!   edit it is the new list and a warning can never be out of date. A warning's identity
 //!   ([`Warning::identity`]) is its kind plus its elements, so the same problem has the same
@@ -109,6 +109,17 @@ pub struct Room {
     pub state: RoomState,
 }
 
+/// A ceiling, as the warnings see it (job A101).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Ceiling {
+    /// Its element ID.
+    pub id: Id,
+    /// How people name it in a sentence: `ceiling Hall`.
+    pub who: String,
+    /// Whether the walls of its level close a loop round a point inside its outline.
+    pub enclosed: bool,
+}
+
 /// Why a stretch cannot be taken as an insert's opening.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InsertError {
@@ -188,6 +199,8 @@ pub struct Model {
     pub walls: Vec<Wall>,
     /// Every room, with what became of it.
     pub rooms: Vec<Room>,
+    /// Every ceiling that builds, with whether walls close round it.
+    pub ceilings: Vec<Ceiling>,
     /// What the dimensions found, already measured: construct-dimensions' `measure` works each
     /// dimension out and its warnings are given here as they are (this crate depends on kit-core
     /// only, so it cannot measure). [`RULES`] lists their kinds; a warning of a kind that is not
@@ -219,7 +232,7 @@ impl Rule {
 }
 
 /// Every kind there is. Add a kind here, with its function; nothing else changes.
-pub const RULES: [Rule; 7] = [
+pub const RULES: [Rule; 8] = [
     Rule {
         kind: "dimension.out_of_range",
         severity: Severity::Warning,
@@ -255,6 +268,11 @@ pub const RULES: [Rule; 7] = [
         severity: Severity::Warning,
         find: crossing_joined,
     },
+    Rule {
+        kind: "ceiling.not_enclosed",
+        severity: Severity::Warning,
+        find: ceiling_not_enclosed,
+    },
 ];
 
 /// A reference of a dimension that cannot be used (it is gone, it has no place in the view, it
@@ -281,6 +299,25 @@ fn not_enclosed(rule: &Rule, model: &Model) -> Vec<Warning> {
                 format!(
                     "{} is not enclosed: the walls round its point do not close",
                     capital(&room.who)
+                ),
+            )
+        })
+        .collect()
+}
+
+/// A ceiling whose outline no walls enclose: the walls of its level do not close a loop round a
+/// point inside it, so nothing under it is a room. Its elements: the ceiling.
+fn ceiling_not_enclosed(rule: &Rule, model: &Model) -> Vec<Warning> {
+    model
+        .ceilings
+        .iter()
+        .filter(|ceiling| !ceiling.enclosed)
+        .map(|ceiling| {
+            rule.warn(
+                vec![ceiling.id.clone()],
+                format!(
+                    "{} is not enclosed: the walls of its level do not close round it",
+                    capital(&ceiling.who)
                 ),
             )
         })

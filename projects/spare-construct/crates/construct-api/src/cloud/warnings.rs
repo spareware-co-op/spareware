@@ -20,7 +20,8 @@
 use construct_regen::parameters::At;
 use construct_regen::rooms::{WALL_KIND, level_of, of_kind, wall_plan_of};
 use construct_rooms::{Outcome, ROOM_KIND};
-use construct_warnings::{Insert, Model, Room, RoomState, Wall, warnings};
+use construct_slabs::{CEILING_KIND, ceiling_boundary, interior_point};
+use construct_warnings::{Ceiling, Insert, Model, Room, RoomState, Wall, warnings};
 use kit_core::Id;
 use kit_store::{Reader, StoreError};
 use serde::Serialize;
@@ -97,6 +98,30 @@ pub async fn read_warnings<R: Reader>(
             id: room.id,
             who,
             state,
+        });
+    }
+    // A ceiling is enclosed when the walls of its level close a loop round a point inside its
+    // outline, found by the search a room uses. One whose outline holds no such point, or whose
+    // point the search refuses, is left out, as a room the search refuses is.
+    for ceiling in of_kind(reader, project, document, CEILING_KIND, at).await? {
+        let (Some(level), Ok(boundary)) = (level_of(&ceiling), ceiling_boundary(&ceiling.recipe))
+        else {
+            continue;
+        };
+        let Some(point) = interior_point(&boundary) else {
+            continue;
+        };
+        let enclosed =
+            match construct_regen::rooms::loop_at(reader, project, document, &level, point, at)
+                .await?
+            {
+                Ok(found) => found.is_some(),
+                Err(_) => continue,
+            };
+        model.ceilings.push(Ceiling {
+            id: ceiling.id.clone(),
+            who: format!("ceiling {}", ceiling.name),
+            enclosed,
         });
     }
     model.dimensions =

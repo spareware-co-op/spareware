@@ -55,8 +55,8 @@
 
 use crate::cloud::elements::write_record;
 use crate::cloud::{
-    curtains, dimensions, families, floors, grids, hosting, levels, loading, openings, params,
-    roofs, rooms, schedules, sheets, stairs, views, walls,
+    ceilings, curtains, dimensions, families, floors, grids, hosting, levels, loading, openings,
+    params, roofs, rooms, schedules, sheets, stairs, views, walls,
 };
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
@@ -111,6 +111,7 @@ pub fn is_step(cmd: &str) -> bool {
         || levels::is_command(cmd)
         || walls::is_command(cmd)
         || floors::is_command(cmd)
+        || ceilings::is_command(cmd)
         || roofs::is_command(cmd)
         || curtains::is_command(cmd)
         || rooms::is_command(cmd)

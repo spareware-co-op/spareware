@@ -99,6 +99,10 @@ fn type_routes() -> Router<Shared> {
             get(floor_types),
         )
         .route(
+            "/api/projects/{project}/models/{model}/ceiling-types",
+            get(ceiling_types),
+        )
+        .route(
             "/api/projects/{project}/models/{model}/roof-types",
             get(roof_types),
         )
@@ -779,6 +783,18 @@ async fn floor_types(
     Ok(Json(
         app.service
             .floor_types(&person, &id(&project)?, &id(&model)?)
+            .await?,
+    ))
+}
+
+async fn ceiling_types(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model)): Path<(String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .ceiling_types(&person, &id(&project)?, &id(&model)?)
             .await?,
     ))
 }

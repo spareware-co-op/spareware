@@ -9,6 +9,7 @@ import './project/schedules.js';
 import './project/crop.js';
 import './architecture/wall.js';
 import './architecture/floor.js';
+import './architecture/ceiling.js';
 import './architecture/roof.js';
 import './architecture/room.js';
 import './workshop/elements.js';

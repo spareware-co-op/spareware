@@ -13,7 +13,9 @@
 //! there for every category.
 
 use crate::error::ScheduleError;
-use construct_categories::{CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS, WALLS};
+use construct_categories::{
+    CEILINGS, CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS, WALLS,
+};
 use construct_params::{Definition, Holder, Kind, ProjectParams};
 use kit_core::Id;
 
@@ -109,10 +111,13 @@ const fn quantity(
 /// A wall's are its reference line's length, its one-face area and its volume, openings taken out
 /// and joints made (construct-regen's `wall_measure`).
 ///
+/// A ceiling's are its area, perimeter, thickness, volume and mass as a floor's are, and the tiles
+/// of its grid and those cut (construct-slabs' `ceiling_read_only`, job A101).
+///
 /// Not here: a roof's pitch (its kind is a slope or an angle by how the roof is set, which a
 /// field's kind cannot follow) and a floor's, roof's or wall's per-layer volumes and masses
 /// (their number follows the type's layers).
-pub const QUANTITIES: [Quantity; 18] = [
+pub const QUANTITIES: [Quantity; 25] = [
     quantity(WALLS, "wall.length", "Length", Kind::Length),
     quantity(WALLS, "wall.area", "Area", Kind::Area),
     quantity(WALLS, "wall.volume", "Volume", Kind::Volume),
@@ -121,6 +126,13 @@ pub const QUANTITIES: [Quantity; 18] = [
     quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length),
     quantity(FLOORS, "floor.volume", "Volume", Kind::Volume),
     quantity(FLOORS, "floor.mass", "Mass (kg)", Kind::Number),
+    quantity(CEILINGS, "ceiling.area", "Area", Kind::Area),
+    quantity(CEILINGS, "ceiling.perimeter", "Perimeter", Kind::Length),
+    quantity(CEILINGS, "ceiling.thickness", "Thickness", Kind::Length),
+    quantity(CEILINGS, "ceiling.volume", "Volume", Kind::Volume),
+    quantity(CEILINGS, "ceiling.mass", "Mass (kg)", Kind::Number),
+    quantity(CEILINGS, "ceiling.tiles", "Tiles", Kind::Number),
+    quantity(CEILINGS, "ceiling.tiles-cut", "Tiles cut", Kind::Number),
     quantity(ROOFS, "roof.area", "Area", Kind::Area),
     quantity(ROOFS, "roof.slope-area", "Slope area", Kind::Area),
     quantity(ROOFS, "roof.thickness", "Thickness", Kind::Length),

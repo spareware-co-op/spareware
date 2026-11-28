@@ -4277,5 +4277,132 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+console.log('\n   Ceilings, placed by a click in a room');
+// Anna places a ceiling by a click inside the seed building's west half, in the Ceiling tool with a
+// 600 by 1200 grid; Ben sees it drawn with its grid lines and the server's tile count, and the room
+// under it takes its height from the ceiling (its volume falls). Anna sets the grid's angle and the
+// ceiling's height in the palette, Ben sees both; a click where no walls close is refused in the
+// server's words; Anna's delete and undo take it away and bring it back in both browsers; a fresh
+// load agrees. Anna touches only the ceiling and Ben only looks.
+const ceilingKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+const ceilingRoom = await anna.evaluate(() => [...window.spare.elements.values()].find((p) => p.el.kind === 'room')?.el.id);
+const ceilingRoomVolume = async () => {
+  const view = await asAnna(`parameters/${ceilingRoom}`);
+  return view.parameters.find((p) => p.id === 'room.volume')?.shown;
+};
+const volumeNumber = (text) => Number.parseFloat(text);
+const ceilingRoomBefore = await ceilingRoomVolume();
+await toArchitecture(anna);
+await toArchitecture(ben);
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:ceiling"]');
+await anna.waitForSelector('#pv-side select[data-key="ceiling-type"]');
+const ceilingTypeList = await asAnna('ceiling-types');
+check(
+  ['ceiling-plaster-13', 'ceiling-plaster-13-timber-45', 'ceiling-suspended-tile-15'].every((id) => ceilingTypeList.types.some((t) => t.id === id)),
+  "the Ceiling tool lists the model's ceiling types, the defaults made through the log",
+);
+await anna.locator('#pv-side input[data-key="ceiling-offset"]').fill('2000 mm');
+await anna.locator('#pv-side input[data-key="ceiling-offset"]').press('Enter');
+await anna.locator('#pv-side select[data-key="ceiling-grid-on"]').selectOption('yes');
+await anna.waitForSelector('#pv-side input[data-key="ceiling-tool-width"]');
+
+// A click where no walls close: refused in the server's words, nothing made.
+const ceilingOutside = await onPlan(anna, 60000, 60000);
+await anna.mouse.click(ceilingOutside.x, ceilingOutside.y);
+await anna.waitForFunction(() => /No closed loop of walls/.test(document.querySelector('#pv-side')?.textContent ?? ''));
+check(
+  (await anna.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'ceiling').length)) === 0,
+  'a click where no walls close is refused in the server’s words, and no ceiling is made',
+);
+
+// A click inside the room.
+const ceilingClick = await onPlan(anna, 3000, 4000);
+await anna.mouse.click(ceilingClick.x, ceilingClick.y);
+const ceilingOf = (known) =>
+  [...window.spare.elements.values()].find((p) => p.el.kind === 'ceiling' && !known.includes(p.el.id))?.el.id;
+await ben.waitForFunction(ceilingOf, ceilingKnown);
+const ceilingId = await ben.evaluate(ceilingOf, ceilingKnown);
+const ceilingRecord = await ben.evaluate((id) => window.spare.elements.get(id).el, ceilingId);
+check(
+  ceilingRecord.recipe.op === 'ceiling' &&
+    ceilingRecord.recipe.args.grid.width === 600 * 6400 &&
+    ceilingRecord.recipe.args.grid.depth === 1200 * 6400 &&
+    ceilingRecord.recipe.args.grid.angle === 0 &&
+    ceilingRecord.props['@level.offset'] === `length:q0:${2000 * 6400}`,
+  "the ceiling Anna places is in Ben's browser: its outline found in the room, 2000 mm over its level, a 600 by 1200 grid at 0 degrees",
+);
+for (const page of [anna, ben]) {
+  await page.waitForSelector(`#pv-canvas g.element[data-id="${ceilingId}"] path.ceiling`);
+  await page.waitForSelector(`#pv-canvas path[data-ceiling-grid-lines="${ceilingId}"]`);
+}
+pass("both browsers draw the ceiling over its room, with its grid lines");
+const ceilingTiles = async (want) => {
+  const view = await until(
+    () => asAnna(`parameters/${ceilingId}`),
+    (read) => read.parameters?.some((p) => p.id === 'ceiling.tiles') && (want === undefined || read.parameters.find((p) => p.id === 'ceiling.tiles').shown === want),
+    'the server counts the ceiling’s tiles',
+  );
+  return view.parameters.find((p) => p.id === 'ceiling.tiles').shown;
+};
+const tilesFirst = await ceilingTiles();
+check(/^[0-9]+$/.test(tilesFirst) && Number(tilesFirst) > 0, `the server counts the grid's tiles over the ceiling, ${tilesFirst}`);
+const ceilingRoomAfter = await until(ceilingRoomVolume, (v) => v && volumeNumber(v) < volumeNumber(ceilingRoomBefore), 'the room under the ceiling takes its height from it');
+pass(`the room under it is bounded by the ceiling: its volume falls from ${ceilingRoomBefore} to ${ceilingRoomAfter}`);
+await shot(ben, 'ben-ceiling');
+
+// Anna picks it and changes its grid angle and its height in the palette.
+await anna.keyboard.press('Escape');
+const ceilingTag = await boxOf(anna.locator(`#pv-canvas g.ceiling-tag[data-ceiling-tag="${ceilingId}"] text`).first(), 'the ceiling’s tag');
+await anna.mouse.click(ceilingTag.x + ceilingTag.width / 2, ceilingTag.y + ceilingTag.height / 2);
+await anna.waitForSelector('#pv-side [data-ceiling-element]');
+await anna.waitForFunction(
+  (want) => document.querySelector('#pv-side [data-read-only="ceiling.tiles"]')?.textContent === want,
+  tilesFirst,
+);
+pass("Anna's palette shows the ceiling's tiles read-only, the same as the server's");
+const ceilingAngle = '#pv-side input[data-key="ceiling-grid-angle"]';
+await anna.locator(ceilingAngle).fill('90');
+await anna.locator(ceilingAngle).press('Enter');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.recipe.args.grid?.angle === 90, ceilingId);
+pass("Anna turns the grid to 90 degrees, and Ben's browser has it");
+const ceilingHeight = '#pv-side input[data-key="ceiling-height"]';
+await anna.locator(ceilingHeight).fill('1800 mm');
+await anna.locator(ceilingHeight).press('Enter');
+await ben.waitForFunction((id) => window.spare.elements.get(id)?.el.props['@level.offset'] === `length:q0:${1800 * 6400}`, ceilingId);
+const ceilingLower = await until(ceilingRoomVolume, (v) => v && volumeNumber(v) < volumeNumber(ceilingRoomAfter), 'the room follows the ceiling down');
+pass(`Anna lowers the ceiling to 1800 mm, and the room under it follows: ${ceilingLower}`);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), ceilingId);
+
+// Delete and undo, in both browsers.
+const ceilingPick = await boxOf(anna.locator(`#pv-canvas g.ceiling-tag[data-ceiling-tag="${ceilingId}"] text`).first(), 'the ceiling’s tag');
+await anna.mouse.click(ceilingPick.x + ceilingPick.width / 2, ceilingPick.y + ceilingPick.height / 2);
+await anna.waitForSelector('#pv-side [data-ceiling-element]');
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+for (const page of [anna, ben]) await page.waitForSelector(`#pv-canvas g.element[data-id="${ceilingId}"]`, { state: 'detached' });
+await until(ceilingRoomVolume, (v) => v === ceilingRoomBefore, 'the room is as tall as it was without the ceiling');
+pass('Anna deletes the ceiling and it goes in both browsers; the room is its old height again');
+await anna.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'element.delete');
+await anna.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await page.waitForSelector(`#pv-canvas g.element[data-id="${ceilingId}"] path.ceiling`);
+await until(ceilingRoomVolume, (v) => v === ceilingLower, 'the room is bounded by the ceiling again');
+pass('her undo brings the ceiling back in both browsers, and the room is under it again');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// A fresh load agrees.
+const ceilingFresh = await signIn('anna');
+await ceilingFresh.waitForSelector(`#pv-canvas g.element[data-id="${ceilingId}"] path.ceiling`);
+await ceilingFresh.waitForSelector(`#pv-canvas path[data-ceiling-grid-lines="${ceilingId}"]`);
+pass('a fresh load draws the ceiling and its grid as the open pages do');
+await ceilingFresh.context().close();
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the ceiling's included, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

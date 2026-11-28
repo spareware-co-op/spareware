@@ -28,11 +28,15 @@
 //! Nothing here builds a shape: construct-regen's `rooms` module reads the walls and fills the
 //! recipe, and its builders make the room's volume through the kernel's interface.
 //!
+//! A room is bounded above by the ceiling over it (job A101): that is read where the room is built,
+//! in construct-regen's `rooms` (`ceiling_height`), not here; the loop and the measures of this
+//! crate take the height they are given.
+//!
 //! Interim: curved walls ([`RoomError::CurvedWall`]) and sloped upper limits
 //! ([`RoomError::SlopedLimit`]) are refused by name until the kernel's exact arcs and sloped
 //! bounds reach rooms; both are rows of the interim register. Not here, with their places kept:
 //! the commands that place, rename, number, move and delete rooms (construct-api), room
-//! separation lines and rooms bounded by floors and ceilings (job 6.3), and wall joins changing a
+//! separation lines and rooms bounded by floors (job 6.3), and wall joins changing a
 //! room's faces: they change only the outlines the regenerator hands in (construct-regen's
 //! `rooms` hands each wall's outline as its joints shape it), and the search here takes any
 //! polygon, at any angle.

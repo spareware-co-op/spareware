@@ -36,8 +36,9 @@ use construct_model::element::Element;
 use construct_model::geometry::{GeometryError, Recipe};
 use construct_params::{Definition, Units, Value};
 use construct_slabs::{
-    SlabError, filled as slabs_filled, is_floor, layer_read_only, layers_of, quantities, read_only,
-    reads_layers, shape_of, shape_quantities, shape_read_only,
+    SlabError, ceiling_boundary, ceiling_layers_of, ceiling_read_only, filled as slabs_filled,
+    grid_of, is_ceiling, is_floor, layer_read_only, quantities, read_only, reads_layers, shape_of,
+    shape_quantities, shape_read_only, slab_layers_of,
 };
 use construct_types::ElementType;
 
@@ -72,7 +73,7 @@ pub fn filled(recipe: &Recipe, ty: Option<&ElementType>) -> Result<Recipe, Geome
             "its layers are read from its floor type, and it names none".to_owned(),
         ));
     };
-    let layers = layers_of(ty)
+    let layers = slab_layers_of(ty)
         .map_err(|e: SlabError| failure("BadFloorType", format!("its type {}: {e}", ty.id())))?;
     slabs_filled(recipe, &layers).map_err(|e| failure("BadBoundary", e.to_string()))
 }
@@ -103,6 +104,9 @@ pub fn read_only_view_cut(
     units: &Units,
     cuts: &[Vec<[i64; 2]>],
 ) -> Vec<ParameterView> {
+    if is_ceiling(element) {
+        return ceiling_view(element, ty, units, cuts);
+    }
     if !is_floor(element) {
         return Vec::new();
     }
@@ -113,7 +117,9 @@ pub fn read_only_view_cut(
         } else {
             construct_openings::with_cuts(shape.boundary(), cuts)?
         };
-        let layers = layers_of(ty.ok_or(SlabError::NotAFloor("it names no type".to_owned()))?)?;
+        let layers = construct_slabs::layers_of(
+            ty.ok_or(SlabError::NotAFloor("it names no type".to_owned()))?,
+        )?;
         let q = quantities(&boundary, &layers, &Materials::default_metric())?;
         let mut rows = read_only(&q)?;
         rows.extend(layer_read_only(&layers, &q)?);
@@ -123,6 +129,38 @@ pub fn read_only_view_cut(
             rows.extend(shape_read_only(&shape_quantities(&shape, &layers)?)?);
         }
         Ok::<_, SlabError>(rows)
+    })();
+    rows.map_or_else(
+        |_| Vec::new(),
+        |rows| {
+            rows.into_iter()
+                .map(|(def, value)| shown(&def, value, units))
+                .collect()
+        },
+    )
+}
+
+/// A ceiling's read-only parameters as a page shows them (job A101): its area, perimeter,
+/// thickness, volume and mass, and the tiles of its grid where they can be counted
+/// ([`construct_slabs::Grid::tiles`]), worked out from its boundary, its type and its grid each
+/// time, never stored, with `cuts` taken out as a floor's are. One whose boundary or type's layers
+/// cannot be read shows none.
+fn ceiling_view(
+    element: &Element,
+    ty: Option<&ElementType>,
+    units: &Units,
+    cuts: &[Vec<[i64; 2]>],
+) -> Vec<ParameterView> {
+    let rows = (|| {
+        let mut boundary = ceiling_boundary(&element.recipe)?;
+        if !cuts.is_empty() {
+            boundary = construct_openings::with_cuts(&boundary, cuts)?;
+        }
+        let layers =
+            ceiling_layers_of(ty.ok_or(SlabError::NotACeiling("it names no type".to_owned()))?)?;
+        let q = quantities(&boundary, &layers, &Materials::default_metric())?;
+        let tiles = grid_of(&element.recipe)?.and_then(|grid| grid.tiles(&boundary).ok());
+        ceiling_read_only(&q, tiles)
     })();
     rows.map_or_else(
         |_| Vec::new(),

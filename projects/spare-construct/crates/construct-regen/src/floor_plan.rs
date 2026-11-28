@@ -37,6 +37,9 @@ use std::collections::BTreeSet;
 
 /// A floor's recipe operation (construct-slabs' `FLOOR_OP`).
 pub const OP: &str = "floor";
+/// A ceiling's recipe operation (construct-slabs' `CEILING_OP`): the same flat layered slab, so
+/// both builders read it as a floor (job A101).
+pub const CEILING_OP: &str = "ceiling";
 /// The version of a flat floor's recipe this module reads (construct-slabs' `OP_VERSION`).
 pub const OP_VERSION: u32 = 1;
 /// The version of a sloped floor's or one with slab edges (construct-slabs' `SHAPED_VERSION`).
@@ -55,10 +58,10 @@ fn fault(code: &str, message: impl Into<String>) -> GeometryError {
     }
 }
 
-/// Whether `recipe` is a floor's.
+/// Whether `recipe` is a floor's or a ceiling's, the one flat layered slab the builders read.
 #[must_use]
 pub fn is_floor(recipe: &Recipe) -> bool {
-    recipe.owner == OWN && recipe.op == OP
+    recipe.owner == OWN && (recipe.op == OP || recipe.op == CEILING_OP)
 }
 
 /// One corner of a loop: the ID of the edge that starts there, and where it is in grid steps.

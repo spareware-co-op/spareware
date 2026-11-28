@@ -91,6 +91,18 @@ Before it is built, a floor's recipe is filled from its type (construct-regen's 
 
 A floor's area (the shoelace sum over grid steps, holes subtracted), its perimeter (every edge of every loop, each to the nearest step), its thickness, its volume (per layer, the area by the layer's thickness) and its mass (per layer, from the material's density where the project's materials hold one) are its read-only parameters `floor.area`, `floor.perimeter`, `floor.thickness`, `floor.volume` and `floor.mass` (kilograms), worked from the record each time. Each layer's volume and mass are `floor.layer-<k>.volume` and `floor.layer-<k>.mass` (kilograms), layer `k` counted from 1 at the top, named `Layer <k> (<function>, <material>) volume` and `... mass (kg)`. A mass has no value while the library lacks the layer's material, and the floor's none while any layer's has none. A sloped floor also reads back `floor.top-area` (its top face's area, the plan area times the root of one plus the gradient squared, to the nearest square step: exact only where that root is whole in ratio), `floor.highest` and `floor.lowest` (from its tied height: the top face's highest corner, and the bottom face's lowest corner); a floor with slab edges `floor.edge-<edge ID>.length` and `floor.edge-<edge ID>.volume` for each, named `Slab edge <edge ID> (<kind>) length` and `... volume`, and its lowest point is then the deepest foot. `floor.area`, `floor.thickness` and `floor.volume` are the slab's: a sloped floor's volume is its plan area times its thickness exactly, and slab edges are counted apart. The server's parameters view lists them after the parameters a floor's category has, each shown in the document's units, with `from` `read-only`.
 
+## Ceilings (job A101)
+
+A ceiling type is a type record of category `700` (ceilings) whose system block has the owner tag `ceiling`: `@system.ceiling` holds the same text as a floor type's layers (above), from the ceiling's upper face down, so the last layer is the exposed finish.
+
+A ceiling is an element record of the ceilings category, kind `ceiling`, recipe `construct/ceiling` op version 1: a floor's record (above) with the boundary in `boundary`, `{"type":"layers"}` in `layers`, and optionally a grid in `grid`, compact JSON in the same sense as the rest, whole numbers only:
+
+```json
+{"angle":0,"depth":7680000,"origin":[0,0],"width":3840000}
+```
+
+`width` and `depth` are a tile's size along the pattern's x and y axes in grid steps (each above 0 and at most 100 m), `origin` a point a grid line goes through in grid steps, `angle` whole degrees from 0 up to 180. The reader refuses any other field, any value that is not a whole number and any value out of those ranges; a ceiling's recipe of version 2 is refused. Its tie is its exposed face (construct-model's FORMAT.md, "Ceilings"). Filled for a builder it is a floor's filled recipe (above) and drops `grid`. What it reads back (`ceiling.area`, `ceiling.perimeter`, `ceiling.thickness`, `ceiling.volume`, `ceiling.mass`, and for a grid at 0 or 90 degrees `ceiling.tiles` and `ceiling.tiles-cut`) is worked out and never stored.
+
 ## Later versions
 
 Arc edges are held already and refused; allowing them takes a check away and changes no byte. Constraints in the sketch were held and refused in the first version and are now solved, which changed no byte. A core in a floor type, and slab edges under a sloped floor, will be new versions here, read beside versions 1 and 2 for ever.

@@ -963,6 +963,28 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             .map_err(Refusal::Bad)
     }
 
+    /// A model's ceiling types with their layers and the materials those are drawn in, for the
+    /// page's ceiling tool ([`cloud::ceilings::read_ceiling_types`]); where it has none, the page
+    /// sends `ceiling.defaults`.
+    ///
+    /// # Errors
+    ///
+    /// A [`Refusal`] when this person may not read the model or the store fails;
+    /// [`Refusal::Bad`] when a type or the parameter table cannot be read, saying why.
+    pub async fn ceiling_types(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+    ) -> Result<cloud::ceilings::CeilingTypesView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        cloud::ceilings::read_ceiling_types(&mut snapshot, project, model)
+            .await?
+            .map_err(Refusal::Bad)
+    }
+
     /// A model's roof types with their layers and the materials those are drawn in, for the
     /// page's roof tool ([`cloud::roofs::read_roof_types`]); where it has none, the page sends
     /// `roof.defaults`.

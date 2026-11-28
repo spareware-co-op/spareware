@@ -17,7 +17,7 @@
 
 use construct_api::cloud::schedules::{ScheduleTable, read_table};
 use construct_api::cloud::{Access, ProjectCommands};
-use construct_categories::{DOORS, FLOORS, ROOFS, ROOMS};
+use construct_categories::{CEILINGS, DOORS, FLOORS, ROOFS, ROOMS};
 use construct_model::element::Element;
 use construct_model::geometry::{Geometry, Recipe};
 use construct_model::keys::Place;
@@ -583,6 +583,13 @@ async fn quantities_are_the_products_own_exact_read_only_rows() {
     let args = json!({ "element": "R-1", "type": STEEL, "level": "L-1",
                        "footprint": rectangle(8000, 6000), "form": "gable", "pitch": "1:4" });
     stack.edit("roof.create", args).await.unwrap();
+    // A ceiling with a grid of 600 by 1200 tiles over 4 m by 3 m: seven columns by three rows,
+    // 12 whole tiles and 9 cut.
+    stack.edit("ceiling.defaults", json!({})).await.unwrap();
+    let args = json!({ "element": "C-1", "type": "ceiling-plaster-13", "level": "L-1",
+                       "boundary": rectangle(4000, 3000),
+                       "grid": { "width": "600 mm", "depth": "1200 mm" } });
+    stack.edit("ceiling.create", args).await.unwrap();
     let args = json!({ "element": "M-1", "name": "Kitchen", "level": "L-g",
                        "at": ["2000", "1500"], "top": "L-1" });
     stack.edit("room.place", args).await.unwrap();
@@ -595,7 +602,11 @@ async fn quantities_are_the_products_own_exact_read_only_rows() {
         .await
         .unwrap()
         .unwrap();
-    for (id, element, category) in [("S-f", "F-1", FLOORS), ("S-r", "R-1", ROOFS)] {
+    for (id, element, category) in [
+        ("S-f", "F-1", FLOORS),
+        ("S-r", "R-1", ROOFS),
+        ("S-c", "C-1", CEILINGS),
+    ] {
         let record = stack.record(element).await.unwrap();
         let ty = records::type_of(&record).unwrap();
         let ty = records::read_type(&mut snapshot, &i("p"), &i(DOCUMENT), &ty, &context)

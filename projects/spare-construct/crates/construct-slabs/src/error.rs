@@ -216,6 +216,20 @@ pub enum SlabError {
     },
     /// A record or recipe that is not a floor's; the text says why.
     NotAFloor(String),
+    /// The type is not of the ceilings category.
+    NotACeilingType {
+        /// Its category.
+        category: CategoryId,
+    },
+    /// A ceiling type of the ceilings category with no ceiling block.
+    NoCeilingLayers {
+        /// The type's ID.
+        ty: Id,
+    },
+    /// A record or recipe that is not a ceiling's; the text says why.
+    NotACeiling(String),
+    /// A ceiling's grid pattern that cannot be held or counted; the text says why.
+    BadGrid(String),
     /// A material ID that is not a kit ID, or the library's refusal.
     Material(MaterialError),
     /// Refused by construct-types.
@@ -325,6 +339,16 @@ impl fmt::Display for SlabError {
                 crate::stored::OWNER
             ),
             Self::NotAFloor(why) => write!(f, "not a floor: {why}"),
+            Self::NotACeilingType { category } => {
+                write!(f, "a type of category {} is not a ceiling type", category.0)
+            }
+            Self::NoCeilingLayers { ty } => write!(
+                f,
+                "ceiling type {ty} has no layers: a ceiling type carries a {:?} system block",
+                crate::ceiling_type::OWNER
+            ),
+            Self::NotACeiling(why) => write!(f, "not a ceiling: {why}"),
+            Self::BadGrid(why) => write!(f, "the ceiling's grid: {why}"),
             Self::Material(error) => error.fmt(f),
             Self::Type(error) => error.fmt(f),
             Self::Malformed(why) => write!(f, "not a stored floor: {why}"),

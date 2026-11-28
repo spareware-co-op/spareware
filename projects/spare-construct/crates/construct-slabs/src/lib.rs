@@ -22,7 +22,12 @@
 //! - [`floor`]: the element record and its recipe ([`floor_record`], [`floor_recipe`],
 //!   [`shaped_recipe`], [`shape_of`], [`boundary_of`], [`with_boundary`], [`with_slope`],
 //!   [`with_edges`], [`filled`]).
-//! - [`defaults`]: [`default_floors`], [`default_floor_types`].
+//! - [`defaults`]: [`default_floors`], [`default_floor_types`], [`default_ceilings`],
+//!   [`default_ceiling_types`].
+//! - Ceilings (job A101, CON-A4-F4-P2): [`ceiling`] (the record, its recipe and its grid),
+//!   [`ceiling_type`] (a type's layers), [`ceiling_measure`] (what a ceiling reads back) and
+//!   [`tiles`] (a grid pattern, its exact count, and where a point stands against a boundary). A
+//!   ceiling is a flat layered slab and is built as a floor is.
 //! - [`error`]: [`SlabError`], every refusal as a value.
 //!
 //! Promises: every [`Layers`] and [`Boundary`] passes every check; every length is exact in
@@ -42,6 +47,9 @@
 //! structural decks.
 
 pub mod boundary;
+pub mod ceiling;
+pub mod ceiling_measure;
+pub mod ceiling_type;
 pub mod defaults;
 pub mod error;
 pub mod floor;
@@ -50,10 +58,22 @@ pub mod layers;
 pub mod measure;
 pub mod shape;
 pub mod stored;
+pub mod tiles;
 
 pub use boundary::{BOUNDARY_VERSION, Boundary, Corner, Edge, Ring, Segment};
+pub use ceiling::{
+    CEILING_KIND, CEILING_OP, GRID_ARG, ceiling_boundary, ceiling_recipe, ceiling_record, grid_of,
+    is_ceiling, with_ceiling_boundary, with_grid,
+};
+pub use ceiling_measure::ceiling_read_only;
+pub use ceiling_type::{
+    OWNER as CEILING_OWNER, ceiling_layers_of, new_ceiling_type, slab_layers_of,
+    with_ceiling_layers,
+};
 pub use construct_solver::{ConstraintId, Point};
-pub use defaults::{DefaultFloor, default_floor_types, default_floors};
+pub use defaults::{
+    DefaultFloor, default_ceiling_types, default_ceilings, default_floor_types, default_floors,
+};
 pub use error::SlabError;
 pub use floor::{
     BOUNDARY_ARG, EDGES_ARG, FLOOR_KIND, FLOOR_OP, LAYERS_ARG, LOOPS_ARG, OP_VERSION,
@@ -69,3 +89,4 @@ pub use measure::{
 };
 pub use shape::{EdgePiece, EdgeProfile, Rise, Shape, SlabEdge, SlopeArrow, TopArea};
 pub use stored::{FORMAT_VERSION, OWNER};
+pub use tiles::{Grid, MOST_TILES, Tiles, contains, interior_point};

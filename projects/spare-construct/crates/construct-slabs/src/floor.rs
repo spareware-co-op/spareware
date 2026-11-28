@@ -26,6 +26,7 @@
 //! Nothing else of a floor reaches the builder.
 
 use crate::boundary::Boundary;
+use crate::ceiling::CEILING_OP;
 use crate::error::SlabError;
 use crate::layers::Layers;
 use crate::shape::{Shape, SlabEdge, SlopeArrow};
@@ -113,9 +114,10 @@ pub fn shaped_recipe(shape: &Shape) -> Recipe {
 /// their one spelling; any refusal of [`Boundary::from_value`] and [`Shape::new`].
 pub fn shape_of(recipe: &Recipe) -> Result<Shape, SlabError> {
     let version = recipe.op_version;
-    if recipe.owner != "construct"
-        || recipe.op != FLOOR_OP
-        || !(version == OP_VERSION || version == SHAPED_VERSION)
+    // A ceiling is the same flat slab (job A101): its recipe is a floor's of version 1 under its own
+    // operation, so a builder reads both alike.
+    let slab = recipe.op == FLOOR_OP || (recipe.op == CEILING_OP && version == OP_VERSION);
+    if recipe.owner != "construct" || !slab || !(version == OP_VERSION || version == SHAPED_VERSION)
     {
         return Err(SlabError::NotAFloor(format!(
             "a recipe of {}/{} version {} is not a floor's",

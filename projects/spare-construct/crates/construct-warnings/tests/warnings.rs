@@ -12,8 +12,8 @@
 )]
 
 use construct_warnings::{
-    Insert, InsertError, Model, RULES, Room, RoomState, Severity, Wall, WallError, Warning,
-    overlap_along_length, warnings,
+    Ceiling, Insert, InsertError, Model, RULES, Room, RoomState, Severity, Wall, WallError,
+    Warning, overlap_along_length, warnings,
 };
 use kit_core::Id;
 
@@ -271,7 +271,8 @@ fn every_kind_is_one_entry_with_its_own_name() {
             "room.not_enclosed",
             "room.redundant",
             "wall.overlap",
-            "insert.crosses_joined_wall"
+            "insert.crosses_joined_wall",
+            "ceiling.not_enclosed"
         ]
     );
     assert_eq!(Severity::Warning.word(), "warning");
@@ -529,4 +530,32 @@ fn an_insert_that_is_not_an_interval_on_the_grid_is_refused() {
         InsertError::TooBig
     );
     assert!(new(1, -5, 5).is_ok());
+}
+
+#[test]
+fn a_ceiling_the_walls_do_not_enclose_is_one_warning_naming_it() {
+    let ceilings = vec![
+        Ceiling {
+            id: i("C-2"),
+            who: "ceiling Hall".to_owned(),
+            enclosed: false,
+        },
+        Ceiling {
+            id: i("C-1"),
+            who: "ceiling Office".to_owned(),
+            enclosed: true,
+        },
+    ];
+    let list = warnings(&Model {
+        ceilings,
+        ..Model::default()
+    });
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].kind, "ceiling.not_enclosed");
+    assert_eq!(list[0].severity, Severity::Warning);
+    assert_eq!(list[0].identity(), "ceiling.not_enclosed|C-2");
+    assert_eq!(
+        list[0].words,
+        "Ceiling Hall is not enclosed: the walls of its level do not close round it"
+    );
 }

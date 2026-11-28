@@ -29,6 +29,13 @@
 //!   ([`is_spatial`] says which kinds do this), one step deep; a room that changes builds again the
 //!   other rooms of its levels, since which of two rooms in one loop comes first may change.
 //!
+//! - A room is bounded above by the ceiling over it ([`ceiling_height`], job A101): the lowest
+//!   ceiling of the room's level whose outline holds the room's point (not on an edge, not in
+//!   an opening), whose exposed face is above the room's base, caps the room's height where it
+//!   is lower than the room's own upper limit, so its volume is its area times the height to the
+//!   ceiling. A ceiling made, changed or deleted builds the rooms of its level again
+//!   ([`is_spatial`]). A ceiling above the room's own limit changes nothing.
+//!
 //! Depends on construct-rooms (the search and the record), construct-levels (ties),
 //! construct-model, construct-params and kit-store, and on [`crate::parameters`] and
 //! [`crate::levels`] for a wall's filled recipe and [`crate::joins`] for its joints. Interim: none
@@ -49,6 +56,7 @@ use construct_rooms::{
     Bound, HEIGHT_ARG, LOOPS_ARG, Measures, Neighbour, Outcome, Outline, ROOM_KIND, RoomError,
     assess, at_of, reads_walls,
 };
+use construct_slabs::{CEILING_KIND, ceiling_boundary, contains};
 use kit_core::Id;
 use kit_store::{Reader, StoreError, from_row, read_row};
 use serde::Serialize;
@@ -72,10 +80,11 @@ fn refused(error: &RoomError) -> GeometryError {
 }
 
 /// Whether a change to an element of this kind builds the rooms round it again: a wall's (its
-/// outline bounds them) or a room's (which of two rooms in one loop comes first).
+/// outline bounds them), a ceiling's (its height bounds them above, job A101) or a room's (which
+/// of two rooms in one loop comes first).
 #[must_use]
 pub fn is_spatial(kind: &str) -> bool {
-    kind == WALL_KIND || kind == ROOM_KIND
+    kind == WALL_KIND || kind == ROOM_KIND || kind == CEILING_KIND
 }
 
 /// The walls a room's filled recipe runs along, by ID, ascending: its `reads` row lists them.
@@ -341,6 +350,109 @@ pub async fn wall_plan_of<R: Reader>(
     }))
 }
 
+/// The height from a room's base to the lowest ceiling over its point, if any: the ceilings of
+/// `level` whose outline holds `point` and whose exposed face is above the room's base, as the
+/// document stands `at` that state. A ceiling that does not read (its tie, its type) is passed
+/// over, as a wall that does not build is.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn ceiling_height<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    point: [i64; 2],
+    level: &Id,
+    at: At,
+) -> Result<Option<Length>, StoreError> {
+    let Ok(own) = levels::placed(reader, project, document, room, at).await? else {
+        return Ok(None);
+    };
+    let Some(base) = own.elevation else {
+        return Ok(None);
+    };
+    let mut lowest: Option<i64> = None;
+    for ceiling in of_kind(reader, project, document, CEILING_KIND, at).await? {
+        if level_of(&ceiling).as_ref() != Some(level) {
+            continue;
+        }
+        let Ok(boundary) = ceiling_boundary(&ceiling.recipe) else {
+            continue;
+        };
+        if !contains(&boundary, point) {
+            continue;
+        }
+        let Ok(placed) = levels::placed(reader, project, document, &ceiling, at).await? else {
+            continue;
+        };
+        let Some(under) = placed.underside() else {
+            continue;
+        };
+        let Some(height) = under.steps().checked_sub(base.steps()).filter(|h| *h > 0) else {
+            continue;
+        };
+        lowest = Some(lowest.map_or(height, |most| most.min(height)));
+    }
+    Ok(lowest.map(Length::from_steps))
+}
+
+/// `recipe` with its height lowered to the ceiling over the room's point ([`ceiling_height`]),
+/// when that is lower than the height it holds; as it is otherwise, and when its height is not
+/// yet a stored length or its point is not read.
+async fn under_ceiling<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    recipe: Recipe,
+    level: &Id,
+    at: At,
+) -> Result<Recipe, StoreError> {
+    let own = match recipe.args.get(HEIGHT_ARG) {
+        Some(Json::String(text)) => match Value::from_stored(text) {
+            Some(Value::Length(length)) => length,
+            _ => return Ok(recipe),
+        },
+        _ => return Ok(recipe),
+    };
+    let Ok(point) = at_of(&recipe) else {
+        return Ok(recipe);
+    };
+    let Some(lower) = ceiling_height(reader, project, document, room, point, level, at)
+        .await?
+        .filter(|ceiling| ceiling.steps() < own.steps())
+    else {
+        return Ok(recipe);
+    };
+    let mut out = recipe;
+    out.args.insert(
+        HEIGHT_ARG.to_owned(),
+        Json::String(Value::Length(lower).stored()),
+    );
+    Ok(out)
+}
+
+/// The loop of walls of `level` round the grid point `point`, as the document stands `at` that
+/// state, found by the very search a room uses ([`construct_rooms::find`]) among the walls'
+/// outlines as joined ([`bounds_on`]): `None` when the walls do not close round it. What a
+/// ceiling placed by clicking in a room is outlined by (job A101). The inner error is the
+/// search's refusal, in words.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn loop_at<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    level: &Id,
+    point: [i64; 2],
+    at: At,
+) -> Result<Result<Option<construct_rooms::Found>, String>, StoreError> {
+    let bounds = bounds_on(reader, project, document, level, at).await?;
+    Ok(construct_rooms::find(&bounds, point).map_err(|e| e.to_string()))
+}
+
 /// What becomes of the room `room`, its recipe `recipe` with its height already read from its
 /// levels, standing on `level`: its loop among the walls of that level and the other rooms on
 /// it, as the module header says. The inner error is a refusal, in words, under its code.
@@ -366,6 +478,8 @@ pub async fn outcome<R: Reader>(
         Ok(point) => point,
         Err(e) => return Ok(Err(refused(&e))),
     };
+    let capped = under_ceiling(reader, project, document, room, recipe.clone(), level, at).await?;
+    let recipe = &capped;
     let height = match recipe.args.get(HEIGHT_ARG) {
         Some(Json::String(text)) => match Value::from_stored(text) {
             Some(Value::Length(length)) => length,
@@ -482,6 +596,10 @@ pub async fn filled_at<R: Reader>(
     if !reads_walls(&recipe) {
         return Ok((Ok(recipe), None));
     }
+    let recipe = match level {
+        Some(level) => under_ceiling(reader, project, document, room, recipe, level, at).await?,
+        None => recipe,
+    };
     let outcome = outcome(reader, project, document, room, &recipe, level, at).await?;
     let who = match construct_rooms::number_of(room) {
         Some(number) if !number.is_empty() => format!("room {number} {}", room.name),

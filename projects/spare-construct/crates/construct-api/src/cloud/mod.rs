@@ -19,6 +19,8 @@
 //!   log.
 //! - [`floors`]: floor types and their layers, and floors drawn from a boundary, through the same
 //!   log.
+//! - [`ceilings`]: ceiling types and their layers, and ceilings placed by clicking inside a room's
+//!   walls or drawn from a sketched outline, with a tile grid, through the same log.
 //! - [`roofs`]: roof types and their layers, and roofs on a rectangle (flat, mono-pitch and gable),
 //!   through the same log.
 //! - [`curtains`]: curtain wall types (their grid and parts) and curtain walls, drawn on their own
@@ -43,6 +45,7 @@
 //! - [`commands`]: a project's commands, each behind Cedar.
 
 pub mod access;
+pub mod ceilings;
 pub mod commands;
 pub mod curtains;
 pub mod dimensions;

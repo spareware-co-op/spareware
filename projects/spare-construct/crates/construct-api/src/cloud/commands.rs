@@ -7,8 +7,8 @@ use crate::cloud::access::{Access, Target};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
 use crate::cloud::{
-    curtains, dimensions, elements, families, floors, grids, hosting, levels, openings, params,
-    roofs, rooms, schedules, sheets, stairs, undo, views, walls,
+    ceilings, curtains, dimensions, elements, families, floors, grids, hosting, levels, openings,
+    params, roofs, rooms, schedules, sheets, stairs, undo, views, walls,
 };
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
@@ -149,6 +149,9 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
         if let Err(refused) = rooms::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
+        if let Err(refused) = ceilings::generic_rules(staged, project, edit).await? {
+            return Ok(Err(refused));
+        }
         if let Err(refused) = floors::generic_rules(staged, project, edit).await? {
             return Ok(Err(refused));
         }
@@ -197,6 +200,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
                 || levels::is_command(cmd)
                 || walls::is_command(cmd)
                 || floors::is_command(cmd)
+                || ceilings::is_command(cmd)
                 || roofs::is_command(cmd)
                 || curtains::is_command(cmd)
                 || rooms::is_command(cmd)
@@ -266,6 +270,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             || levels::is_command(&edit.cmd)
             || walls::is_command(&edit.cmd)
             || floors::is_command(&edit.cmd)
+            || ceilings::is_command(&edit.cmd)
             || roofs::is_command(&edit.cmd)
             || curtains::is_command(&edit.cmd)
             || rooms::is_command(&edit.cmd)
@@ -292,24 +297,27 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         };
         let mut staged = Staged::new(txn);
         let outcome = if params::is_command(&edit.cmd) {
-            match floors::generic_rules(&mut staged, project, edit).await? {
-                Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
-                    Ok(()) => match roofs::generic_rules(&mut staged, project, edit).await? {
-                        Ok(()) => {
-                            match curtains::generic_rules(&mut staged, project, edit).await? {
-                                Ok(()) => {
-                                    params::apply(
-                                        &mut staged,
-                                        project,
-                                        context,
-                                        edit,
-                                        self.claim_ms,
-                                    )
-                                    .await?
+            match ceilings::generic_rules(&mut staged, project, edit).await? {
+                Ok(()) => match floors::generic_rules(&mut staged, project, edit).await? {
+                    Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
+                        Ok(()) => match roofs::generic_rules(&mut staged, project, edit).await? {
+                            Ok(()) => {
+                                match curtains::generic_rules(&mut staged, project, edit).await? {
+                                    Ok(()) => {
+                                        params::apply(
+                                            &mut staged,
+                                            project,
+                                            context,
+                                            edit,
+                                            self.claim_ms,
+                                        )
+                                        .await?
+                                    }
+                                    Err(refused) => Err(refused),
                                 }
-                                Err(refused) => Err(refused),
                             }
-                        }
+                            Err(refused) => Err(refused),
+                        },
                         Err(refused) => Err(refused),
                     },
                     Err(refused) => Err(refused),
@@ -344,6 +352,8 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if rooms::is_command(&edit.cmd) {
             rooms::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        } else if ceilings::is_command(&edit.cmd) {
+            ceilings::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if floors::is_command(&edit.cmd) {
             floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
         } else if roofs::is_command(&edit.cmd) {

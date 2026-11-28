@@ -1282,6 +1282,67 @@ async fn quantities(
         .collect()
 }
 
+/// Through the server's commands on the stand-in (job A101): the default ceiling types made, an
+/// L-shaped ceiling with an opening and a 600 by 1200 grid drawn over level 1 on the 13 mm plaster
+/// type; its parameters view lists its area, perimeter, thickness, volume, mass and its tiles
+/// (45 whole and 29 cut, worked by hand in construct-slabs' tests) in units and read-only, and a
+/// person off the team can't draw one.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_ceiling_drawn_by_command_shows_its_quantities_and_tiles() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.ceiling_types(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty());
+    assert!(refused(s.ceiling_types(&dan, &project, &model).await));
+    s.edit(&anna, &project, &model, "ceiling.defaults", json!({}))
+        .await
+        .unwrap();
+    let types = s.ceiling_types(&anna, &project, &model).await.unwrap();
+    assert_eq!(types.types.len(), 3);
+    let plaster = types
+        .types
+        .iter()
+        .find(|t| t.id == "ceiling-plaster-13")
+        .unwrap();
+    assert_eq!(plaster.thickness, "13 mm");
+    let ceiling = json!({ "element": "C-900", "type": "ceiling-plaster-13", "level": "1",
+                          "offset": "2700 mm", "boundary": l_floor(60_000),
+                          "grid": { "width": "600 mm", "depth": "1200 mm" } });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "ceiling.create", ceiling.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "ceiling.create", ceiling)
+        .await
+        .unwrap();
+    let view = serde_json::to_value(
+        s.parameters(&anna, &project, &model, &i("C-900"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(view["category"], json!({ "id": 700, "name": "Ceilings" }));
+    let read = quantities(s, &project, &model, "C-900").await;
+    let ids: Vec<&str> = read.keys().map(String::as_str).collect();
+    assert_eq!(
+        ids,
+        [
+            "ceiling.area",
+            "ceiling.mass",
+            "ceiling.perimeter",
+            "ceiling.thickness",
+            "ceiling.tiles",
+            "ceiling.tiles-cut",
+            "ceiling.volume"
+        ]
+    );
+    assert_eq!(read["ceiling.area"].1.as_deref(), Some("44.00 m²"));
+    assert_eq!(read["ceiling.thickness"].1.as_deref(), Some("13 mm"));
+    assert_eq!(read["ceiling.tiles"].1.as_deref(), Some("74"));
+    assert_eq!(read["ceiling.tiles-cut"].1.as_deref(), Some("29"));
+}
+
 /// Through the server's commands on the stand-in: the default floor types made, an L-shaped
 /// floor with a hole drawn on level 1 of the 200 mm concrete type, built as the box around it;
 /// its parameters view lists its area, perimeter, thickness, volume and mass, and each layer's
