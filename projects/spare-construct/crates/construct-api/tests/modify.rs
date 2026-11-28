@@ -351,8 +351,8 @@ async fn a_wall_moves_with_what_it_hosts_and_one_undo_takes_it_back() {
 
 /// A quarter turn takes a wall to run along y; the opening it hosts names that axis now, and the
 /// door turns with it. A turn from one direction to another lands a wall of its own exactly. A
-/// wall that hosts a door or an opening, turned off the axes by any other angle, is refused in the
-/// builder's words, since the builder hosts them only on a wall along x or y today.
+/// wall that hosts a door or an opening turns off the axes too, by any angle: the builder hosts
+/// them at any angle, and the turn undoes whole.
 #[tokio::test]
 async fn a_wall_turns_by_quarter_turns_and_by_whole_turns_between_directions() {
     let stack = Stack::new().await;
@@ -372,23 +372,23 @@ async fn a_wall_turns_by_quarter_turns_and_by_whole_turns_between_directions() {
     assert_eq!(cuts.keys().collect::<Vec<_>>(), ["F-1", "O-1"]);
     assert!(stack.bounds("F-1").await.is_ok());
 
+    // Any other angle turns it too: the builder hosts an opening in a wall at any angle, and the
+    // turn is one step that undoes whole.
     let before = stack.rows("piece").await;
-    let refused = stack
+    stack
         .edit(
             "modify.rotate",
             json!({ "elements": ["W-1"], "about": ["0", "0"], "angle": "30°" }),
         )
         .await
-        .unwrap_err();
-    assert!(
-        refused.starts_with("opening O-1: W-1 runs at an angle"),
-        "{refused}"
-    );
+        .unwrap();
+    assert!(stack.bounds("W-1").await.is_ok());
     assert_eq!(
-        stack.rows("piece").await,
-        before,
-        "a refusal writes nothing"
+        cuts_of(&stack, "W-1").await.keys().collect::<Vec<_>>(),
+        ["F-1", "O-1"]
     );
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.rows("piece").await, before);
 
     // A 3:4:5 turn about the origin takes (0, 4 m) to (-3.2 m, 2.4 m) and (6 m, 4 m) to
     // (0.4 m, 7.2 m): on the grid.
@@ -405,24 +405,19 @@ async fn a_wall_turns_by_quarter_turns_and_by_whole_turns_between_directions() {
     assert_eq!(point_of(&angled, "end"), [400 * MM, 7200 * MM]);
     assert!(stack.bounds("W-2").await.is_ok());
 
+    // The same turn of the wall that hosts the opening: it goes with its wall.
     let before = stack.rows("piece").await;
-    let refused = stack
+    stack
         .edit(
             "modify.rotate",
             json!({ "elements": ["W-1"], "about": ["0", "0"],
                     "from": ["1 m", "0"], "to": ["3 m", "4 m"] }),
         )
         .await
-        .unwrap_err();
-    assert!(
-        refused.starts_with("opening O-1: W-1 runs at an angle"),
-        "{refused}"
-    );
-    assert_eq!(
-        stack.rows("piece").await,
-        before,
-        "a refusal writes nothing"
-    );
+        .unwrap();
+    assert!(stack.bounds("W-1").await.is_ok());
+    stack.edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(stack.rows("piece").await, before);
 }
 
 /// A door's fit is asked with the door turned as it is built, facing out of its side: on a wall
@@ -874,6 +869,11 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
         (
             "modify.array",
             json!({ "elements": ["W-1"], "count": 3, "spacing": ["0", "8 m"], "copy": "A" }),
+        ),
+        // Refused: nothing by that name is in the model.
+        (
+            "modify.move",
+            json!({ "elements": ["NOT-HERE"], "by": ["1 m", "0"] }),
         ),
         (
             "modify.rotate",

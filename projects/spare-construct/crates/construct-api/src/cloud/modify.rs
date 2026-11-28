@@ -28,8 +28,7 @@
 //! hosted element moved off its host or turned alone, an older door hosted by its position, a
 //! copy's ID already taken), another person's claim on an element it rewrites, and anything the
 //! builders would refuse of what it writes, in their words (a door, a family or an opening is
-//! hosted only on a wall along x or y today, so a wall that hosts one is turned off the axes only
-//! when the builder hosts them at any angle): every
+//! hosted at any angle, so a wall that hosts one turns off the axes with them): every
 //! record written is filled and read by the builders' own readers as regeneration reads it
 //! ([`construct_regen::levels::recipe_at`], [`construct_regen::face_names`]; a room by
 //! [`construct_regen::rooms::found_at`]), every grid and plane is read again with their names
