@@ -4382,22 +4382,28 @@ const svDrawn = '#pv-canvas g.drawn[data-section-view]';
 const svNote = '[data-section-note]';
 if (withKernel) {
   for (const page of [anna, ben]) await page.waitForSelector(`${svDrawn} path[data-material]`);
+  // The wall's own layers' materials: floors and roofs the section also cuts are other materials.
+  const svMaterials = await ben.evaluate((id) => window.spare.elements.get(id).fill.recipe.args.layers.map((l) => l.material), svWall);
   const hatchHeights = (page) =>
-    page.evaluate((sel) => {
-      const ys = [];
-      for (const path of document.querySelectorAll(`${sel} path[data-material]`)) {
-        const numbers = path.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
-        for (let i = 1; i < numbers.length; i += 2) ys.push(numbers[i]);
-      }
-      return ys;
-    }, svDrawn);
+    page.evaluate(
+      ([sel, materials]) => {
+        const ys = [];
+        for (const path of document.querySelectorAll(`${sel} path[data-material]`)) {
+          if (!materials.includes(path.getAttribute('data-material'))) continue;
+          const numbers = path.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number);
+          for (let i = 1; i < numbers.length; i += 2) ys.push(numbers[i]);
+        }
+        return ys;
+      },
+      [svDrawn, svMaterials],
+    );
   for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
     const ys = await hatchHeights(page);
     // The view's y runs up the sheet and is written negated: the cut wall is filled from its top
     // down to the door's head at 2100 mm, and nothing below it, where the opening is.
     check(
       ys.length > 0 && Math.max(...ys) <= -2000 && Math.min(...ys) < -2500,
-      `${name}'s section fills the cut wall by material, and the opening is in it: nothing is filled below the door's head`,
+      `${name}'s section fills the cut wall by material, and the opening is in it: nothing is filled below the door's head (filled from ${-Math.max(...ys)} to ${-Math.min(...ys)} mm up)`,
     );
   }
   const svBytes = await Promise.all([anna, ben].map((page) => page.locator(svDrawn).innerHTML()));
