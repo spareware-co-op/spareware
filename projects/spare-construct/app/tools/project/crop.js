@@ -4,6 +4,7 @@ import { register } from '../../core/registry.js';
 import { C } from '../../core/state.js';
 import { canEdit, manage, problem } from '../../core/problems.js';
 import { modelLevels } from './levels.js';
+import { loadViews } from './views.js';
 
 // --- A view's crop and range ---
 // The part of the model a view draws, and how high a plan cuts (construct-views' FORMAT.md,
@@ -89,3 +90,4 @@ ACT.stackcropclear = () => manage('view.crop.clear', { view: C.manage.view }, 'c
 
 // What this tool plugs into the core with (core/registry.js; note A96-tool-architecture.md).
 register.dialogs({ id: 'crop', order: 40, html: (m) => cropHtml(m) });
+register.holds({ id: 'crop', order: 10, where: ['crop', 'range'], reread: () => loadViews() });

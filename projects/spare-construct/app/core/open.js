@@ -50,7 +50,7 @@ function forgetTheOpenModel() {
   clearTimeout(C.schedulesTimer);
   C.problems.clear();
   C.asked.clear();
-  C.cropHold = 0;
+  C.holds.clear();
   C.cuts = false;
   C.builder = null;
   for (const entry of entries('models')) if (entry.forget) entry.forget(); // what each tool keeps of the model (register.models)

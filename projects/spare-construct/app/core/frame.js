@@ -6,7 +6,7 @@ import { C, NOT_YET, WORKS, planName, say } from './state.js';
 import { drawBrowser } from './browser.js';
 import { letGo } from './channel.js';
 import { stepWords } from './undo.js';
-import { clearProblems } from './problems.js';
+import { clearProblems, watchHeldControls } from './problems.js';
 import { drawPlan, plan } from './plan.js';
 import { threeD } from './viewport3d.js';
 
@@ -109,6 +109,7 @@ function takeOverTheFrame() {
     if (event.key === 'Delete' && !event.target.closest('input,textarea,select')) ACT.stackdelete();
   });
   setInterval(drawPlan, 1000); // claims run out by themselves
+  watchHeldControls();
 }
 
 /** The demo's ribbon, with only the buttons that have a meaning here changed. */

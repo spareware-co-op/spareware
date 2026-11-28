@@ -84,6 +84,7 @@ register.layers({ id: 'floor-sketch', order: 50, over: () => floorSketch() });
 | `models` | `open(model)` (awaited in order), `forget()` | a model opening and closing |
 | `logs` | `entry(entry)` | each entry of the log for the open model |
 | `dialogs` | `html(m)` by the dialog's name | the Manage tab's dialog frame |
+| `holds` | `where` (the names its panel's commands are sent with), `reread()` | held values, below |
 
 A hook that has nothing to say returns `undefined`; for a question one tool answers, the core takes the first answer that is not `undefined`. Every registration names its `order`, unique in its kind: the place the core asked it in before the cut (the if-chain's position, by tens), so the order the files load in never decides anything. A new tool picks the number that puts it where it belongs.
 
@@ -91,9 +92,19 @@ A tool's own buttons and fields keep the demo's tables (`ACT.<name>` for a click
 
 **Adding a tool** is a file under `tools/<discipline>/`, its line in `tools/index.js`, and its section of the two-browser test. The core is not edited.
 
+### Held values
+
+A panel is drawn again from the page's record of the model whenever anything changes, and until the server has answered a person's change that record is older than what they set: the redraw put the old value back under their click. Two tools had each fixed it their own way (the crop and range dialog held its whole panel; the schedules dialog its ticked boxes). It is the core's now, once, for every panel:
+
+- `manage()`, which sends every command a panel's control makes, holds the control the change came from (by its `data-key`) with the person's value, for that command.
+- `redraw()`, which draws every panel and dialog again, gives each held control the person's value back.
+- The server's answer lets go: a refusal at once, so the redraw that shows the refusal shows the server's value, and the tool reads its panel's data again; an applied command once the tool has read its data again and drawn it, when it registers how (`register.holds({ id, order, where, reread })`; the crop tool's reads its views), or at once when it has no way to.
+
+A tool keeps no hold of its own. The crop and range dialog's (`C.cropHold`) moved onto it at the cut; the schedules dialog's moves onto it when it lands.
+
 ### Where the core still names a tool
 
-The cut moved every tool out and gave the core hooks where it asked tools most (the ribbon, the hint, the side panel, the plan's drawing, picking and dragging, a model opening and closing, the log, the dialogs). The rest the split binds late: where a core file still calls a tool's function, it calls `late.<name>`, filled when the tool's file has loaded (`core/late.js`), so the core never imports a tool and every such place is listed. After the cut there are 33 (the split's report lists them): the seating of families and curtain walls in a wall's shape (`shapes.js`), Workshop's elements, the browser's Views, Schedules and Warnings parts, the levels' names, the 3D view's colours and the status bar's warning count. Each is a hook still to make; the next jobs turn them into kinds as above, one at a time, the same way.
+The cut moved every tool out and gave the core hooks where it asked tools most (the ribbon, the hint, the side panel, the plan's drawing, picking and dragging, a model opening and closing, the log, the dialogs). The rest the split binds late: where a core file still calls a tool's function, it calls `late.<name>`, filled when the tool's file has loaded (`core/late.js`), so the core never imports a tool and every such place is listed. After the cut there are 32 (the split's report lists them): the seating of families and curtain walls in a wall's shape (`shapes.js`), Workshop's elements, the browser's Views, Schedules and Warnings parts, the levels' names, the 3D view's colours and the status bar's warning count. Each is a hook still to make; the next jobs turn them into kinds as above, one at a time, the same way.
 
 Delete and the tool switch stay chains of `ACT.stackdelete` and `ACT.tool` wrappers, each tool around the last, as before: they work through the demo's own table, and turning them into a `remove(piece)` hook is one of those jobs.
 
@@ -113,6 +124,7 @@ The cut moves code; it does not change what any line does:
 - The core calls a tool's hooks directly, in the order it called the functions they wrap, so an exception still goes where it went. (Transport's `Registry.call` catches a plug-in's exception; whether Construct does is decided later, separately.)
 - Every top-level statement that does something when the page loads (a listener added, an `ACT` entry wrapped) runs in the same order as before, and the split checks it (below).
 - One thing moves in time, by the nature of a module: the page's code runs once the document has been read, as every module does, rather than at the point the script stood, which was already the end of the document. The demo's own start has run before it either way. One part of the page leaned on the old moment: Workshop's frame, which the demo's start opens on a reload of Workshop's view, finds its way into the model (`spare.workshop`) once, as it loads, and could now load first and find none. The frame host loads such a frame again when it starts (`reloadEarlyFrame`), so it finds it as before.
+- One change in behaviour was asked for, after the cut (main, 28 Nov): held values (above), which every panel now has where only the crop and range dialog had its own.
 - The two-browser test ran unedited.
 
 ### The split, repeatable on any newer main

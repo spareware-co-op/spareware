@@ -215,7 +215,6 @@ register.models({ id: 'views', order: 40, open: () => loadViews() });
 register.logs({ id: 'views', order: 10, entry: (entry) => viewsChanged(entry) });
 
 // What files loaded before this one use from it, bound once it has loaded.
-provide({
-  get leaveView() { return leaveView; }, get loadViews() { return loadViews; },
-  get modelViews() { return modelViews; },
-});
+provide({ get leaveView() { return leaveView; }, get modelViews() { return modelViews; } });
+
+export { loadViews };

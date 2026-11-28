@@ -49,6 +49,10 @@ const KINDS = {
   logs: { req: { id: 's', entry: 'f' }, opt: { order: 'n' } },
   // A dialog of the Manage tab, by the name it is opened with.
   dialogs: { req: { id: 's', html: 'f' }, opt: { order: 'n' } },
+  // How a tool reads its panel's data again (`reread`, a promise once drawn), for the commands its
+  // panel sends (by the `where` they are sent with): a control the person changed keeps their value
+  // until the server answers and the tool has read its data again (core/problems.js, held values).
+  holds: { req: { id: 's', where: 'a', reread: 'f' }, opt: { order: 'n' } },
 };
 
 const TYPE_OK = {

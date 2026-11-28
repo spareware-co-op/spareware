@@ -4,7 +4,9 @@ import { late } from './late.js';
 import { registered } from './registry.js';
 import { C, api, modelUrl, say } from './state.js';
 import { FROM, worked } from './parameters.js';
-import { canEdit, capital, manage, newId, plural, problem, topLevel } from './problems.js';
+import {
+  canEdit, capital, keepHeld, manage, newId, plural, problem, topLevel,
+} from './problems.js';
 
 // --- The dialogs ---
 
@@ -73,7 +75,6 @@ function renderManage() {
   const m = C.manage;
   const root = $('#stack-manage');
   if (!m || !root || $('#dlg').hidden || !(m.data || m.error)) return;
-  if (m.which === 'crop' && C.cropHold > 0) return;
   let html;
   if (m.error) html = `<div class="note bad small" role="alert">${esc(m.error)}</div>`;
   else if (registered('dialogs', m.which)) html = registered('dialogs', m.which).html(m); // a tool's dialog (register.dialogs)
@@ -94,6 +95,7 @@ function redraw(root, html) {
   const scroller = root.closest('.dlg-b');
   const scrolled = scroller?.scrollTop;
   root.innerHTML = html;
+  keepHeld(root);
   for (const input of $$('[data-draft]', root)) {
     if (!drafts.has(input.dataset.key)) continue;
     if (input.type === 'checkbox') input.checked = drafts.get(input.dataset.key);
