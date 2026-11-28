@@ -12,8 +12,8 @@
 )]
 
 use construct_warnings::{
-    Model, RULES, Room, RoomState, Severity, Wall, WallError, Warning, overlap_along_length,
-    warnings,
+    Insert, InsertError, Model, RULES, Room, RoomState, Severity, Wall, WallError, Warning,
+    overlap_along_length, warnings,
 };
 use kit_core::Id;
 
@@ -61,8 +61,14 @@ fn model(walls: Vec<Wall>, rooms: Vec<Room>) -> Model {
     Model {
         walls,
         rooms,
-        areas: Vec::new(),
+        inserts: Vec::new(),
+        ..Model::default()
     }
+}
+
+/// An insert `id` hosted on wall `host`, its opening from `low` to `high` along `axis`.
+fn insert(id: &str, host: &str, axis: usize, low: i64, high: i64) -> Insert {
+    Insert::new(i(id), format!("window {id}"), i(host), axis, low, high).unwrap()
 }
 
 fn identities(model: &Model) -> Vec<String> {
@@ -79,7 +85,6 @@ fn a_model_with_no_problems_gives_an_empty_list() {
         ],
         vec![
             room("R-1", RoomState::Enclosed),
-            room("R-2", RoomState::Redundant(i("R-1"))),
             room("R-3", RoomState::Refused("a point in a wall".to_owned())),
         ],
     );
@@ -278,7 +283,16 @@ fn every_kind_is_one_entry_with_its_own_name() {
     let names: Vec<&str> = RULES.iter().map(|r| r.kind).collect();
     assert_eq!(
         names,
-        ["room.not_enclosed", "area.not_enclosed", "wall.overlap"]
+        [
+            "dimension.out_of_range",
+            "dimension.reference_missing",
+            "dimension.reference_parallel",
+            "room.not_enclosed",
+            "area.not_enclosed",
+            "room.redundant",
+            "wall.overlap",
+            "insert.crosses_joined_wall"
+        ]
     );
     assert_eq!(Severity::Warning.word(), "warning");
     assert!(Severity::Notice < Severity::Warning && Severity::Warning < Severity::Error);
@@ -319,4 +333,220 @@ fn an_outline_that_is_not_a_convex_polygon_on_the_grid_is_refused() {
     let cw = [[0, 0], [0, 10], [10, 10], [10, 0]];
     let wall = Wall::new(i("W-1"), l, [1, 0], &cw).unwrap();
     assert_eq!(wall.outline(), [[10, 0], [10, 10], [0, 10], [0, 0]]);
+}
+
+#[test]
+fn what_the_dimensions_measured_is_listed_by_kind_and_a_kind_that_is_not_a_rule_is_not() {
+    let found = |kind: &'static str, dimension: &str, wall: &str| Warning {
+        kind,
+        severity: Severity::Error,
+        elements: vec![i(dimension), i(wall)],
+        words: format!("{dimension} says {wall} is the problem"),
+    };
+    let model = Model {
+        dimensions: vec![
+            found("dimension.reference_parallel", "D-2", "W-9"),
+            found("dimension.reference_missing", "D-1", "W-2"),
+            found("dimension.reference_missing", "D-1", "W-1"),
+            found("dimension.no_such_kind", "D-1", "W-3"),
+        ],
+        ..Model::default()
+    };
+    let listed = warnings(&model);
+    let identities: Vec<String> = listed.iter().map(Warning::identity).collect();
+    assert_eq!(
+        identities,
+        [
+            "dimension.reference_missing|D-1|W-1",
+            "dimension.reference_missing|D-1|W-2",
+            "dimension.reference_parallel|D-2|W-9"
+        ]
+    );
+    // The table's severity is the one listed, whatever the measurement carried.
+    assert!(listed.iter().all(|w| w.severity == Severity::Warning));
+    assert_eq!(listed[0].words, "D-1 says W-1 is the problem");
+}
+
+#[test]
+fn a_second_room_in_one_enclosed_space_is_a_warning_naming_both_rooms() {
+    // Two rooms, "A1" and "A1 again", in the left half of a house: the second is redundant (it has
+    // no area) and the first keeps the space. The warning's elements: the redundant room, then the
+    // room that keeps the space.
+    let mut keeper = room("R-1", RoomState::Enclosed);
+    keeper.who = "room 1 A1".to_owned();
+    let mut second = room("R-2", RoomState::Redundant(i("R-1")));
+    second.who = "room 2 A1 again".to_owned();
+    let list = warnings(&model(Vec::new(), vec![keeper, second]));
+    assert_eq!(list.len(), 1);
+    let w = &list[0];
+    assert_eq!(w.kind, "room.redundant");
+    assert_eq!(w.severity, Severity::Warning);
+    assert_eq!(w.elements, [i("R-2"), i("R-1")]);
+    assert_eq!(
+        w.words,
+        "Room 2 A1 again is redundant: room 1 A1 already holds the same enclosed space"
+    );
+    assert_eq!(w.identity(), "room.redundant|R-2|R-1");
+}
+
+#[test]
+fn a_redundant_room_whose_keeper_is_unknown_is_named_by_its_id_and_fixing_it_clears_it() {
+    // The keeper is not among the rooms the model lists: it is named by its ID rather than not at
+    // all.
+    let alone = model(
+        Vec::new(),
+        vec![room("R-2", RoomState::Redundant(i("R-1")))],
+    );
+    let list = warnings(&alone);
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].elements, [i("R-2"), i("R-1")]);
+    assert_eq!(
+        list[0].words,
+        "Room R-2 is redundant: room R-1 already holds the same enclosed space"
+    );
+    // The cause fixed: the second room moved into a space of its own.
+    let fixed = model(
+        Vec::new(),
+        vec![
+            room("R-1", RoomState::Enclosed),
+            room("R-2", RoomState::Enclosed),
+        ],
+    );
+    assert_eq!(warnings(&fixed), []);
+}
+
+/// The worked case of the issue, in half millimetres so that 3942.5 mm is a whole number: an
+/// exterior wall along x from 0 to 8000 mm (0 to 16000), 250 mm thick (y from -250 to 250, centred
+/// on its line), and a partition 115 mm thick meeting it at x = 4000 mm and running away from it
+/// (x from 7885 to 8115, y from 250 to 16000). A 1200 mm window centred 4000 mm along the wall
+/// spans x = 3400 to 4600 mm, that is 6800 to 9200: the partition's faces, 7885 and 8115, are both
+/// inside it, so 230 units (115 mm) of the partition lie in the opening.
+fn house() -> Vec<Wall> {
+    vec![
+        rect("W-1", "L1", [0, -250], [16_000, 250]),
+        rect("W-2", "L1", [7885, 250], [8115, 16_000]),
+    ]
+}
+
+fn with_inserts(walls: Vec<Wall>, inserts: Vec<Insert>) -> Model {
+    Model {
+        walls,
+        rooms: Vec::new(),
+        inserts,
+        ..Model::default()
+    }
+}
+
+#[test]
+fn an_opening_across_a_wall_that_joins_its_host_is_a_warning_naming_insert_and_both_walls() {
+    let m = with_inserts(house(), vec![insert("WIN-1", "W-1", 0, 6800, 9200)]);
+    let list = warnings(&m);
+    assert_eq!(list.len(), 1);
+    let w = &list[0];
+    assert_eq!(w.kind, "insert.crosses_joined_wall");
+    assert_eq!(w.severity, Severity::Warning);
+    // The insert, its host, the joined wall.
+    assert_eq!(w.elements, [i("WIN-1"), i("W-1"), i("W-2")]);
+    assert_eq!(
+        w.words,
+        "Window WIN-1 crosses wall W-2, which joins its host wall W-1: its opening would have to cut the joined wall"
+    );
+    assert_eq!(w.identity(), "insert.crosses_joined_wall|WIN-1|W-1|W-2");
+}
+
+#[test]
+fn an_opening_clear_of_the_joined_wall_is_no_warning_and_the_exact_edges_decide() {
+    let at = |low: i64, high: i64| {
+        warnings(&with_inserts(
+            house(),
+            vec![insert("WIN-1", "W-1", 0, low, high)],
+        ))
+        .len()
+    };
+    // Window 1000 to 2200 mm (2000 to 4400): well clear of the partition.
+    assert_eq!(at(2000, 4400), 0);
+    // Ending exactly on the partition's near face (7885) touches it and shares no length: clear.
+    assert_eq!(at(5485, 7885), 0);
+    // Starting exactly on its far face (8115): clear.
+    assert_eq!(at(8115, 10_515), 0);
+    // One unit (0.5 mm) in over either face: a warning.
+    assert_eq!(at(5485, 7886), 1);
+    assert_eq!(at(8114, 10_514), 1);
+    // Wholly inside the partition's thickness: a warning.
+    assert_eq!(at(7900, 8000), 1);
+}
+
+#[test]
+fn only_a_wall_that_joins_the_host_counts() {
+    let m = |walls: Vec<Wall>| with_inserts(walls, vec![insert("WIN-1", "W-1", 0, 6800, 9200)]);
+    let host = rect("W-1", "L1", [0, -250], [16_000, 250]);
+    // A partition that stops short of the host (a gap of one unit): not joined.
+    let short = rect("W-2", "L1", [7885, 251], [8115, 16_000]);
+    assert_eq!(warnings(&m(vec![host.clone(), short])), []);
+    // A partition that ends inside the host's thickness: joined.
+    let into = rect("W-2", "L1", [7885, 0], [8115, 16_000]);
+    assert_eq!(warnings(&m(vec![host.clone(), into])).len(), 1);
+    // A wall on another level, a wall parallel to the host, and the host alone: none.
+    let other_level = rect("W-2", "L2", [7885, 250], [8115, 16_000]);
+    assert_eq!(warnings(&m(vec![host.clone(), other_level])), []);
+    let parallel = rect("W-2", "L1", [7000, 250], [9000, 500]);
+    assert_eq!(warnings(&m(vec![host.clone(), parallel])), []);
+    assert_eq!(warnings(&m(vec![host.clone()])), []);
+    // A joined wall at an angle is judged by the same test: its outline across the opening.
+    let angled = Wall::new(
+        i("W-2"),
+        i("L1"),
+        [1, 1],
+        &[[7900, 250], [8300, 250], [10_000, 2000], [9600, 2000]],
+    )
+    .unwrap();
+    assert_eq!(warnings(&m(vec![host, angled])).len(), 1);
+}
+
+#[test]
+fn an_insert_whose_host_is_not_a_wall_of_the_model_is_not_judged() {
+    let m = with_inserts(house(), vec![insert("WIN-1", "W-9", 0, 6800, 9200)]);
+    assert_eq!(warnings(&m), []);
+}
+
+#[test]
+fn the_insert_warnings_are_ordered_and_leave_when_the_window_moves_clear() {
+    let before = with_inserts(
+        house(),
+        vec![
+            insert("WIN-2", "W-1", 0, 6800, 9200),
+            insert("WIN-1", "W-1", 0, 6800, 9200),
+        ],
+    );
+    assert_eq!(
+        identities(&before),
+        [
+            "insert.crosses_joined_wall|WIN-1|W-1|W-2",
+            "insert.crosses_joined_wall|WIN-2|W-1|W-2"
+        ]
+    );
+    let after = with_inserts(house(), vec![insert("WIN-1", "W-1", 0, 2000, 4400)]);
+    assert_eq!(warnings(&after), []);
+}
+
+#[test]
+fn an_insert_that_is_not_an_interval_on_the_grid_is_refused() {
+    let new = |axis: usize, low: i64, high: i64| {
+        Insert::new(
+            i("WIN-1"),
+            "window WIN-1".to_owned(),
+            i("W-1"),
+            axis,
+            low,
+            high,
+        )
+    };
+    assert_eq!(new(2, 0, 10).unwrap_err(), InsertError::Axis);
+    assert_eq!(new(0, 10, 10).unwrap_err(), InsertError::Empty);
+    assert_eq!(new(0, 10, 5).unwrap_err(), InsertError::Empty);
+    assert_eq!(
+        new(0, 0, 2_000_000_000_000).unwrap_err(),
+        InsertError::TooBig
+    );
+    assert!(new(1, -5, 5).is_ok());
 }

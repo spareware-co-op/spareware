@@ -22,3 +22,7 @@ Merged regions (`merge::merge`: the regions of one category and material that to
 ## SVG
 
 `svg::Svg` writes a picture as one SVG document: model millimetres, x to the right and y negated (SVG's y runs down), `width` and `height` the paper size at the scale with 5 mm of paper all round. Hatches come first, one `path` each with `data-material`, square ends; then every line, a `line` or arc `path` with `data-element` and `data-role`, round ends. Numbers are exact where the decimal ends and to the nanometre otherwise. Pinned: [`tests/two_walls_plan.svg`](tests/two_walls_plan.svg) and [`tests/two_walls_and_one.svg`](tests/two_walls_and_one.svg).
+
+## Cropped
+
+`crop::clip` cuts a picture to a view's crop outline (the corners of construct-views' `Region`, in the drawing's own coordinates, either way round): every stroke and every hatch line keeps the pieces inside the outline or along it, cut at the exact crossing (a fraction of the grid off the axes), each piece keeping the pen, colour and source of its line; a line wholly outside goes; nothing is drawn along the cut. An arc is kept or dropped whole when its circle is clear of the outline, and refused (`DrawingError::Crop`) when the circle meets it. Nothing about a crop is stored in a drawing: it is applied when the picture is printed.

@@ -737,3 +737,109 @@ async fn a_door_is_placed_on_a_layered_wall() {
         [("D-1".to_owned(), [3000, 1943, 0], 900)]
     );
 }
+
+/// A layered wall `id` of the default partition drawn 5 m from (1000, 2000) to (1000, 2000) plus
+/// `end` millimetres, 2.7 m high on level 1.
+async fn a_wall_at(stack: &Stack, id: &str, end: [i64; 2]) {
+    let partition = walls::default_type_args().unwrap().remove(0);
+    let ty = partition["type"].clone();
+    stack.edit("wall.type.create", partition).await.unwrap();
+    let to = [
+        format!("{} mm", 1000 + end[0]),
+        format!("{} mm", 2000 + end[1]),
+    ];
+    let draw = json!({ "element": id, "type": ty, "start": ["1000 mm", "2000 mm"],
+                       "end": to, "level": 1, "height": "2700 mm" });
+    stack.edit("wall.draw", draw).await.unwrap();
+}
+
+/// A wall at any angle hosts through the same commands as one along an axis (piece A83): on a
+/// partition drawn 5 m long at 30, 45 and 60 degrees and at a 3:4:5 slope, a door, a plain
+/// opening, a window and a placed door are each placed on a side of it, seated in the wall's own
+/// frame (their records hold their offsets; their placements the nearest millimetre to their
+/// origins: on the 3:4:5 wall the door's, 300 mm along on the exterior face 57.5 mm right of the
+/// line, is exactly (226, 205.5) mm from the wall's start, placed at (1226, 2206)); the wall is
+/// built with each and each builds; a door that would cross the wall's end is refused in the
+/// builder's words, and on the 3:4:5 wall, exactly 5 m long, one that would touch it, both judged
+/// in the wall's frame; moved along the wall, the door sits where it now is.
+#[tokio::test]
+async fn doors_windows_and_openings_are_placed_on_walls_at_any_angle() {
+    const DOOR: &str = "library.doors-windows.single-swing-door";
+    const WINDOW: &str = "library.doors-windows.fixed-window";
+    for end in [[4330, 2500], [3536, 3536], [2500, 4330], [3000, 4000]] {
+        let stack = Stack::new(Arc::new(Cutter)).await;
+        a_wall_at(&stack, "W-1", end).await;
+        let exact = end == [3000, 4000];
+        let placed = [
+            (
+                "hosted.place",
+                json!({ "element": "D-1", "host": "W-1", "face": "box.exterior",
+                        "along": "300 mm", "recipe": door_recipe(900) }),
+            ),
+            (
+                "opening.place",
+                json!({ "element": "O-1", "host": "W-1", "side": "interior", "along": "2800 mm",
+                        "sill": "900 mm", "width": "600 mm", "height": "1200 mm" }),
+            ),
+            (
+                "family.place",
+                json!({ "element": "F-1", "family": WINDOW, "type": "w1200x1200",
+                        "host": "W-1", "side": "exterior", "along": "2000 mm" }),
+            ),
+            (
+                "family.place",
+                json!({ "element": "F-2", "family": DOOR, "type": "d900x2100",
+                        "host": "W-1", "side": "interior", "along": "4000 mm" }),
+            ),
+        ];
+        for (cmd, args) in placed {
+            stack
+                .edit(cmd, args)
+                .await
+                .unwrap_or_else(|e| panic!("{end:?}: {cmd}: {e}"));
+        }
+        let body = stack.body("W-1").await;
+        let cut: Vec<&str> = body["cut"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["key"].as_str().unwrap())
+            .collect();
+        assert_eq!(cut, ["D-1", "F-1", "F-2", "O-1"], "{end:?}");
+        for id in ["D-1", "O-1", "F-1", "F-2"] {
+            stack.body(id).await;
+        }
+        let (_, door) = stack.record("D-1").await.unwrap();
+        assert_eq!(door.props["@host.along"], "length:q0:1920000");
+        if exact {
+            assert_eq!(
+                [door.placement.x, door.placement.y, door.placement.z],
+                [1226, 2206, 0]
+            );
+        }
+        let refused = stack
+            .edit("hosted.place", place("D-2", "W-1", "exterior", "4500 mm"))
+            .await
+            .unwrap_err();
+        assert_eq!(refused, "door D-2: it crosses the wall's end", "{end:?}");
+        if exact {
+            let refused = stack
+                .edit("hosted.place", place("D-2", "W-1", "exterior", "4100 mm"))
+                .await
+                .unwrap_err();
+            assert_eq!(refused, "door D-2: it touches the wall's end");
+        }
+        let before = door.placement;
+        stack
+            .edit(
+                "hosted.move",
+                json!({ "element": "D-1", "along": "450 mm" }),
+            )
+            .await
+            .unwrap();
+        let (_, moved) = stack.record("D-1").await.unwrap();
+        assert_ne!(moved.placement, before, "{end:?}");
+        assert_eq!(moved.props["@host.along"], "length:q0:2880000");
+        stack.body("D-1").await;
+    }
+}

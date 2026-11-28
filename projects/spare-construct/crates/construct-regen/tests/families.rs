@@ -460,26 +460,8 @@ fn a_family_is_seated_on_its_walls_centre_plane_facing_out_of_its_side() {
         };
         assert_eq!(reach, (10, 50), "{end:?} {role}: {front:?}");
     }
-    // Only a layered wall along an axis hosts a family, and only at whole millimetres.
+    // Only a layered wall hosts a family.
     let angled = wall("W-1", PARTITION, [0, 0], [3000, 4000]);
-    let filled = walls::filled(
-        &angled.recipe,
-        &context,
-        &angled,
-        Some(&wall_type(&context, PARTITION)),
-    )
-    .unwrap();
-    let face = side(&context, &angled, PARTITION, "exterior");
-    let family = placed("F-1", DOOR, "d900x2100", "W-1", &face, 1500, 0);
-    let read = hosting::read(&family).unwrap().unwrap();
-    let refused =
-        hosting::seat(&edition, &angled, &filled, &family, &family.recipe, &read).unwrap_err();
-    assert_eq!(refused.code, "NotAHost");
-    assert!(
-        refused.message.starts_with("family F-1: "),
-        "{}",
-        refused.message
-    );
     let mut boxed = angled.clone();
     boxed.recipe = Recipe::construct(
         "wall.straight",
@@ -499,6 +481,58 @@ fn a_family_is_seated_on_its_walls_centre_plane_facing_out_of_its_side() {
     )
     .unwrap_err();
     assert_eq!(refused.code, "NotAHost");
+}
+
+/// On a wall at a 3:4:5 slope (piece A83) a family is seated in the wall's frame, its origin
+/// 1500 mm along the line on its centre plane, exactly (900, 1200) mm; facing the exterior, the
+/// line's right, its x runs against the line, and it is seated in place of a turn. The stand-in
+/// draws its leaf turned with the wall, 10 to 50 mm right of the line, each corner to the nearest
+/// millimetre.
+#[test]
+fn a_family_on_a_wall_at_an_angle_is_seated_in_its_frame() {
+    let context = context();
+    let edition = Boxes.edition();
+    let angled = wall("W-1", PARTITION, [0, 0], [3000, 4000]);
+    let filled = walls::filled(
+        &angled.recipe,
+        &context,
+        &angled,
+        Some(&wall_type(&context, PARTITION)),
+    )
+    .unwrap();
+    let face = side(&context, &angled, PARTITION, "exterior");
+    let family = placed("F-1", DOOR, "d900x2100", "W-1", &face, 1500, 0);
+    let read = hosting::read(&family).unwrap().unwrap();
+    let (at, seated) =
+        hosting::seat(&edition, &angled, &filled, &family, &family.recipe, &read).unwrap();
+    assert_eq!([at.x, at.y, at.z], [900, 1200, 0]);
+    let instance = families::Instance::of(&seated).unwrap();
+    assert_eq!(instance.turn, Turn::None);
+    assert_eq!(
+        instance.seat,
+        construct_families::Seat::new(
+            [-19_200_000, -25_600_000],
+            [-5_760_000, -7_680_000],
+            [-9_600_000, 0]
+        )
+    );
+    let drawn = Boxes.build(&seated).unwrap();
+    let leaf = drawn.displays[0]
+        .parts
+        .iter()
+        .find(|p| p.function == "leaf")
+        .unwrap();
+    // Right of the line (3, 4) / 5 from the wall's start: (4x - 3y) / 5, the family at (900, 1200).
+    let right: Vec<i64> = leaf
+        .outline
+        .iter()
+        .map(|&[x, y]| (4 * (x + 900) - 3 * (y + 1200)) / 5)
+        .collect();
+    let (near, far) = (*right.iter().min().unwrap(), *right.iter().max().unwrap());
+    assert!(
+        (9..=11).contains(&near) && (49..=51).contains(&far),
+        "{right:?}"
+    );
 }
 
 /// Through the log: a door and a window on a layered wall are seated in it and the wall is built

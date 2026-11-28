@@ -2,6 +2,7 @@
 //! staging fields and its phase settings, written as an element record of the views category and
 //! read back. How a view picks a pen's width.
 
+use crate::crop::{CROP_KEY, Crop};
 use crate::cut::{CutLine, Point, Side};
 use crate::error::ViewError;
 use crate::graphics::{GRAPHICS_KEY, Graphics};
@@ -82,6 +83,7 @@ pub struct View {
     staging: ElementStaging,
     phasing: Option<ViewSettings>,
     graphics: Graphics,
+    crop: Option<Crop>,
 }
 
 impl View {
@@ -106,6 +108,7 @@ impl View {
             staging,
             phasing: None,
             graphics: Graphics::new(),
+            crop: None,
         })
     }
 
@@ -162,6 +165,20 @@ impl View {
     #[must_use]
     pub fn with_graphics(mut self, graphics: Graphics) -> Self {
         self.graphics = graphics;
+        self
+    }
+
+    /// The view's crop, if it has one.
+    #[must_use]
+    pub fn crop(&self) -> Option<&Crop> {
+        self.crop.as_ref()
+    }
+
+    /// The view with a crop, or with none. Whether the view can hold one is asked of
+    /// [`Crop::check_kind`]; reading a record refuses a crop a view of its kind cannot hold.
+    #[must_use]
+    pub fn with_crop(mut self, crop: Option<Crop>) -> Self {
+        self.crop = crop;
         self
     }
 
@@ -288,6 +305,9 @@ impl View {
         if let Some(text) = self.graphics.to_text() {
             props.insert(GRAPHICS_KEY.to_owned(), text);
         }
+        if let Some(crop) = &self.crop {
+            props.insert(CROP_KEY.to_owned(), crop.to_text());
+        }
         if let Some(plan) = self.kind.plan() {
             write_plan(&mut props, plan);
         }
@@ -366,6 +386,14 @@ impl View {
         graphics
             .check_kind(&kind)
             .map_err(|why| malformed(&format!("holds graphics rules it cannot hold: {why}")))?;
+        let crop = match record.props.get(CROP_KEY) {
+            None => None,
+            Some(text) => {
+                Crop::check_kind(&kind)
+                    .map_err(|why| malformed(&format!("holds a crop it cannot hold: {why}")))?;
+                Some(Crop::from_text(text).map_err(|why| malformed(&why))?)
+            }
+        };
         let view = Self::new(
             record.id.clone(),
             &record.name,
@@ -376,7 +404,8 @@ impl View {
         )
         .map_err(|_| malformed("has no name"))?
         .with_phasing(phasing)
-        .with_graphics(graphics);
+        .with_graphics(graphics)
+        .with_crop(crop);
         if view.to_record(&record.document) != *record {
             return Err(malformed("is not as a view record is written"));
         }

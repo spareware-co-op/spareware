@@ -159,7 +159,13 @@ pub fn extents(
     limits: Limits,
     turn: Turn,
 ) -> Result<Vec<Extent>, EvalError> {
-    let evaluated = super::build::run(&mut Boxes, recipe, values, limits, turn)?;
+    let evaluated = super::build::run(
+        &mut Boxes,
+        recipe,
+        values,
+        limits,
+        super::build::Stand::Turned(turn),
+    )?;
     Ok(evaluated
         .solids
         .into_iter()

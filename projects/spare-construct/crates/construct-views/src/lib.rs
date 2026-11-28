@@ -1,4 +1,4 @@
-//! Spare Construct: views as elements, and what each shows (CON-A8-F1-P1, CON-A8-F1-P2; the part
+//! Spare Construct: views as elements, and what each shows (CON-A8-F1-P1, P2 and P3; the part
 //! "view scale and detail level").
 //!
 //! A view is an element of the views category: a floor plan, a ceiling plan, a section, an
@@ -26,6 +26,10 @@
 //!   [`View::graphics`] and stored under [`GRAPHICS_KEY`].
 //! - [`resolve`], [`Resolved`], [`Origin`]: the one rule for how an element looks in a view:
 //!   the subcategory's rule, else the category's, else the project's object style.
+//! - [`Crop`], [`Region`]: a view's crop region (CON-A8-F1-P3): a rectangle or a closed outline in
+//!   the view's own coordinates, checked exactly to be simple, with an optional annotation region
+//!   and on and shown switches; held by [`View::crop`] and stored under [`CROP_KEY`]. Stored and
+//!   served only: the drawing does not clip to it yet.
 //! - [`ViewError`]: every refusal, as a value.
 //!
 //! Promises: records are the truth (main's ruling 7), and this crate is the types and pure
@@ -41,14 +45,16 @@
 //! Not built here, with their places kept:
 //! - Drawing a plan or a section from a view (jobs 7.2, 8.1): this crate says what a view shows,
 //!   not how it is drawn. A section's height range is not held; it is every height.
-//! - Crop regions, view templates and overrides (jobs 7.7, 8.5): more fields on the view record
-//!   under their own reserved keys, read in [`View::from_record`]. The plan drawing applying the
-//!   graphics rules, and the page showing them, are later jobs: [`resolve`] is what they call.
+//! - View templates and overrides (job 8.5): more fields on the view record under their own
+//!   reserved keys, read in [`View::from_record`]. The plan drawing applying the graphics rules,
+//!   and the page showing them, are later jobs: [`resolve`] is what they call. Clipping a drawing
+//!   to a crop (job 7.7's next step) is the drawing's.
 //! - Commands through the edit log: construct-api's `cloud::views` (a view's entry in
 //!   `construct_categories::category_of_kind` and the level-deletion guard for the levels a range
 //!   is tied to are done: construct-levels counts [`RANGE_KEYS`]).
 //! - Datum extents per view, annotation owned by a view, and three-dimensional camera settings.
 
+mod crop;
 mod cut;
 mod error;
 mod graphics;
@@ -64,6 +70,7 @@ pub use construct_levels::Tie;
 pub use construct_params::Length;
 pub use construct_styles::Scale;
 pub use construct_styles::{Colour, Edge, PatternId};
+pub use crop::{CROP_FORMAT_VERSION, CROP_KEY, Crop, Region};
 pub use cut::{CutLine, Point, Side};
 pub use error::ViewError;
 pub use graphics::{

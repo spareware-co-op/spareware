@@ -32,6 +32,7 @@ A view is an element record like any other (the records in the database are the 
 | `@view.look` | A section or an elevation | `choice:left` or `choice:right`: the side of the line, walking from its first end to its second, that the view looks to |
 | `@view.far` | A section or an elevation | How far it sees, square to the line: stored length text, above zero |
 | `@view.graphics` | A view with graphics rules, never a drafting view or a legend | The rules, as JSON text, written only when the view has one: see "Graphics rules" below |
+| `@view.crop` | A view with a crop, only a plan, a section or an elevation | The crop, as JSON text, written only when the view has one: see "Crop regions" below |
 
 Which keys a record has depends on its kind, and no other keys are allowed: a section with a `@level`, or a plan with a line, is refused. Lengths are construct-params' stored length text in its one spelling (`length:q0:` and the grid steps); the older whole-millimetre spelling is not accepted here, since no view was ever written with it. A view range's height is `height_of` of its level plus its offset (construct-levels), so moving a level moves every view range tied to it and no view record changes.
 
@@ -55,7 +56,7 @@ The view commands are construct-api's [`cloud::views`](../construct-api/src/clou
 - The element commands refuse a view, naming these. A level a plan is of, or one its range is tied to, is not deleted: construct-levels counts the ties under `RANGE_KEYS` ([`tied_to`](../construct-levels/src/levels.rs)). An undo that would leave a view on a level the model no longer has is turned back.
 - Interim: a document stores no phases or design options yet. Until a job stores them through the log, a view's `staging` and `phasing` may name the two phases every project starts with (`phase-existing`, `phase-new`) and no design option exists to name, and every element is read as created in `phase-new` when a view is asked what it shows. A new view is created in `phase-new`.
 
-The server reads them at `GET /api/projects/<project>/models/<model>/views` (a JSON list of `{id, name, kind, level, level_name, scale, detail}`, by name) and `.../views/<view>` (`{view, cut, seen, beyond}`: the sorted IDs of the elements the view cuts, sees, and a plan sees below its bottom), behind `model.read`. A floor plan is drawn at `.../views/<view>/plan` (`{view, through, svg, skipped}`: the cut at the view range's cut height, printed at the view's scale by construct-drawing, and the elements it could not draw, each with the reason), by the server's `plan` module over the kernel builder; a server built without the kernel refuses it in words. The second is [`list`](src/listing.rs) over the model's stored shapes, each box lifted by the height its level gives its base (the built row's `elevation`), the low corner rounded down and the high one up to whole millimetres.
+The server reads them at `GET /api/projects/<project>/models/<model>/views` (a JSON list of `{id, name, kind, level, level_name, scale, detail, range, crop}`, by name) and `.../views/<view>` (`{view, cut, seen, beyond}`: the sorted IDs of the elements the view cuts, sees, and a plan sees below its bottom), behind `model.read`. A floor plan is drawn at `.../views/<view>/plan` (`{view, through, svg, skipped}`: the cut at the view range's cut height, printed at the view's scale by construct-drawing, and the elements it could not draw, each with the reason), by the server's `plan` module over the kernel builder; a server built without the kernel refuses it in words. The second is [`list`](src/listing.rs) over the model's stored shapes, each box lifted by the height its level gives its base (the built row's `elevation`), the low corner rounded down and the high one up to whole millimetres.
 
 ## Graphics rules
 
@@ -91,6 +92,32 @@ Interim: a document stores no pens, line patterns or object styles yet, so rules
 
 Not stored: `construct_views::list` answers it from the view and the model's elements (their category, box in whole millimetres in the project's frame, and staging), by the rules in that file's header: the category must be one a view draws (model and import categories), the phase rule is [construct-phases](../construct-phases/FORMAT.md)'s own, and the reach is the view range for a plan (cut, seen, beyond), the region of the line for a section or an elevation (cut, seen), and everything for a three-dimensional view. A drafting view and a legend show no model. Answers are sorted by element ID.
 
+## Crop regions
+
+A plan, a ceiling plan, a section or an elevation may hold a crop: the part of the view that is drawn. One JSON text under `@view.crop`, keys in this order, no spare space, written only when the view has a crop (a three-dimensional view, a drafting view and a legend hold none, and a record that has one does not read):
+
+```json
+{"format":1,"on":true,"shown":true,"region":{"rectangle":["length:q0:0","length:q0:0","length:q0:76800000","length:q0:51200000"]},"annotation":null}
+```
+
+| Part | Value |
+| --- | --- |
+| `format` | `1` |
+| `on` | `true`: the crop applies, and the view's extent (the size a viewport takes on a sheet) is the region's box. `false`: the region is kept and ignored |
+| `shown` | `true`: the region's outline is shown in the view. `false`: hidden. It changes no size |
+| `region` | `{"rectangle": [x0, y0, x1, y1]}`: the lower left and the upper right corner, each a stored length, `x0` below `x1` and `y0` below `y1`; or `{"outline": [[x, y], ...]}`: a closed outline's corners in order, the last joined to the first, in the order they were given (either way round) |
+| `annotation` | `null`, or a region as above: the crop of the view's annotation, apart from the model's |
+
+The coordinates are the view's own: a plan's are the project's x and y; a section's or an elevation's are the distance along its line from the first end, and the height above the project's zero. An outline is exactly simple (the rules below). Any other spelling, a version other than 1 or an unknown field is refused when read.
+
+The rules a command checks, besides those above: a rectangle's minimum is below its maximum on both axes; an outline has at least three corners, no corner twice in a row (the last then the first included), no two edges that cross, touch or lie along each other (neighbours meet only at their shared corner and do not fold back along each other) and an area above zero. They are decided with exact whole-step arithmetic, no float and no tolerance, and coordinates too large for it are refused as out of range. Reading a record applies them too, so a record always holds a crop that stands.
+
+Through the log: `view.crop.set`, `view.crop.clear` and `view.crop.show` ([cloud format](../construct-model/FORMAT.md)). Each is one undo step, runs behind `model.edit` and takes the claim on the view; a call that changes nothing is no step. `view.duplicate` keeps the crop, the other view commands do not touch it, and the element commands refuse a view as before, so there is no way round the crop's checks. The server's view listing (`GET .../views`) gives each view's `range` (a plan's four ties, `{level, offset}`, and the `heights` they resolve to above zero, or `null`) and `crop` (`{region, annotation, on, shown}`, each region `{shape, corners}` in order, lengths as text such as `4000 mm`), `null` when there is none. A viewport on a sheet takes the box of the crop's region as its view's extent while the crop is on.
+
+Not done yet: clipping the drawing to the crop. The drawing is the bytes it was; only a viewport's size follows the crop (decision note CON-A8-F1-P3).
+
+A view with no `@view.crop` has no crop, which is every view stored before this part existed; it reads and draws as before.
+
 ## Later versions
 
-Crop regions, a view template and per-element overrides will each be more reserved keys on this record, read strictly as these are; version 1 records read as views with none of them, and graphics rules (above) are the first of them. The shared spelling of an element's staging fields for every kind of element is the job that wires them into records; until it lands, a view's is the `@staging` key above, read in one function.
+A view template and per-element overrides will each be more reserved keys on this record, read strictly as these are; version 1 records read as views with none of them, and graphics rules and crop regions (above) are the first of them. The shared spelling of an element's staging fields for every kind of element is the job that wires them into records; until it lands, a view's is the `@staging` key above, read in one function.

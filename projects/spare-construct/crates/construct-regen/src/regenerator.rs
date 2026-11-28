@@ -14,8 +14,9 @@
 //!
 //! Types, a document's parameter table and its levels have no shape: they are listed by kind and
 //! never built. A recipe that names a parameter is filled first ([`crate::parameters::filled`]),
-//! and one that reads its top tie next ([`crate::levels::filled`]); an element's place is its
-//! base level's ([`crate::levels::placed`]). Each element is listed under `reads` with every
+//! and one that reads its top tie next ([`crate::levels::filled`]), a stair laid out from it
+//! ([`crate::stairs::filled`]); an element's place is its base level's
+//! ([`crate::levels::placed`]). Each element is listed under `reads` with every
 //! record it reads (the parameter table, its type, its levels), so a change to any of them, or
 //! its deletion, builds it again in the same pass. A shape is then the same however the log was
 //! reached.
@@ -39,9 +40,12 @@
 //! A placed family (`family.instance`, job 6.4) is hosted the same way and rides the same rows:
 //! it is seated in its wall ([`crate::hosting::seat`]: its place and its turn, read from the wall
 //! each time, never stored), both in its own build and in the wall's, so the solids it is built
-//! with and the opening its wall cuts are in one place. A wall moved, or its type changed, builds
+//! with and the opening its wall cuts are in one place. In a wall at an angle every hosted
+//! element is seated so (piece A83: its seat in place of a turn, the same in both builds). A wall moved, or its type changed, builds
 //! it again with the wall; a change to its own record (its type, or the recipe version it names)
-//! builds its wall again; nothing else is.
+//! builds its wall again; nothing else is. One of a family the document holds (job 7.6) reads
+//! the family's record too: its `reads` row names it, so a family's record written again builds
+//! every copy that names it, and their walls with them.
 //!
 //! A floor is cut by its openings, which are hosted on it as a door is on a wall, and by every
 //! shaft of its document that passes wholly through its thickness (construct-openings' `reach`,
@@ -1020,7 +1024,8 @@ async fn inputs<R: Reader>(
         ),
         Err(_) => (Ok((element.placement, None)), Ok(Vec::new())),
     };
-    // A placed family is built as it is seated in its wall: turned as it stands there.
+    // A hosted element is built as it is seated in its wall: a placed family turned as it stands
+    // there, and anything in a wall at an angle with its seat.
     let placement = match placement {
         Ok((at, seated)) => {
             if let Some(seated) = seated {
@@ -1148,7 +1153,13 @@ async fn hosted_in<R: Reader>(
                 }));
             }
         };
-        match hosting::seat(edition, host, own, &record, &recipe, &hosting) {
+        // An embedded curtain wall is handed to its host as the opening it cuts.
+        let seated = match hosting::cut_of(edition, host, own, &record, &recipe, &hosting) {
+            Ok(Some(cut)) => Ok(cut),
+            Ok(None) => hosting::seat(edition, host, own, &record, &recipe, &hosting),
+            Err(e) => Err(e),
+        };
+        match seated {
             Ok((at, recipe)) => found.push(HostedInput {
                 key: key.clone(),
                 recipe,
@@ -1282,6 +1293,10 @@ fn reads_of(element: &Element) -> BTreeSet<String> {
             read.insert(type_id.to_string());
         }
     }
+    // A placed family of a family in the document is built from the family's record.
+    if let Some(family) = crate::families::in_document(&element.recipe) {
+        read.insert(family.to_string());
+    }
     read
 }
 
@@ -1307,7 +1322,10 @@ async fn input_of<R: Reader>(
     let recipe = recipe_of(reader, project, document, element).await?;
     Ok(match placed {
         Ok(placed) => {
-            let recipe = recipe.and_then(|recipe| levels::filled(&recipe, &placed));
+            let recipe = recipe
+                .and_then(|recipe| levels::filled(&recipe, &placed))
+                // A stair is laid out from the rise its levels give it.
+                .and_then(|recipe| crate::stairs::filled(&recipe));
             // A room's loop is found from the walls of its level once its height is read.
             let recipe = match recipe {
                 Ok(recipe) => {
