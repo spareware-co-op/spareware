@@ -54,6 +54,7 @@
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use crate::cloud::{
     curtains, dimensions, families, floors, grids, hosting, levels, loading, openings, params,
     roofs, rooms, schedules, sheets, stairs, views, walls,
@@ -97,6 +98,25 @@ const WINDOW: u64 = 128;
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The undo tool ([`Tool`]): undo and redo of a person's own steps, which ask every tool's undo
+/// rules.
+pub struct UndoTool;
+
+impl Tool for UndoTool {
+    const NAME: &'static str = "undo";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
 }
 
 /// Whether an applied entry of this command is a step.
