@@ -265,6 +265,7 @@ fn every_kind_is_one_entry_with_its_own_name() {
     assert_eq!(
         names,
         [
+            "column.grid_released",
             "dimension.out_of_range",
             "dimension.reference_missing",
             "dimension.reference_parallel",

@@ -53,11 +53,13 @@
 //! what each stands on and reads back (the server's read-only view).
 
 use crate::cloud::floors::{Answer, Run, length, need, units, why};
+use crate::cloud::stairs::{LengthView, PlanCutView, plan_cuts};
 use crate::cloud::{levels, params};
 use construct_categories::{COLUMNS, CategoryId};
 use construct_columns::{
     Column, ColumnError, ColumnSpec, Position, Section, Top, column_of, column_record,
-    default_column_types, is_column, new_column_type, spec_of, with_column, with_spec,
+    default_column_types, is_column, kept, new_column_type, released, spec_of, with_column,
+    with_spec,
 };
 use construct_levels::{Length, Tie};
 use construct_materials::MaterialId;
@@ -864,7 +866,7 @@ async fn move_columns<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
             (Err(refusal), _) | (_, Err(refusal)) => return Ok(Err(refusal)),
         };
         match with_column(record, &column) {
-            Ok(record) => changed.push(record),
+            Ok(record) => changed.push(kept(record)),
             Err(e) => return Ok(Err(why(e))),
         }
     }
@@ -940,6 +942,69 @@ async fn delete_columns<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
         claims: taken,
         ..kit_sync::Applied::default()
     }))
+}
+
+/// Lets go of the columns that stand on grid `grid`, which is about to be deleted: each keeps
+/// the place it stands at now as a plain point, with a note of the grids it stood on (the
+/// warnings list reads it, construct-columns' [`released`]), so deleting a grid never leaves a
+/// column that cannot be built. A column that cannot be read or does not resolve now is left as
+/// it is. Called by `grid.delete` in the same step, so undo puts the columns back with the grid.
+/// Returns what was written, for the step's changes.
+///
+/// # Errors
+/// A store error.
+pub(crate) async fn release_grid<T: Txn>(
+    txn: &mut T,
+    project: &Id,
+    document: &Id,
+    grid: &Id,
+) -> Result<Vec<Change>, StoreError> {
+    let all = records::read_document(txn, project, document).await?;
+    let records_of: Vec<Element> = all.into_values().map(|(_, record)| record).collect();
+    let grids: Vec<&Element> = records_of
+        .iter()
+        .filter(|record| record.kind == construct_grids::GRID_KIND)
+        .collect();
+    let Ok(datums) = construct_grids::Datums::from_records(grids.iter().copied()) else {
+        return Ok(Vec::new());
+    };
+    let mut changes = Vec::new();
+    for record in records_of.iter().filter(|record| is_column(record)) {
+        let Ok(column) = column_of(record) else {
+            continue;
+        };
+        let stands = column.position.grids();
+        if !stands.contains(&grid) {
+            continue;
+        }
+        let Ok(at) = column.position.resolve(&datums) else {
+            continue;
+        };
+        let name = grids
+            .iter()
+            .find(|g| g.id == *grid)
+            .map_or_else(|| grid.to_string(), |g| format!("grid {}", g.name));
+        let Ok(letgo) = released(record.clone(), at, &name) else {
+            continue;
+        };
+        let before = records::read_element(txn, project, document, &letgo.id)
+            .await?
+            .map(|(hash, _)| hash);
+        let hash = crate::cloud::elements::write_record(txn, project, &letgo).await?;
+        let pointer = Place::Piece {
+            project: project.clone(),
+            document: document.clone(),
+            piece: letgo.id.clone(),
+        };
+        txn.put(pointer.key(), kit_store::to_row(&hash.as_str())?)
+            .await?;
+        changes.push(Change {
+            piece: letgo.id.clone(),
+            before,
+            after: Some(hash),
+        });
+    }
+    Ok(changes)
 }
 
 /// The words for a generic command that should have been a column command.
@@ -1080,7 +1145,39 @@ pub struct ColumnView {
     pub words: String,
     /// What it reads back (height, section area, volume, mass), each shown in the document's units.
     pub quantities: Vec<QuantityView>,
+    /// Where it stands in height, as the document has its levels now: its base and its top above
+    /// the project's zero; none where its levels or its height cannot be read.
+    pub span: Option<SpanView>,
+    /// What it was let go of when that was deleted (`grid A`), as a notice; none otherwise.
+    pub released: Option<String>,
 }
+
+/// How high a column stands, above the project's zero.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub struct SpanView {
+    /// Its base.
+    pub base: LengthView,
+    /// Its top.
+    pub top: LengthView,
+}
+
+/// A place where two grid lines cross, as `column.place.grids` takes it.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub struct CrossingView {
+    /// The first grid's ID (the one that sorts first by ID).
+    pub first: String,
+    /// The second grid's ID.
+    pub second: String,
+    /// Which of their crossings, counted from 0 in order of x then y.
+    pub cross: usize,
+    /// Along x, as typed text.
+    pub x: String,
+    /// Along y, as typed text.
+    pub y: String,
+}
+
+/// The most crossings a view lists: a model of more grid lines than this lists its first pairs.
+pub const MOST_CROSSINGS: usize = 10_000;
 
 /// A tie to a level, as a page shows it.
 #[derive(Serialize, Debug, PartialEq, Eq)]
@@ -1131,6 +1228,11 @@ pub struct ColumnsView {
     pub types: Vec<ColumnTypeView>,
     /// Every column, by ID.
     pub columns: Vec<ColumnView>,
+    /// Where the grid lines cross, by the pair's IDs (at most [`MOST_CROSSINGS`]), so a page can
+    /// place columns at them without working any geometry out.
+    pub crossings: Vec<CrossingView>,
+    /// Every floor plan's cut plane, so a page can cut a column where its plan cuts it.
+    pub plans: Vec<PlanCutView>,
 }
 
 fn type_view(ty: &ElementType, spec: &ColumnSpec) -> ColumnTypeView {
@@ -1214,10 +1316,50 @@ pub async fn read_columns<R: Reader>(
         columns.push(column_view(reader, project, document, record, ty, &shown).await?);
     }
     columns.sort_by(|a, b| a.id.cmp(&b.id));
+    let crossings = crossings_of_grids(&all);
+    let plans = plan_cuts(reader, project, document).await?;
     Ok(Ok(ColumnsView {
         types: listed,
         columns,
+        crossings,
+        plans,
     }))
+}
+
+/// Where the document's grid lines cross each other, by the pair's IDs, from the lines as they are
+/// now; the points are construct-grids' (the nearest step to the true crossing).
+fn crossings_of_grids(all: &std::collections::BTreeMap<Id, (Id, Element)>) -> Vec<CrossingView> {
+    let grids: Vec<&Element> = all
+        .values()
+        .map(|(_, record)| record)
+        .filter(|record| record.kind == construct_grids::GRID_KIND)
+        .collect();
+    let Ok(datums) = construct_grids::Datums::from_records(grids.iter().copied()) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<&Id> = grids.iter().map(|record| &record.id).collect();
+    ids.sort();
+    let mut found = Vec::new();
+    for (at, first) in ids.iter().enumerate() {
+        for second in ids.iter().skip(at.saturating_add(1)) {
+            let Ok(crossings) = datums.crossings_of(first, second) else {
+                continue;
+            };
+            for (cross, crossing) in crossings.iter().enumerate() {
+                if found.len() >= MOST_CROSSINGS {
+                    return found;
+                }
+                found.push(CrossingView {
+                    first: first.to_string(),
+                    second: second.to_string(),
+                    cross,
+                    x: crossing.point.x.to_string(),
+                    y: crossing.point.y.to_string(),
+                });
+            }
+        }
+    }
+    found
 }
 
 /// One column as a page lists it: its record, its built row and what it reads back.
@@ -1263,6 +1405,8 @@ async fn column_view<R: Reader>(
                 state: "failed",
                 words: "its record is not a column's as this server writes it".to_owned(),
                 quantities: Vec::new(),
+                span: None,
+                released: None,
             });
         };
         let (top, height) = match &column.top {
@@ -1306,6 +1450,38 @@ async fn column_view<R: Reader>(
                     shown: row.shown,
                 })
                 .collect(),
+            span: span_of(reader, project, document, record).await?,
+            released: construct_columns::released_from(record).map(ToOwned::to_owned),
         })
     }
+}
+
+/// A column's base and top above the project's zero, as the levels stand now.
+async fn span_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    record: &Element,
+) -> Result<Option<SpanView>, StoreError> {
+    let Ok(placed) = placing::placed(reader, project, document, record, At::Now).await? else {
+        return Ok(None);
+    };
+    let Ok(filled) = placing::recipe_at(reader, project, document, record, At::Now).await? else {
+        return Ok(None);
+    };
+    let height = filled
+        .args
+        .get(construct_columns::HEIGHT_ARG)
+        .and_then(Json::as_str)
+        .and_then(Value::from_stored);
+    let (Some(base), Some(Value::Length(height))) = (placed.elevation, height) else {
+        return Ok(None);
+    };
+    let Some(top) = base.steps().checked_add(height.steps()) else {
+        return Ok(None);
+    };
+    Ok(Some(SpanView {
+        base: LengthView::of(base),
+        top: LengthView::of(Length::from_steps(top)),
+    }))
 }

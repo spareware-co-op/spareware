@@ -55,6 +55,9 @@ pub const RING_ARG: &str = "ring";
 pub const MATERIAL_ARG: &str = "material";
 /// The filled recipe's argument that lists the grid lines the column stands on.
 pub const GRIDS_ARG: &str = "grids";
+/// The record's `props` key that says a column was let go of a grid line: the text it holds is
+/// the line's name, so a warning can say which ([`released`]).
+pub const RELEASED_KEY: &str = "released_from";
 /// The tallest a column is: 100 m.
 pub const MOST_HEIGHT: Length = Length::from_mm(100_000);
 
@@ -395,6 +398,45 @@ pub fn with_column(mut record: Element, column: &Column) -> Result<Element, Colu
         },
     );
     Ok(record)
+}
+
+/// A column let go of its grid lines: the same column standing at `at` (grid steps) as a plain
+/// point, with `grids` (what it stood on that is deleted, as a person reads it: `grid A`) kept in
+/// its `props` under
+/// [`RELEASED_KEY`] so a warning can say what it stood on. Used when a grid is deleted under a
+/// column: it keeps its place, never fails to build. Its turn, type, base and top are as they were.
+///
+/// # Errors
+/// [`ColumnError::NotAColumn`] for a record that is not a column's, or `at` that is not a point
+/// a length holds.
+pub fn released(record: Element, at: [i64; 2], grids: &str) -> Result<Element, ColumnError> {
+    let mut column = column_of(&record)?;
+    column.position = Position::Point {
+        x: Length::from_steps(at[0]),
+        y: Length::from_steps(at[1]),
+    };
+    let mut record = with_column(record, &column)?;
+    record
+        .props
+        .insert(RELEASED_KEY.to_owned(), grids.to_owned());
+    Ok(record)
+}
+
+/// What a column was let go of, when it was ([`released`]).
+#[must_use]
+pub fn released_from(record: &Element) -> Option<&str> {
+    if record.kind != COLUMN_KIND {
+        return None;
+    }
+    record.props.get(RELEASED_KEY).map(String::as_str)
+}
+
+/// A column's record with the note that it was let go of its grid lines taken away (a person
+/// has placed it again).
+#[must_use]
+pub fn kept(mut record: Element) -> Element {
+    record.props.remove(RELEASED_KEY);
+    record
 }
 
 /// The height from a base to a top: construct-levels' [`span`], and checked to stand up.

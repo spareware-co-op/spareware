@@ -658,7 +658,7 @@ pub struct LengthView {
 }
 
 impl LengthView {
-    fn of(length: Length) -> Self {
+    pub(crate) fn of(length: Length) -> Self {
         Self {
             value: Value::Length(length).stored(),
             shown: show(length, &units()),
@@ -877,7 +877,7 @@ pub async fn read_stairs<R: Reader>(
 
 /// Every floor plan's cut plane, by the plans' names; a plan whose range does not resolve against
 /// the levels is left out (the views list says why).
-async fn plan_cuts<R: Reader>(
+pub(crate) async fn plan_cuts<R: Reader>(
     reader: &mut R,
     project: &Id,
     document: &Id,

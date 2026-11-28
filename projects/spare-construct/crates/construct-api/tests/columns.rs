@@ -936,6 +936,148 @@ async fn the_read_only_view_lists_types_and_columns() {
     );
 }
 
+/// Deleting a grid that columns stand on never fails a build: each of them keeps the place it
+/// stands at as a plain point, with a notice in the warnings list; the other columns follow their
+/// grids still; a moved grid no longer moves a let-go column; the delete is one step and undo puts
+/// the grid and the columns' grids back; a column moved on its own is no longer noticed.
+#[tokio::test]
+async fn a_grid_deleted_under_columns_leaves_them_standing_as_points() {
+    let stack = Stack::new().await;
+    stack
+        .edit("column.place.grids", on_the_grid())
+        .await
+        .unwrap();
+    let before = stack.rows("piece").await;
+    stack
+        .edit("grid.delete", json!({ "grid": "G-2" }))
+        .await
+        .unwrap();
+    for (id, at) in [("C-2a", [6000, 0]), ("C-2b", [6000, 5000])] {
+        assert_eq!(stack.centre(id).await, at, "{id} keeps its place");
+        let record = stack.record(id).await.unwrap();
+        assert!(record.recipe.args["at"]["point"].is_array());
+        assert_eq!(
+            record.props.get("released_from"),
+            Some(&"grid G-2".to_owned())
+        );
+    }
+    let untouched = stack.record("C-1a").await.unwrap();
+    assert_eq!(untouched.recipe.args["at"]["grids"], json!(["G-1", "G-A"]));
+    assert!(!untouched.props.contains_key("released_from"));
+    stack
+        .edit(
+            "grid.move",
+            json!({ "grid": "G-A", "dx": "0", "dy": "250 mm" }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stack.centre("C-1a").await, [0, 250]);
+    assert_eq!(stack.centre("C-2a").await, [6000, 0], "no longer on a grid");
+
+    stack.regen.catch_up(&i("p")).await.unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let listed =
+        construct_api::cloud::warnings::read_warnings(&mut snapshot, &i("p"), &i(DOCUMENT))
+            .await
+            .unwrap();
+    let kinds: Vec<(&str, &str, &str)> = listed
+        .warnings
+        .iter()
+        .map(|w| (w.kind, w.severity, w.words.as_str()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            (
+                "column.grid_released",
+                "notice",
+                "Column C-2a stood on grid G-2, which is deleted: it keeps its place as a point"
+            ),
+            (
+                "column.grid_released",
+                "notice",
+                "Column C-2b stood on grid G-2, which is deleted: it keeps its place as a point"
+            ),
+        ]
+    );
+    let view = read_columns(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap()
+        .unwrap();
+    let released = view.columns.iter().find(|c| c.id == "C-2a").unwrap();
+    assert_eq!(released.state, "built");
+    assert_eq!(
+        released.at,
+        AtView::Point {
+            x: "6000 mm".to_owned(),
+            y: "0 mm".to_owned()
+        }
+    );
+
+    stack
+        .edit(
+            "column.move",
+            json!({ "elements": ["C-2a"], "dx": "0", "dy": "0" }),
+        )
+        .await
+        .unwrap();
+    assert!(
+        !stack
+            .record("C-2a")
+            .await
+            .unwrap()
+            .props
+            .contains_key("released_from")
+    );
+
+    // One step: its undo gives back the grid and the columns' places on it.
+    for _ in 0..3 {
+        stack.edit("edit.undo", json!({})).await.unwrap();
+    }
+    assert_eq!(stack.rows("piece").await, before);
+    assert_eq!(stack.centre("C-2a").await, [6000, 0]);
+    let back = stack.record("C-2b").await.unwrap();
+    assert_eq!(back.recipe.args["at"]["grids"], json!(["G-2", "G-B"]));
+}
+
+/// A column turned by any angle: a 400 mm square turned 30 degrees is 546.4 mm across, so its box is 546 to 548 mm (the box rounds outward to whole millimetres; the turn's
+/// rounding is stated in construct-columns, half a step and 2^-24 of one), its centre and its
+/// height are as before, and its quantities do not depend on the turn.
+#[tokio::test]
+async fn a_column_turned_by_any_angle() {
+    let stack = Stack::new().await;
+    let mut turned = place("C-t", 2000, 1000);
+    turned["turn"] = json!("30");
+    stack.edit("column.place", turned).await.unwrap();
+    let (lo, hi) = stack.bounds("C-t").await.unwrap();
+    let across = [hi[0] - lo[0], hi[1] - lo[1]];
+    assert!(across.iter().all(|a| (546..=548).contains(a)), "{across:?}");
+    assert_eq!(stack.centre("C-t").await, [2000, 1000]);
+    assert_eq!(hi[2], 3000);
+    for (turn, size) in [("180", 400), ("360", 400), ("45", 566)] {
+        stack
+            .edit("column.turn", json!({ "elements": ["C-t"], "turn": turn }))
+            .await
+            .unwrap();
+        let (lo, hi) = stack.bounds("C-t").await.unwrap();
+        let wide = hi[0] - lo[0];
+        assert!((wide - size).abs() <= 1, "{turn}: {wide}");
+    }
+    stack.regen.catch_up(&i("p")).await.unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let view = read_columns(&mut snapshot, &i("p"), &i(DOCUMENT))
+        .await
+        .unwrap()
+        .unwrap();
+    let column = view.columns.iter().find(|c| c.id == "C-t").unwrap();
+    let volume = column
+        .quantities
+        .iter()
+        .find(|q| q.id == "column.volume")
+        .unwrap();
+    assert_eq!(volume.shown.as_deref(), Some("0.48 m³"));
+}
+
 #[tokio::test]
 async fn replaying_the_log_from_empty_gives_the_same_bytes() {
     let stack = Stack::new().await;

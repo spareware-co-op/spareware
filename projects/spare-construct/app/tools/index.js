@@ -20,3 +20,4 @@ import './architecture/family.js';
 import './project/families.js';
 import './architecture/opening.js';
 import './architecture/stair.js';
+import './architecture/column.js';

@@ -4277,5 +4277,251 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   const mismatched = await page.evaluate(() => window.spare.mismatches);
   check(mismatched.length === 0, `every body ${name}'s page built, the curtain walls' and the wall cut for one included, matches the server's`);
 }
+
+console.log('\n   Columns, at grid intersections');
+// Anna draws two vertical and two horizontal grid lines in clear ground with the grid tool, picks the
+// column tool, has the server make its default column types, chooses the 400 by 400 type with an
+// unconnected height of 3 m and the way "pick grid lines", and clicks the four lines: the tool shows a
+// dot at each crossing and says how many. One button places a column at each crossing, and Ben sees
+// the four, each drawn cut (filled) because it stands across the plan's cut plane, each on its two
+// grid lines on the server, each the section of its type. Ben makes a schedule of columns from the
+// project browser and its table has the four rows. Anna places a column turned 30 degrees at a point,
+// and a short one that ends below the cut plane, drawn as a thin outline. Anna deletes a grid line two
+// of the columns stand on: both stay where they were as points, the warnings list says so, Ben's
+// properties palette says so, and Anna's undo puts the grid line and their place on it back. Nobody
+// changes what the other touched in the last 30 s without the other letting go first.
+// This section's own helpers: a started run (one section on a saved state) has none of an earlier section's.
+const colToArchitecture = async (page) => {
+  await page.click('#b-disc');
+  await page.click('#disc-menu [data-a="architecture"]');
+  await page.waitForSelector('#pv-canvas g.element[data-id="D-101"]');
+  await page.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+};
+const colOnPlan = (page, x, y) =>
+  page.evaluate(([mx, my]) => {
+    const svg = document.querySelector('#pv-canvas svg');
+    const at = svg.createSVGPoint();
+    at.x = mx;
+    at.y = my;
+    const screen = at.matrixTransform(svg.getScreenCTM());
+    return { x: screen.x, y: screen.y };
+  }, [x, y]);
+const colClick = async (page, x, y) => {
+  const at = await colOnPlan(page, x, y);
+  await page.mouse.click(at.x, at.y);
+};
+const colOwnGrids = '#pv-canvas g.datum.own[data-kind="grid"]';
+const colGridGroup = (id) => `#pv-canvas g.datum[data-datum="${id}"]`;
+const colScheduleLeaf = (name) => `#browser [data-act="stackschedule"]:has(span:text-is("${name}"))`;
+const colTable = '#stack-sched table[data-schedule-table]';
+await colToArchitecture(anna);
+await colToArchitecture(ben);
+const colGridsBefore = await anna.locator(colOwnGrids).count();
+const colDrawGrid = async (from, to) => {
+  await anna.click('#ribbon [data-act="dtool"][data-a="architecture:grid"]');
+  await colClick(anna, ...from);
+  await colClick(anna, ...to);
+  await anna.keyboard.press('Escape');
+};
+const colLines = [
+  [[13000, -5500], [13000, -2500]],
+  [[16000, -5500], [16000, -2500]],
+  [[12500, -5000], [16500, -5000]],
+  [[12500, -3500], [16500, -3500]],
+];
+for (const [at, [from, to]] of colLines.entries()) {
+  await colDrawGrid(from, to);
+  for (const page of [anna, ben]) await page.waitForFunction(([count, here]) => document.querySelectorAll(here).length === count, [colGridsBefore + at + 1, colOwnGrids]);
+}
+const colGridId = (page, [from]) => page.locator(`${colOwnGrids}[data-x0="${from[0]}"][data-y0="${from[1]}"]`).getAttribute('data-datum');
+const colGrids = [];
+for (const line of colLines) colGrids.push(await colGridId(anna, line));
+pass("Anna draws two vertical and two horizontal grid lines with the grid tool, and Ben's browser draws them");
+
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:column"]');
+const colField = (key) => `#pv-side [data-key="column-${key}"]`;
+await anna.waitForSelector(colField('defaults'));
+check((await asAnna('columns')).types.length === 0, 'the model has no column types yet, and the tool offers to add the default ones');
+await anna.click(colField('defaults'));
+await anna.waitForSelector(`${colField('type')} option[value="column-concrete-400x400"]`, { state: 'attached' });
+check(
+  (await asAnna('columns')).types.length === 3 && (await anna.locator(`${colField('type')} option`).count()) === 3,
+  'the column tool has the server make its default column types through the log, and offers them',
+);
+await anna.locator(colField('type')).selectOption('column-concrete-400x400');
+await anna.locator(colField('top')).selectOption('free');
+await anna.locator(colField('height')).fill('3000 mm');
+await anna.locator(colField('height')).press('Enter');
+await anna.locator(colField('mode')).selectOption('pick');
+await anna.waitForSelector('#pv-side [data-column-picked]');
+const colPick = async ([from, to], along) => {
+  // A point on the line clear of its crossings.
+  const at = from[0] === to[0] ? [from[0], along] : [along, from[1]];
+  await colClick(anna, ...at);
+};
+const colPicks = [[colLines[0], -2800, [1, 0]], [colLines[2], 14500, [2, 1]], [colLines[1], -2800, [3, 2]], [colLines[3], 14500, [4, 4]]];
+for (const [line, along, want] of colPicks) {
+  await colPick(line, along);
+  await anna.waitForFunction(
+    ([count, crossings]) => new RegExp(`^${count} grid lines? picked, ${crossings} crossings?`).test(document.querySelector('#pv-side [data-column-picked]')?.textContent ?? ''),
+    want,
+  );
+}
+check(
+  (await anna.locator('#pv-canvas circle.column-cross').count()) === 4,
+  'four grid lines picked: the tool draws a dot at each of their four crossings, as the server lists them',
+);
+const colKnown = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await anna.click(colField('place'));
+const colsOf = (known) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'column' && !known.includes(p.el.id)).map((p) => p.el.id).sort();
+await ben.waitForFunction((known) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'column' && !known.includes(p.el.id)).length === 4, colKnown);
+const colIds = await ben.evaluate(colsOf, colKnown);
+await anna.keyboard.press('Escape');
+const colView = async () => (await asAnna('columns')).columns.filter((c) => colIds.includes(c.id));
+await until(colView, (cols) => cols.length === 4 && cols.every((c) => c.state === 'built'), 'the server builds the four columns');
+const colRows = await colView();
+const crossingsWanted = ['13000,-5000', '13000,-3500', '16000,-5000', '16000,-3500'];
+const colCentre = (page, id) =>
+  page.evaluate((one) => {
+    const { min, max } = window.spare.elements.get(one).shape.bounds;
+    return `${(min[0] + max[0]) / 2},${(min[1] + max[1]) / 2}`;
+  }, id);
+const colCentres = async (page) => (await Promise.all(colIds.map((id) => colCentre(page, id)))).sort();
+check(
+  colRows.every((c) => c.at.on === 'grids' && c.type === 'column-concrete-400x400' && c.height === '3000 mm' && c.top === null && c.base.level === '1') &&
+    JSON.stringify([...new Set(colRows.flatMap((c) => [c.at.first, c.at.second]))].sort()) === JSON.stringify([...colGrids].sort()),
+  'the server holds the four columns by their grid lines, of the 400 by 400 type, 3000 mm high, on the plan\'s level',
+);
+for (const page of [anna, ben]) {
+  await page.waitForFunction((ids) => ids.every((id) => window.spare.elements.get(id)?.shape), colIds);
+  check(JSON.stringify(await colCentres(page)) === JSON.stringify([...crossingsWanted].sort()), 'a column stands at each of the four crossings');
+  const sizes = await page.evaluate((ids) => ids.map((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return [max[0] - min[0], max[1] - min[1], max[2] - min[2]].join('x');
+  }), colIds);
+  check(sizes.every((s) => s.startsWith('400x400x3000')), 'each is 400 by 400 and 3000 mm high');
+  for (const id of colIds) await page.waitForSelector(`g.element[data-id="${id}"] .body.column.column-cut`);
+}
+pass('both browsers draw each column cut, filled, as it stands across the plan\'s cut plane');
+await shot(ben, 'ben-columns');
+
+// Ben makes a schedule of columns from the browser's Schedules group.
+const colCloseSchedule = async (page) => {
+  await page.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+  await page.waitForSelector('#dlg', { state: 'hidden' });
+};
+const colSchedIds = async (page, ids, label) => {
+  const read = () => page.locator(`${colTable} tr[data-row]`).evaluateAll((rows) => rows.map((r) => r.dataset.row).sort()).catch(() => []);
+  for (let tries = 0; tries < 100; tries += 1) {
+    if (JSON.stringify(await read()) === JSON.stringify([...ids].sort())) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`FAILED: ${label}: the rows were ${JSON.stringify(await read())}, wanted ${JSON.stringify(ids)}`);
+};
+await colToArchitecture(ben);
+await ben.click('#browser [data-act="view"][data-a="l1"]');
+await ben.locator('#browser [data-key="new-schedule-name"]').fill('Column list');
+await ben.locator('#browser [data-key="new-schedule-category"]').selectOption({ label: 'Columns' });
+await ben.locator('#browser [data-act="stacknewschedule"]').click();
+await anna.waitForSelector(colScheduleLeaf('Column list'));
+await ben.waitForSelector(colTable);
+await colSchedIds(ben, colIds, "Ben's table of columns has a row for each of the four columns");
+pass("Ben's schedule of columns lists the four columns Anna placed, and Anna's list shows the schedule");
+await colCloseSchedule(ben);
+const colSchedule = (await asAnna('schedules')).find((s) => s.name === 'Column list');
+await ben.locator(`#browser [data-act="stackscheddelete"][data-a="${colSchedule.id}"]`).click();
+await anna.waitForFunction((name) => ![...document.querySelectorAll('#browser [data-act="stackschedule"] span')].some((s) => s.textContent === name), 'Column list');
+
+// A column turned 30 degrees at a point, and one that ends below the cut plane.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:column"]');
+await anna.locator(colField('mode')).selectOption('point');
+await anna.locator(colField('turn')).fill('30');
+await anna.locator(colField('turn')).press('Enter');
+const colKnownAgain = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await colClick(anna, 14500, -4250);
+await ben.waitForFunction((known) => [...window.spare.elements.values()].some((p) => p.el.kind === 'column' && !known.includes(p.el.id)), colKnownAgain);
+const colTurned = (await ben.evaluate(colsOf, colKnownAgain))[0];
+const colTurnedRow = async () => (await asAnna('columns')).columns.find((c) => c.id === colTurned);
+await until(colTurnedRow, (c) => c?.state === 'built', 'the server builds the turned column');
+check((await colTurnedRow()).turn === '30' && (await colTurnedRow()).at.on === 'point', 'a column Anna clicks at a point is turned 30 degrees, on the server');
+for (const page of [anna, ben]) {
+  await page.waitForFunction((id) => window.spare.elements.get(id)?.shape, colTurned);
+  const across = await page.evaluate((id) => {
+    const { min, max } = window.spare.elements.get(id).shape.bounds;
+    return [max[0] - min[0], max[1] - min[1]];
+  }, colTurned);
+  check(across.every((a) => a >= 546 && a <= 548), `a 400 mm square turned 30 degrees is about 546 mm across: ${across}`);
+}
+await anna.locator(colField('turn')).fill('0');
+await anna.locator(colField('turn')).press('Enter');
+await anna.locator(colField('height')).fill('500 mm');
+await anna.locator(colField('height')).press('Enter');
+const colKnownLow = await anna.evaluate(() => [...window.spare.elements.keys()]);
+await colClick(anna, 14500, -2900);
+await ben.waitForFunction((known) => [...window.spare.elements.values()].some((p) => p.el.kind === 'column' && !known.includes(p.el.id)), colKnownLow);
+const colLow = (await ben.evaluate(colsOf, colKnownLow))[0];
+for (const page of [anna, ben]) await page.waitForSelector(`g.element[data-id="${colLow}"] .body.column.column-below`);
+pass("a column 500 mm high, which ends below the plan's cut plane, is drawn as a thin outline in both browsers");
+await anna.keyboard.press('Escape');
+
+// Anna deletes the grid line two of the columns stand on.
+const colWarnings = async () => (await asAnna('warnings')).warnings.filter((w) => w.kind === 'column.grid_released');
+check((await colWarnings()).length === 0, 'no column has lost a grid line yet');
+const colV2 = colGrids[1];
+const colV2Bubble = await boxOf(anna.locator(`${colGridGroup(colV2)} circle.bub`), 'the bubble of the second vertical grid line');
+await anna.mouse.click(colV2Bubble.x + colV2Bubble.width / 2, colV2Bubble.y + colV2Bubble.height / 2);
+await anna.waitForSelector(`${colGridGroup(colV2)}[data-picked="yes"]`);
+await anna.waitForFunction(() => !document.activeElement?.closest('input,textarea,select'));
+await anna.keyboard.press('Delete');
+await anna.waitForFunction((at) => !document.querySelector(at), colGridGroup(colV2));
+await ben.waitForFunction((at) => !document.querySelector(at), colGridGroup(colV2));
+const onV2 = colRows.filter((c) => c.at.first === colV2 || c.at.second === colV2).map((c) => c.id).sort();
+check(onV2.length === 2, 'two of the four columns stand on that grid line');
+await until(colWarnings, (found) => found.length === 2, 'the warnings list says two columns lost their grid line');
+check(
+  JSON.stringify((await colWarnings()).flatMap((w) => w.elements).sort()) === JSON.stringify(onV2) && (await colWarnings()).every((w) => w.severity === 'notice' && /which is deleted: it keeps its place as a point$/.test(w.words)),
+  'the warnings list a notice for each, in words, and the other two columns are not in it',
+);
+const colAfter = await colView();
+check(
+  colAfter.every((c) => c.state === 'built') &&
+    onV2.every((id) => colAfter.find((c) => c.id === id).at.on === 'point') &&
+    colAfter.filter((c) => !onV2.includes(c.id)).every((c) => c.at.on === 'grids'),
+  'every column still builds: the two keep their place as points and the others stay on their grid lines',
+);
+for (const page of [anna, ben]) {
+  await page.waitForFunction((ids) => ids.every((id) => window.spare.elements.get(id)?.shape), colIds);
+  check(JSON.stringify(await colCentres(page)) === JSON.stringify([...crossingsWanted].sort()), 'all four stand where they stood, in both browsers');
+}
+await ben.keyboard.press('Escape');
+const colLostBox = await box(ben, onV2[0]);
+await ben.mouse.click(colLostBox.x + colLostBox.width / 2, colLostBox.y + colLostBox.height / 2);
+await ben.waitForSelector('#pv-side [data-column-released]');
+check(
+  /which was deleted\. It keeps its place as a point\.$/.test(await ben.locator('#pv-side [data-column-released]').textContent()),
+  "Ben's properties palette tells him the column keeps its place as a point since its grid line was deleted",
+);
+check(
+  (await ben.locator('#pv-side [data-column-element]').textContent()).includes('Concrete 400 x 400') &&
+    (await ben.locator('#pv-side').textContent()).includes('0.48 m'),
+  "the palette shows the column's type and its quantities (volume)",
+);
+await ben.keyboard.press('Escape');
+
+// Anna's undo gives the grid line back, and the columns their place on it.
+await anna.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'grid.delete');
+await anna.click('#qat [data-act="stackundo"]');
+await ben.waitForSelector(colGridGroup(colV2));
+await until(colView, (cols) => cols.every((c) => c.at.on === 'grids' && c.released === null), 'the undo puts the columns back on their grid lines');
+await until(colWarnings, (found) => found.length === 0, 'and the notices go');
+for (const page of [anna, ben]) {
+  check(JSON.stringify(await colCentres(page)) === JSON.stringify([...crossingsWanted].sort()), 'the columns stand where they stood, in both browsers, on their grid lines again');
+}
+pass("Anna's undo of the grid line's deletion gives it back, and the columns' place on it");
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the columns' included, matches the server's`);
+}
 await browser.close();
 console.log('\nThe browser checks passed.');

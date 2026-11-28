@@ -481,7 +481,13 @@ async fn change_grid<T: Txn>(
         return Ok(Err(refusal));
     }
     if run.edit.cmd == "grid.delete" {
-        return run.delete_claimed(&id, hash).await;
+        // The columns standing on it keep their place as points (construct-api's columns module).
+        let letgo =
+            crate::cloud::columns::release_grid(run.txn, run.project, run.document, &id).await?;
+        return Ok(run.delete_claimed(&id, hash).await?.map(|mut applied| {
+            applied.changes.extend(letgo);
+            applied
+        }));
     }
     let Some(grid) = datums.grid(&id) else {
         return Ok(Err(why(GridError::UnknownGrid(id))));

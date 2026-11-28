@@ -16,7 +16,8 @@
 //! - [`column`]: [`Column`], [`Position`] (a point, or two grid lines' crossing), [`Top`] (a level
 //!   and an offset, or an unconnected height), the element record ([`column_record`],
 //!   [`column_of`], [`with_column`]), the recipe, [`filled_by_type`] and [`finish`] (what the
-//!   builders take), [`height_between`] and [`check_height`] (a top below its base is refused by
+//!   builders take), [`released`] (a column let go of grids that were deleted keeps its place as a
+//!   point, with a note the warnings read), [`height_between`] and [`check_height`] (a top below its base is refused by
 //!   name).
 //! - [`measure`]: [`quantities`] and [`read_only`]: height, section area, volume and mass,
 //!   worked out, never stored.
@@ -46,7 +47,7 @@
 //!   the ring.
 //! - Slanted columns, and columns attached to beams and floors (CON-A5-F1-P1's other words);
 //!   structural columns of steel sections (CON-A5-F1-P4, section libraries).
-//! - The page tool, plan and 3D drawing and the two-browser section: the second half, a later lane.
+//! - 3D drawing of a turned or round column's true shape: the kernel's (interim rows above).
 
 pub mod column;
 pub mod column_type;
@@ -58,9 +59,10 @@ pub mod stored;
 
 pub use column::{
     AT_ARG, COLUMN_KIND, COLUMN_OP, Column, GRIDS_ARG, HEIGHT_ARG, MATERIAL_ARG, MOST_HEIGHT,
-    OP_VERSION, Position, RING_ARG, SECTION_ARG, TURN_ARG, Top, check_height, column_of,
-    column_recipe, column_record, filled_by_type, finish, grids_read, height_between, is_column,
-    is_column_recipe, reads_section, section_arg, tie_arg, with_column,
+    OP_VERSION, Position, RELEASED_KEY, RING_ARG, SECTION_ARG, TURN_ARG, Top, check_height,
+    column_of, column_recipe, column_record, filled_by_type, finish, grids_read, height_between,
+    is_column, is_column_recipe, kept, reads_section, released, released_from, section_arg,
+    tie_arg, with_column,
 };
 pub use column_type::{new_column_type, spec_of, with_spec};
 pub use defaults::{DefaultColumn, default_column_types, default_columns};
