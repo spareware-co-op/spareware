@@ -109,6 +109,18 @@ pub struct Room {
     pub state: RoomState,
 }
 
+/// A column that was let go of the grid lines it stood on when they were deleted, and keeps its
+/// place as a point.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReleasedColumn {
+    /// Its element ID.
+    pub id: Id,
+    /// How people name it in a sentence: `column C1`.
+    pub who: String,
+    /// What it stood on that was deleted, as a person reads it: `grid A`.
+    pub grids: String,
+}
+
 /// Why a stretch cannot be taken as an insert's opening.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InsertError {
@@ -195,6 +207,8 @@ pub struct Model {
     pub dimensions: Vec<Warning>,
     /// Every door and window hosted in a wall, with the stretch its opening takes.
     pub inserts: Vec<Insert>,
+    /// Every column let go of its grid lines (construct-columns' `released_from`).
+    pub released_columns: Vec<ReleasedColumn>,
 }
 
 /// One kind of warning.
@@ -219,7 +233,12 @@ impl Rule {
 }
 
 /// Every kind there is. Add a kind here, with its function; nothing else changes.
-pub const RULES: [Rule; 7] = [
+pub const RULES: [Rule; 8] = [
+    Rule {
+        kind: "column.grid_released",
+        severity: Severity::Notice,
+        find: released_columns,
+    },
     Rule {
         kind: "dimension.out_of_range",
         severity: Severity::Warning,
@@ -266,6 +285,25 @@ fn measured_dimensions(rule: &Rule, model: &Model) -> Vec<Warning> {
         .iter()
         .filter(|found| found.kind == rule.kind)
         .map(|found| rule.warn(found.elements.clone(), found.words.clone()))
+        .collect()
+}
+
+/// A column whose grid lines were deleted: it keeps its place as a point. Its elements: the
+/// column.
+fn released_columns(rule: &Rule, model: &Model) -> Vec<Warning> {
+    model
+        .released_columns
+        .iter()
+        .map(|column| {
+            rule.warn(
+                vec![column.id.clone()],
+                format!(
+                    "{} stood on {}, which is deleted: it keeps its place as a point",
+                    capital(&column.who),
+                    column.grids
+                ),
+            )
+        })
         .collect()
 }
 

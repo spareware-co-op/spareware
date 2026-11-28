@@ -66,6 +66,15 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .stair-cut { stroke: var(--ink); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .stair-walk { fill: none; stroke: var(--ink); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .stair-walk-start, .dw .stair-arrow { fill: var(--ink); stroke: none; pointer-events: none; }
+/* A column: the outline of its section, filled where the view's cut plane crosses it, a thin outline where it ends below the plane, dashed where it starts above; and the tool's sketch of picked grid lines, their crossings and the box. */
+.dw .column { fill: var(--sink); fill-opacity: .2; stroke: var(--ink); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.dw .column-cut { fill: var(--ink); fill-opacity: .7; stroke-width: 1.5px; }
+.dw .column-below { fill: none; stroke: var(--ink-2); }
+.dw .column-above { fill: none; stroke: var(--ink-2); stroke-dasharray: 6 4; }
+.dw .column.sel { stroke: var(--app-strong); stroke-width: 2px; }
+.dw .column-cross { fill: var(--app-strong); stroke: none; pointer-events: none; }
+.dw .column-picked { fill: none; stroke: var(--app-strong); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .column-box { fill: var(--app-strong); fill-opacity: .08; stroke: var(--app-strong); stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .floor-refused { fill: var(--danger-tint); fill-rule: evenodd; stroke: var(--danger); stroke-width: 1.5px; stroke-dasharray: 6 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Grids and reference planes: a linked model's are seen, never picked; the open model's are picked by a band along the line. */

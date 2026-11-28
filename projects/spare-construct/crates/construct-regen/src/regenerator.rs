@@ -643,6 +643,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         let mut old_host = None;
         let mut was_read = None;
         let mut was_shaft = false;
+        let mut was_grid = false;
         let mut spaces: Vec<Id> = Vec::new();
         if let Some(hash) = old.as_ref().map(|old| &old.input).or(before) {
             let record = kit_store::Place::Record {
@@ -656,6 +657,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             }
             old_host = hosting::host_of(&before);
             was_shaft = is_shaft_record(&before);
+            was_grid = before.kind == construct_grids::GRID_KIND;
             if rooms::is_spatial(&before.kind)
                 && let Some(level) = old.as_ref().and_then(|old| old.level.clone())
             {
@@ -685,6 +687,10 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             let mut hosts: Vec<Id> = old_host.into_iter().collect();
             if was_shaft {
                 hosts.extend(of_kind(txn, project, document, construct_slabs::FLOOR_KIND).await?);
+            }
+            // A column on a grid line that is gone builds again and says so.
+            if was_grid {
+                hosts.extend(readers_of(txn, project, document, element_id).await?);
             }
             return Ok((
                 None,
@@ -722,6 +728,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         let edition = edition_of(txn, project, document).await?;
         let mut inputs = inputs(txn, project, document, &edition, &element, &hosted).await?;
         let mut records = reads_of(&element);
+        // A column reads the grid lines it stands on, from its own recipe, so that it builds
+        // again when one is made or moved even if it failed to build before.
+        records.extend(crate::columns::grids_read(&element.recipe));
         // A room reads the walls its loop runs along, as its filled recipe names them.
         if let Ok(recipe) = &inputs.recipe {
             records.extend(rooms::walls_read(recipe));
@@ -785,6 +794,12 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         hosts.dedup();
         if was_shaft || is_shaft_record(&element) {
             hosts.extend(of_kind(txn, project, document, construct_slabs::FLOOR_KIND).await?);
+        }
+        // The columns that stand on a grid line that changed build again, one step deep.
+        if was_grid || element.kind == construct_grids::GRID_KIND {
+            hosts.extend(readers_of(txn, project, document, element_id).await?);
+            hosts.sort();
+            hosts.dedup();
         }
         if rooms::is_spatial(&element.kind)
             && let Some(level) = &placed.level
@@ -1172,6 +1187,27 @@ async fn of_kind<R: Reader>(
     Ok(found)
 }
 
+/// The elements whose `reads` row lists `changed`, in key order: a grid line that changes builds
+/// again the columns that stand on it.
+async fn readers_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    changed: &Id,
+) -> Result<Vec<Id>, StoreError> {
+    let mut found = Vec::new();
+    for (key, row) in reader.scan(&list::reads(project, document)).await? {
+        let Some(Place::Reads { element, .. }) = Place::parse(&key) else {
+            continue;
+        };
+        let reads: Reads = from_row(&row)?;
+        if element != *changed && reads.reads(changed.as_str()) {
+            found.push(element);
+        }
+    }
+    Ok(found)
+}
+
 /// A height a built row holds in stored length text.
 fn stored_length(text: Option<&String>) -> Option<Length> {
     match ParamValue::from_stored(text?) {
@@ -1320,6 +1356,14 @@ async fn input_of<R: Reader>(
                         placed.level.as_ref(),
                     )
                     .await?
+                }
+                Err(e) => Err(e),
+            };
+            // A column's ring is worked out from its section and the grid lines it stands on once
+            // its height is read.
+            let recipe = match recipe {
+                Ok(recipe) => {
+                    crate::columns::finished(reader, project, document, recipe, at).await?
                 }
                 Err(e) => Err(e),
             };

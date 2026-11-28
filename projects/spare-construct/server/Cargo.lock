@@ -658,6 +658,7 @@ version = "0.0.0"
 dependencies = [
  "construct-categories",
  "construct-clash",
+ "construct-columns",
  "construct-curtain",
  "construct-dimensions",
  "construct-doorgen",
@@ -712,6 +713,23 @@ dependencies = [
  "construct-model",
  "engine-geometry",
  "kit-store",
+]
+
+[[package]]
+name = "construct-columns"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-grids",
+ "construct-levels",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "libm",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -910,6 +928,7 @@ name = "construct-regen"
 version = "0.0.0"
 dependencies = [
  "construct-categories",
+ "construct-columns",
  "construct-curtain",
  "construct-dimensions",
  "construct-families",

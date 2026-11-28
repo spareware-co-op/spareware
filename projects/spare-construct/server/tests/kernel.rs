@@ -163,6 +163,16 @@ fn a_room_with_an_island_wall_is_its_loop_extruded() {
 }
 
 #[test]
+fn a_column_is_its_ring_extruded() {
+    kernel_suite::a_column_is_its_ring_extruded(engine);
+}
+
+#[test]
+fn a_round_column_is_a_polygon_solid() {
+    kernel_suite::a_round_column_is_a_polygon_solid(engine);
+}
+
+#[test]
 fn a_hip_roof_is_its_pieces_united() {
     kernel_suite::a_hip_roof_is_its_pieces_united(engine);
 }

@@ -3117,3 +3117,86 @@ async fn a_models_own_families_are_loaded_and_listed_for_the_page() {
     let listed = s.families(&anna, &project, &model).await.unwrap();
     assert!(listed.iter().all(|f| !f.in_document));
 }
+
+/// Through the server's commands on the stand-in: the default column types made, six columns placed
+/// at once on the crossings of a 2 by 3 grid (`column.place.grids`) on level 1 with an unconnected
+/// height, built as boxes about the crossings; the read-only view lists the types and the columns
+/// with what each reads back in units; a person off the team can't place or read.
+#[tokio::test(flavor = "multi_thread")]
+async fn columns_placed_on_a_grid_are_listed_with_their_quantities() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.columns(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty() && none.columns.is_empty());
+    assert!(refused(s.columns(&dan, &project, &model).await));
+    s.edit(&anna, &project, &model, "column.defaults", json!({}))
+        .await
+        .unwrap();
+    for (id, x) in [("GX-1", "70 m"), ("GX-2", "76 m"), ("GX-3", "82 m")] {
+        let args = json!({ "grid": id, "name": id, "x0": x, "y0": "-1 m", "x1": x, "y1": "9 m" });
+        s.edit(&anna, &project, &model, "grid.create", args)
+            .await
+            .unwrap();
+    }
+    for (id, y) in [("GY-A", "0"), ("GY-B", "5 m")] {
+        let args = json!({ "grid": id, "name": id, "x0": "69 m", "y0": y, "x1": "83 m", "y1": y });
+        s.edit(&anna, &project, &model, "grid.create", args)
+            .await
+            .unwrap();
+    }
+    let mut columns = Vec::new();
+    for (n, v) in ["GX-1", "GX-2", "GX-3"].into_iter().enumerate() {
+        for h in ["GY-A", "GY-B"] {
+            columns.push(json!({ "element": format!("CX-{n}-{h}"), "first": v, "second": h }));
+        }
+    }
+    let place = json!({ "type": "column-concrete-400x400", "level": "1", "height": "3 m",
+                        "columns": columns });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "column.place.grids", place.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "column.place.grids", place)
+        .await
+        .unwrap();
+    assert_eq!(
+        wall_bounds(s, &project, &model, "CX-1-GY-B").await,
+        ([75_800, 4800, 0], [76_200, 5200, 3000])
+    );
+    let view = serde_json::to_value(s.columns(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(view["types"].as_array().unwrap().len(), 3);
+    let listed = view["columns"].as_array().unwrap();
+    assert_eq!(listed.len(), 6);
+    let one = listed.iter().find(|c| c["id"] == "CX-1-GY-B").unwrap();
+    assert_eq!(one["state"], "built");
+    assert_eq!(one["height"], "3000 mm");
+    assert_eq!(
+        one["at"],
+        json!({ "on": "grids", "first": "GX-2", "second": "GY-B", "cross": 0 })
+    );
+    let volume = one["quantities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|q| q["id"] == "column.volume")
+        .unwrap();
+    assert_eq!(volume["shown"], "0.48 m³");
+    // The properties view of a column carries the same read-only rows.
+    let params = serde_json::to_value(
+        s.parameters(&anna, &project, &model, &i("CX-1-GY-B"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(params["category"], json!({ "id": 1100, "name": "Columns" }));
+    assert!(
+        params["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"] == "column.height"
+                && p["shown"] == "3000 mm"
+                && p["from"] == "read-only")
+    );
+}

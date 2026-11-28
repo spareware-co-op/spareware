@@ -17,6 +17,8 @@
 //!   same log.
 //! - [`walls`]: wall types and their layers, and drawing layered walls of them, through the same
 //!   log.
+//! - [`columns`]: column types and columns (at a point or where grid lines cross, by level and
+//!   height), placed, retyped, moved, turned and deleted, through the same log.
 //! - [`floors`]: floor types and their layers, and floors drawn from a boundary, through the same
 //!   log.
 //! - [`roofs`]: roof types and their layers, and roofs on a rectangle (flat, mono-pitch and gable),
@@ -43,6 +45,7 @@
 //! - [`commands`]: a project's commands, each behind Cedar.
 
 pub mod access;
+pub mod columns;
 pub mod commands;
 pub mod curtains;
 pub mod dimensions;

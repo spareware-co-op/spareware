@@ -24,6 +24,7 @@ cloud = [
     "dep:construct-openings",
     "dep:construct-roofs",
     "dep:construct-rooms",
+    "dep:construct-columns",
     "dep:construct-warnings",
     "dep:construct-stairs",
     "dep:construct-phases",
@@ -66,6 +67,8 @@ construct-openings = { path = "../construct-openings", optional = true }
 construct-roofs = { path = "../construct-roofs", optional = true }
 # The room commands: construct-rooms checks every room.
 construct-rooms = { path = "../construct-rooms", optional = true }
+# The column type and column commands: construct-columns checks every section, height and position.
+construct-columns = { path = "../construct-columns", optional = true }
 # The warnings view: construct-warnings works the list out from walls and rooms read as rooms read them.
 construct-warnings = { path = "../construct-warnings", optional = true }
 # The stair commands: construct-stairs checks every stair and lays it out by its rule set.

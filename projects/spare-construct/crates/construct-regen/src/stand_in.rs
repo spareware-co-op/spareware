@@ -28,6 +28,10 @@
 //! room. Interim, as every stand-in shape: its holes and its true outline in 3D are the kernel's
 //! to build (the interim register's row).
 //!
+//! A column (`column`) is one box too: the box around its ring from its base up to its height
+//! ([`crate::column_plan`]), outlined by its ring, one part of its material, its deviation 0 only when
+//! the box is the column. Interim, as every stand-in shape: a turned or round column's true shape in 3D
+//! is the kernel's to build (the interim register's row).
 //! A stair (`stair`) is one box too: the box around every piece ([`crate::stair_plan`]), rounded
 //! outward to whole millimetres, named `box.<role>` for its pieces' faces. Its displays draw each
 //! piece as a part in the stair's material: a landing as its prism, a run as its side profile cut
@@ -69,6 +73,7 @@
 //! ([`Geometry::build_hosting`]) is built alone, as it was before hosting, and says so; the
 //! kernel's builder ([`crate::kernel`]) cuts them. The interim register has the row.
 
+use crate::column_plan::{self, ColumnPlan};
 use crate::curtain_plan::{self, CurtainPlan, DOOR_HEIGHT, DOOR_WIDTH};
 use crate::families::{self, Instance};
 use crate::floor_plan::{self, FloorPlan};
@@ -1176,6 +1181,87 @@ fn room_names(plan: &RoomPlan) -> Vec<FaceName> {
         .collect()
 }
 
+/// A column as one box ([`crate::column_plan`]): the box around its ring, its sides rounded
+/// outward to whole millimetres, from its base at 0 up to its height (rounded up). Named
+/// `box.bottom`, `box.top` and `box.side.<k>` for each edge of the ring. Its outline is its ring,
+/// each corner the nearest millimetre; its deviation is 0 only when the box is the column (a
+/// rectangle along the axes), else at most the box's diagonal, and by one millimetre more where a
+/// corner or the height was rounded. It has one part, of its material.
+fn column(recipe: &Recipe) -> Result<Built, GeometryError> {
+    let plan = ColumnPlan::of(recipe)?;
+    let ([x0, y0], [x1, y1]) = plan.extent();
+    let min = [floor_plan::floor_mm(x0), floor_plan::floor_mm(y0), 0];
+    let max = [
+        floor_plan::ceil_mm(x1),
+        floor_plan::ceil_mm(y1),
+        floor_plan::ceil_mm(plan.height),
+    ];
+    let mut rounded = !floor_plan::nearest_mm(plan.height).1;
+    let mut outline = Vec::with_capacity(plan.ring.len());
+    for &[x, y] in &plan.ring {
+        let ((x, a), (y, b)) = (floor_plan::nearest_mm(x), floor_plan::nearest_mm(y));
+        rounded |= !(a && b);
+        outline.push([x, y]);
+    }
+    let deviation = if plan.is_box() {
+        i64::from(rounded)
+    } else {
+        let [w, d] = [
+            i128::from(max[0].saturating_sub(min[0])),
+            i128::from(max[1].saturating_sub(min[1])),
+        ];
+        let square = w.saturating_mul(w).saturating_add(d.saturating_mul(d));
+        let mut root = square.isqrt();
+        if root.saturating_mul(root) < square {
+            root = root.saturating_add(1);
+        }
+        i64::try_from(root)
+            .unwrap_or(i64::MAX)
+            .saturating_add(i64::from(rounded))
+    };
+    let body = FloorBody {
+        kind: "column",
+        min,
+        max,
+    };
+    let mesh = Mesh {
+        positions: box_corners(min, max).concat(),
+        indices: TRIANGLES.to_vec(),
+    };
+    let part = Part {
+        material: plan.material.clone(),
+        function: "structure".to_owned(),
+        triangles: [0, part_count(TRIANGLES.len() / 3)?],
+        outline: outline.clone(),
+    };
+    let displays = (0..2)
+        .map(|lod| Display {
+            lod,
+            deviation,
+            mesh: mesh.clone(),
+            outline: outline.clone(),
+            parts: vec![part.clone()],
+        })
+        .collect();
+    Ok(Built {
+        body: serde_json::to_vec(&body).unwrap_or_default(),
+        bounds: Bounds { min, max },
+        names: column_names(&plan),
+        displays,
+    })
+}
+
+/// A column's face names: `box.<role>` for each of [`ColumnPlan::roles`].
+fn column_names(plan: &ColumnPlan) -> Vec<FaceName> {
+    plan.roles()
+        .into_iter()
+        .map(|role| FaceName {
+            name: format!("box.{role}"),
+            role,
+        })
+        .collect()
+}
+
 /// The persistent names of a box's faces, one per role: the same six for every box.
 fn box_names() -> Vec<FaceName> {
     ROLES
@@ -1209,6 +1295,9 @@ pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
     }
     if room_plan::is_room(recipe) {
         return Ok(room_names(&RoomPlan::of(recipe)?));
+    }
+    if column_plan::is_column(recipe) {
+        return Ok(column_names(&ColumnPlan::of(recipe)?));
     }
     if stair_plan::is_stair(recipe) {
         return Ok(stair_names(&StairPlan::of(recipe)?));
@@ -1584,6 +1673,9 @@ impl Geometry for Boxes {
         }
         if room_plan::is_room(recipe) {
             return room(recipe);
+        }
+        if column_plan::is_column(recipe) {
+            return column(recipe);
         }
         if stair_plan::is_stair(recipe) {
             return stair(recipe);

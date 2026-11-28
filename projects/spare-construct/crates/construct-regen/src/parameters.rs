@@ -872,6 +872,7 @@ pub async fn recipe_at<R: Reader>(
     .and_then(|recipe| crate::walls::filled(&recipe, &context, element, ty.as_ref()))
     .and_then(|recipe| crate::slabs::filled(&recipe, ty.as_ref()))
     .and_then(|recipe| crate::roofs::filled(&recipe, ty.as_ref()))
+    .and_then(|recipe| crate::columns::filled(&recipe, ty.as_ref()))
     .and_then(|recipe| crate::curtains::filled(&recipe, ty.as_ref())))
 }
 
@@ -910,5 +911,6 @@ pub fn reads_records(recipe: &Recipe) -> bool {
         || crate::walls::reads_type(recipe)
         || crate::slabs::reads_type(recipe)
         || crate::roofs::reads_type(recipe)
+        || crate::columns::reads_type(recipe)
         || crate::curtains::reads_type(recipe)
 }

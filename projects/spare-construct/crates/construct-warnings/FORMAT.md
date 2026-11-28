@@ -20,6 +20,7 @@ A published format under [EXTENDING.md](../../../../EXTENDING.md), section 3: th
 | `dimension.reference_missing` | The dimension, then the element it references | A reference of a dimension cannot be found in its view (the element or the feature is gone, or it has no place there) |
 | `dimension.reference_parallel` | The dimension, then the element it references | A line reference runs along the dimension's offset line, so it has no place along it |
 | `dimension.out_of_range` | The dimension, then the element it references | A value or a point of a dimension does not fit the kernel's grid |
+| `column.grid_released` | The column | A column stood on grid lines that were deleted: it keeps its place as a point, and the note stays until the column is moved |
 | `insert.crosses_joined_wall` | The door, window or opening; its host wall; the joined wall | A wall on the host's level, not parallel to it, whose outline meets the host's and stands across a positive length of the stretch of the host the insert's opening takes |
 
 ## The list

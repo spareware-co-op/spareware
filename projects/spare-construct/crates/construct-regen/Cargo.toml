@@ -22,6 +22,7 @@ server = [
     "dep:construct-slabs",
     "dep:construct-roofs",
     "dep:construct-rooms",
+    "dep:construct-columns",
     "dep:construct-stairs",
     "dep:construct-materials",
     "dep:construct-views",
@@ -59,6 +60,9 @@ construct-slabs = { path = "../construct-slabs", optional = true }
 construct-roofs = { path = "../construct-roofs", optional = true }
 # A room's loop is found from the walls of its level (src/rooms.rs). Same workspace.
 construct-rooms = { path = "../construct-rooms", optional = true }
+# A column's section is read from its column type and its position from its grid lines
+# (src/columns.rs). Same workspace.
+construct-columns = { path = "../construct-columns", optional = true }
 # A stair is laid out from the rise its levels give it and filled with its pieces (src/stairs.rs).
 # Same workspace.
 construct-stairs = { path = "../construct-stairs", optional = true }

@@ -6,9 +6,9 @@
 //! kinds; the table below lists them by name, and the job that adds a kind adds its line here.
 
 use crate::{
-    CURTAIN_WALLS, CategoryError, CategoryId, DIMENSIONS, DOORS, FLOORS, GENERIC_MODELS, GRIDS,
-    LEVELS, OPENINGS, REFERENCE_PLANES, ROOFS, ROOMS, SCHEDULES, SHEETS, STAIRS, VIEWPORTS, VIEWS,
-    WALLS,
+    COLUMNS, CURTAIN_WALLS, CategoryError, CategoryId, DIMENSIONS, DOORS, FLOORS, GENERIC_MODELS,
+    GRIDS, LEVELS, OPENINGS, REFERENCE_PLANES, ROOFS, ROOMS, SCHEDULES, SHEETS, STAIRS, VIEWPORTS,
+    VIEWS, WALLS,
 };
 
 /// Every element kind that exists, with its category, sorted by kind name.
@@ -17,6 +17,7 @@ use crate::{
 /// any building, so no category of building parts is theirs: they are generic models.
 const KINDS: &[(&str, CategoryId)] = &[
     ("block", GENERIC_MODELS),
+    ("column", COLUMNS),
     ("dimension", DIMENSIONS),
     ("door.single", DOORS),
     // A placed family (job 6.4): its own category is its family's, which its record carries; by

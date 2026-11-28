@@ -7,6 +7,9 @@
 //! order as a view a page, a script or an AI reads: each warning's identity, kind, severity,
 //! elements and sentence.
 //!
+//! A column let go of the grid lines it stood on (they were deleted) is a notice, read from the
+//! note its record keeps ([`construct_columns::released_from`]).
+//!
 //! A dimension's warnings (a reference that is gone or has no place) are measured the way the
 //! dimension listing measures them and handed over as they are ([`Model::dimensions`]).
 //!
@@ -20,7 +23,7 @@
 use construct_regen::parameters::At;
 use construct_regen::rooms::{WALL_KIND, level_of, of_kind, wall_plan_of};
 use construct_rooms::{Outcome, ROOM_KIND};
-use construct_warnings::{Insert, Model, Room, RoomState, Wall, warnings};
+use construct_warnings::{Insert, Model, ReleasedColumn, Room, RoomState, Wall, warnings};
 use kit_core::Id;
 use kit_store::{Reader, StoreError};
 use serde::Serialize;
@@ -98,6 +101,23 @@ pub async fn read_warnings<R: Reader>(
             who,
             state,
         });
+    }
+    for column in of_kind(
+        reader,
+        project,
+        document,
+        construct_columns::COLUMN_KIND,
+        at,
+    )
+    .await?
+    {
+        if let Some(grids) = construct_columns::released_from(&column) {
+            model.released_columns.push(ReleasedColumn {
+                id: column.id.clone(),
+                who: format!("column {}", column.name),
+                grids: grids.to_owned(),
+            });
+        }
     }
     model.dimensions =
         crate::cloud::dimensions::measured_warnings(reader, project, document).await?;

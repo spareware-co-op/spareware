@@ -28,6 +28,11 @@
 //! - [`roofs`]: how a roof's recipe reads its layers from its roof type and has its shape worked
 //!   out (construct-roofs), filled with the parameters by [`parameters::recipe_at`].
 //!
+//! - [`column_plan`]: a column (`column`) as both builders read it: its filled recipe's ring, height
+//!   and material in grid steps (job 14.7). The kernel builds one solid, the stand-in one box.
+//! - [`columns`]: how a column's recipe reads its section from its type and its position from the
+//!   grid lines it stands on (construct-columns), filled with the levels' height before it is built.
+//!
 //! - [`room_plan`]: a room (`room`) as both builders read it: its filled recipe's loops and
 //!   height in grid steps (job 5.4). The kernel builds its volume as one solid, the stand-in one
 //!   box.
@@ -87,6 +92,9 @@
 
 #[cfg(feature = "server")]
 pub mod catalog;
+pub mod column_plan;
+#[cfg(feature = "server")]
+pub mod columns;
 pub mod curtain_plan;
 #[cfg(feature = "server")]
 pub mod curtains;

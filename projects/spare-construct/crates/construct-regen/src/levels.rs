@@ -237,6 +237,7 @@ pub fn filled(recipe: &Recipe, placed: &Placed) -> Result<Recipe, GeometryError>
         *arg = if wall_plan::is_layered(recipe)
             || construct_openings::is_shaft(recipe)
             || crate::room_plan::is_room(recipe)
+            || crate::column_plan::is_column(recipe)
             || crate::stair_plan::is_stair(recipe)
             || crate::curtain_plan::is_curtain(recipe)
         {
