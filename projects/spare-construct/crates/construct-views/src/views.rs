@@ -76,6 +76,19 @@ impl Views {
         all
     }
 
+    /// The same views each put through `change`: a view template applies to the views tied to it
+    /// this way.
+    #[must_use]
+    pub fn mapped(&self, change: impl Fn(&View) -> View) -> Self {
+        Self {
+            by_id: self
+                .by_id
+                .iter()
+                .map(|(id, view)| (id.clone(), change(view)))
+                .collect(),
+        }
+    }
+
     /// Every view as a record of `document`, in ID order.
     #[must_use]
     pub fn to_records(&self, document: &Id) -> Vec<Element> {

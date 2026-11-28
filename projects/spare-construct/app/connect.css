@@ -106,7 +106,7 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .stack-warning[data-severity="error"] .leaf { border-left-color: var(--danger, currentColor); }
 .stack-warning-at { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 4px 27px; }
 .stack-sched h3 { margin: 4px 0; font-size: 13px; }
-.stack-sched .grow { flex: 1; min-width: 120px; }
+.stack-sched .grow, .stack-manage .grow { flex: 1; min-width: 120px; }
 .stack-sched .sched-scroll { max-height: 40vh; overflow: auto; margin: 6px 0; border: 1px solid var(--hairline); }
 .sched-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .sched-table th, .sched-table td { padding: 3px 8px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }

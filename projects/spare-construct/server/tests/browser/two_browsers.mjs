@@ -2927,5 +2927,252 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, after the schedules, matches the server's`);
 }
 
+console.log('\n   View templates, element overrides and view filters');
+// Anna opens Level 1's plan and sets an override on one wall (a colour and halftone, then hiding it,
+// then clearing it) from the Overrides dialog on the view's line, and Ben's page reads it and, on
+// a server with the geometry kernel, both draw it. She gives walls a text parameter and a filter on
+// it with a colour, and a second filter that matches too: the first in the list wins the colour, and
+// moving it down gives the colour to the other. Then she makes a view template from the view, ties
+// the view to it and changes the template (its scale, then what walls cut): Ben's page, which has the
+// same view open, follows each change at once, and his try to give the tied view a graphics rule of
+// its own is turned back in the server's words. She unties the view, which keeps what it showed,
+// and deletes the template. Each step is read from the server's lists in both pages; the drawing
+// is checked on the kernel's server only, which is the one that draws.
+const vtKernel = process.env.STACK_GEOMETRY === 'kernel';
+const vtView = 'VP-1';
+const vtLeaf = (name) => `#browser [data-act="stackview"]:has(span:text-is("${name}"))`;
+const vtDialog = '#stack-manage';
+const vtField = (key) => `${vtDialog} [data-key="${key}"]`;
+const vtWall = '#pv-canvas g.drawn line[data-element="W-101"]';
+const vtClose = async (page) => {
+  await page.locator('#dlg .dlg-f [data-act="dgclose"]').click();
+  await page.waitForSelector('#dlg', { state: 'hidden' });
+};
+// Waits until a list the server reads satisfies a test, written as the source of a function of the
+// list (it is read in the page, where the list is fetched).
+const vtUntil = (page, path, source) =>
+  page.waitForFunction(
+    async ([url, test]) => {
+      const data = await fetch(url).then((r) => r.json());
+      // eslint-disable-next-line no-eval
+      return eval(test)(data);
+    },
+    [`${model}/${path}`, source],
+    { polling: 250 },
+  );
+const vtStrokes = (page, colour) => page.locator(`#pv-canvas g.drawn line[stroke="${colour}"]`);
+
+await toArchitecture(anna);
+await toArchitecture(ben);
+await anna.click(vtLeaf('Level 1 plan'));
+await ben.click(vtLeaf('Level 1 plan'));
+let vtPlain = null;
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'attached' });
+  vtPlain = await ben.locator(vtWall).first().getAttribute('stroke-width');
+}
+
+// --- An override on one wall.
+await anna.keyboard.press('Escape');
+let vtSelected = false;
+for (const at of [0.1, 0.9, 0.5, 0.3, 0.7]) {
+  const where = await box(anna, 'W-101');
+  await anna.mouse.click(where.x + where.width * at, where.y + where.height / 2);
+  vtSelected = (await anna.locator('g.element[data-id="W-101"] .body.sel').count()) === 1;
+  if (vtSelected) break;
+}
+check(vtSelected, 'Anna selects the wall W-101 in the plan');
+await anna.click('#browser [data-act="stackviewoverrides"]');
+await anna.waitForSelector(`${vtDialog} [data-ov-element="W-101"]`);
+await anna.locator(vtField('ov-use-colour')).check();
+await anna.locator(vtField('ov-colour')).fill('#1040c0');
+await anna.locator(vtField('ov-halftone')).check();
+await anna.click(vtField('ov-make'));
+await anna.waitForSelector(`${vtDialog} [data-override="W-101"]:has-text("#1040c0")`);
+await vtUntil(
+  ben,
+  `views/${vtView}/overrides`,
+  '(l) => l.overrides.length === 1 && l.overrides[0].element === "W-101" && l.overrides[0].look.halftone === true && l.overrides[0].look.colour.join() === "16,64,192"',
+);
+pass("Anna gives the wall a colour and halftone in this view: Ben's page reads the override");
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(`${vtWall}[stroke="#1040c0"][opacity="0.5"]`, { state: 'attached' });
+    check(
+      (await vtStrokes(page, '#1040c0').evaluateAll((lines) => lines.every((l) => l.dataset.element === 'W-101'))) === true,
+      "only that wall's lines are drawn in its colour, in both browsers",
+    );
+  }
+}
+await shot(anna, 'anna-element-override');
+await anna.locator(vtField('ov-hide')).check();
+await anna.click(vtField('ov-make'));
+await vtUntil(ben, `views/${vtView}/overrides`, '(l) => l.overrides[0].look.shown === false && l.overrides[0].look.halftone === true');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'detached' });
+  pass('the wall hidden in this view leaves the drawing in both browsers, the other walls stay');
+} else {
+  pass("the wall hidden in this view: Ben's page reads it");
+}
+await anna.click(`${vtDialog} [data-act="stackoverrideclear"][data-a="W-101"]`);
+await anna.waitForSelector(`${vtDialog} [data-ov-none]`);
+await vtUntil(ben, `views/${vtView}/overrides`, '(l) => l.overrides.length === 0');
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForSelector(vtWall, { state: 'attached' });
+    await page.waitForFunction((sel) => !document.querySelector(sel), `${vtWall}[stroke="#1040c0"]`);
+  }
+}
+pass('one clear takes the override away, and the wall is drawn as it was in both browsers');
+await vtClose(anna);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// --- Two filters on a parameter of walls.
+await anna.evaluate(() => {
+  const definition = { id: 'P-vtfire', name: 'Fire rating', kind: 'text', holder: 'instance', choices: [] };
+  window.spare.edit('parameter.define', { definition });
+  window.spare.edit('parameter.bind', { parameter: 'P-vtfire', categories: [100] });
+});
+await anna.waitForFunction(() => window.spare.pending.length === 0);
+const vtRate = async (value) => {
+  await anna.evaluate((text) => window.spare.edit('element.param', { element: 'W-101', parameter: 'P-vtfire', value: text }), value);
+  await anna.waitForFunction(() => window.spare.pending.length === 0);
+};
+await vtRate('1h');
+await anna.click('#browser [data-act="stackviewfilters"]');
+await anna.waitForSelector(vtField('filter-name'));
+await anna.locator(vtField('filter-category')).selectOption('100');
+await anna.waitForFunction((sel) => [...document.querySelectorAll(`${sel} option`)].some((o) => o.value === 'P-vtfire'), vtField('filter-parameter'));
+await anna.locator(vtField('filter-parameter')).selectOption('P-vtfire');
+await anna.locator(vtField('filter-name')).fill('One hour');
+await anna.locator(vtField('filter-value')).fill('1h');
+await anna.locator(vtField('filter-use-colour')).check();
+await anna.locator(vtField('filter-colour')).fill('#10a040');
+await anna.click(vtField('filter-make'));
+await anna.waitForSelector(`${vtDialog} [data-filter]:has-text("One hour")`);
+await anna.locator(vtField('filter-name')).fill('Rated');
+await anna.locator(vtField('filter-value')).fill('h');
+await anna.locator(vtField('filter-op')).selectOption('contains');
+await anna.locator(vtField('filter-colour')).fill('#c01010');
+await anna.locator(vtField('filter-halftone')).check();
+await anna.click(vtField('filter-make'));
+await anna.waitForSelector(`${vtDialog} [data-filter]:has-text("Rated")`);
+await vtUntil(
+  ben,
+  `views/${vtView}/filters`,
+  '(l) => l.filters.map((f) => f.name).join() === "One hour,Rated" && l.filters[0].parameter_name === "Fire rating" && l.filters[1].op === "contains"',
+);
+pass("Anna adds two filters on a wall parameter: Ben's page reads them in their order");
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    // Both match the wall rated 1h: the first filter wins the colour, the second adds the halftone.
+    await page.waitForSelector(`${vtWall}[stroke="#10a040"][opacity="0.5"]`, { state: 'attached' });
+  }
+  pass("the wall rated 1h is drawn in the first filter's colour and the second's halftone, in both browsers");
+}
+// Moving the first filter down gives the colour to the other: the order decides.
+await anna.locator(`${vtDialog} [data-filter] [data-act="stackfilterdown"]`).first().click();
+await vtUntil(ben, `views/${vtView}/filters`, '(l) => l.filters.map((f) => f.name).join() === "Rated,One hour"');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(`${vtWall}[stroke="#c01010"]`, { state: 'attached' });
+}
+pass('moving a filter down gives its colour to the one that is now first, and Ben follows');
+// A parameter that changes changes the drawing: a rating no filter matches draws the wall as it was.
+await vtRate('none');
+if (vtKernel) {
+  for (const page of [anna, ben]) {
+    await page.waitForFunction((sel) => !document.querySelector(sel), `${vtWall}[stroke="#c01010"]`);
+    await page.waitForSelector(`${vtWall}:not([stroke="#c01010"]):not([stroke="#10a040"])`, { state: 'attached' });
+  }
+  await vtRate('1h');
+  for (const page of [anna, ben]) await page.waitForSelector(`${vtWall}[stroke="#c01010"]`, { state: 'attached' });
+  pass("the wall's rating changed and changed back: the filters are asked again and the drawing follows in both browsers");
+}
+for (const name of ['Rated', 'One hour']) {
+  await anna.locator(`${vtDialog} [data-filter]:has-text("${name}") [data-act="stackfilteroff"]`).click();
+  await anna.waitForFunction((n) => ![...document.querySelectorAll('#stack-manage [data-filter]')].some((row) => row.textContent.includes(n)), name);
+}
+await vtUntil(ben, `views/${vtView}/filters`, '(l) => l.filters.length === 0');
+await vtClose(anna);
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+
+// --- A view template, tied to the view.
+await anna.click('#browser [data-act="stackviewtemplates"]');
+await anna.waitForSelector(vtField('new-template-name'));
+await anna.locator(vtField('new-template-name')).fill('Working plan');
+await anna.locator(vtField('new-template-name')).press('Enter');
+await anna.waitForSelector(`${vtDialog} [data-template]:has(h3:text-is("Working plan"))`);
+const vtTemplate = (await asAnna('view-templates'))[0].id;
+check((await asAnna('view-templates')).length === 1, 'Anna makes a view template from the view');
+await anna.click(`${vtDialog} [data-act="stacktpltie"][data-a="${vtTemplate}"]`);
+await anna.waitForSelector(`${vtDialog} [data-tpl-tied="${vtTemplate}"]`);
+await ben.waitForSelector(`#browser [data-view-follows="${vtTemplate}"]:has-text("Follows Working plan")`);
+pass("Anna ties the view to the template and Ben's browser says the view follows it");
+
+// She changes the template's scale: the view in Ben's page changes with it.
+const vtOldScale = (await asAnna('views')).find((v) => v.id === vtView).scale;
+await anna.locator(`${vtDialog} [data-key="tpl-scale:${vtTemplate}"]`).fill('20');
+await anna.locator(`${vtDialog} [data-key="tpl-scale:${vtTemplate}"]`).press('Enter');
+await vtUntil(ben, 'views', `(l) => l.find((v) => v.id === "${vtView}").scale === 20`);
+await ben.waitForSelector(`${vtLeaf('Level 1 plan')}[title$="1:20"]`);
+check(vtOldScale !== 20, "the template's scale reaches the view tied to it: Ben's browser lists it at 1:20");
+if (vtKernel) {
+  await ben.waitForFunction(([sel, was]) => {
+    const line = document.querySelector(sel);
+    return line && line.getAttribute('stroke-width') !== was;
+  }, [vtWall, vtPlain]);
+  pass("Ben's plan is drawn again at the new scale, its pens printing as that scale says");
+}
+
+// She hides what walls cut in the template, from its own Graphics: both pages lose the walls.
+await anna.click(`${vtDialog} [data-act="stacktplgraphics"][data-a="${vtTemplate}"]`);
+await anna.waitForSelector(vtField('gfx-category'));
+await anna.locator(vtField('gfx-category')).selectOption('100');
+await anna.waitForSelector(`${vtDialog} [data-gfx-origin="project"]`);
+await anna.locator(vtField('gfx-shown')).uncheck();
+await anna.waitForSelector(`${vtDialog} [data-gfx-rule="100"]:has-text("hidden")`);
+await vtUntil(ben, `views/${vtView}/graphics`, '(l) => l.rules.some((r) => r.category === 100 && r.cut && r.cut.shown === false)');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'detached' });
+  pass("walls hidden in the template leave the plan of the view tied to it, in both browsers");
+} else {
+  pass("walls hidden in the template: the view tied to it lists the rule in Ben's page");
+}
+
+// Ben cannot give the tied view a rule of his own: the server says why, beside his control.
+await ben.click('#browser [data-act="stackviewgraphics"]');
+await ben.waitForSelector(vtField('gfx-category'));
+await ben.locator(vtField('gfx-category')).selectOption('100');
+await ben.waitForSelector(`${vtDialog} [data-gfx-origin="category"]`);
+await ben.locator(vtField('gfx-halftone')).check();
+await ben.waitForSelector(`${vtDialog} [data-problem="graphics:100:cut"]`);
+const vtWords = await ben.locator(`${vtDialog} [data-problem="graphics:100:cut"]`).textContent();
+check(
+  /follows the view template Working plan, which sets its graphics rules: change it in the template, or untie the view first\./.test(vtWords),
+  `the tied view refuses a rule of its own, in words: ${vtWords}`,
+);
+await vtClose(ben);
+
+// She unties the view: it keeps what it showed, and the template can go.
+await anna.click(`#dlg .dlg-f [data-act="dgclose"]`);
+await anna.waitForSelector('#dlg', { state: 'hidden' });
+await anna.click('#browser [data-act="stackviewtemplates"]');
+await anna.waitForSelector(`${vtDialog} [data-act="stacktpluntie"]`);
+await anna.click(`${vtDialog} [data-act="stacktpluntie"]`);
+await ben.waitForFunction(() => !document.querySelector('#browser [data-view-follows]'));
+const vtKept = (await asAnna('views')).find((v) => v.id === vtView);
+check(vtKept.template === null && vtKept.scale === 20, 'she unties the view: it follows nothing and keeps the scale it showed');
+if (vtKernel) {
+  for (const page of [anna, ben]) await page.waitForSelector(vtWall, { state: 'detached' });
+}
+await anna.click(`${vtDialog} [data-act="stacktpldelete"][data-a="${vtTemplate}"]`);
+await anna.waitForSelector(`${vtDialog} [data-tpl-none]`);
+check((await asAnna('view-templates')).length === 0, 'she deletes the template: the server holds none');
+await vtClose(anna);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, after the view templates, matches the server's`);
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

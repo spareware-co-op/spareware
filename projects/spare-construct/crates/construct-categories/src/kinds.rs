@@ -34,6 +34,7 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("schedule", SCHEDULES),
     ("sheet", SHEETS),
     ("view", VIEWS),
+    ("view_template", VIEWS),
     ("viewport", VIEWPORTS),
     ("wall.layered", WALLS),
     ("wall.straight", WALLS),

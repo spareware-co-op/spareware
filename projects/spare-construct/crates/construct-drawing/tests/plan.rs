@@ -684,3 +684,123 @@ fn a_hidden_category_is_left_out_of_the_drawing() {
     assert_eq!(pic.strokes.len(), 0);
     assert_eq!(pic.hatches.len(), 0);
 }
+
+/// What a view says of single elements (a filter that matches, an override), standing in for the
+/// server's answer: the walls' own look, except for the elements it names.
+#[derive(Debug)]
+struct PerElement {
+    base: Rules,
+    /// An element drawn in halftone, if any.
+    halftone: Option<Id>,
+    /// An element left out, if any.
+    hidden: Option<Id>,
+    /// Whether the view says it looks different per element (false: it never asks).
+    asked: bool,
+}
+
+impl construct_drawing::look::Looks for PerElement {
+    fn look(
+        &self,
+        category: construct_categories::CategoryId,
+        kind: LineKind,
+    ) -> Result<construct_drawing::look::Look, String> {
+        self.base.look(category, kind)
+    }
+
+    fn look_for(
+        &self,
+        element: &Id,
+        category: construct_categories::CategoryId,
+        kind: LineKind,
+    ) -> Result<construct_drawing::look::Look, String> {
+        let mut look = self.look(category, kind)?;
+        look.halftone = self.halftone.as_ref() == Some(element);
+        look.shown = self.hidden.as_ref() != Some(element);
+        Ok(look)
+    }
+
+    fn per_element(&self) -> bool {
+        self.asked
+    }
+}
+
+fn per_element(halftone: Option<&str>, hidden: Option<&str>, asked: bool) -> PerElement {
+    PerElement {
+        base: Rules {
+            base: Defaults::new(),
+            scale: Scale::new(100).unwrap(),
+            hidden: None,
+            walls: None,
+        },
+        halftone: halftone.map(|id| Id::parse(id).unwrap()),
+        hidden: hidden.map(|id| Id::parse(id).unwrap()),
+        asked,
+    }
+}
+
+/// One concrete wall in halftone beside the other: its lines print at half strength, the other's
+/// at full, and the two no longer merge into one hatch, so the halftone wall's hatch is its own.
+/// A view whose elements all look alike gives the picture it always gave.
+#[test]
+fn an_element_of_its_own_look_prints_apart_from_the_others_of_its_category() {
+    let drawing = two_walls_and_one();
+    let scale = Scale::new(100).unwrap();
+    let defaults = Defaults::new();
+
+    let plain = per_element(None, None, false);
+    let baseline = picture(&drawing, with_looks(&defaults, &plain), scale).unwrap();
+    assert_eq!(
+        baseline.hatches.len(),
+        2,
+        "two concrete walls merge, plaster apart"
+    );
+    // Asked, with every element looking alike: the same picture, the same merged hatch.
+    let alike = per_element(None, None, true);
+    assert_eq!(
+        picture(&drawing, with_looks(&defaults, &alike), scale).unwrap(),
+        baseline
+    );
+
+    let asked = per_element(Some("wall-a"), None, true);
+    let pic = picture(&drawing, with_looks(&defaults, &asked), scale).unwrap();
+    assert_eq!(
+        pic.hatches.len(),
+        3,
+        "the halftone wall is a region of its own"
+    );
+    assert_eq!(pic.hatches.iter().filter(|h| h.opacity == 50).count(), 1);
+    let half: std::collections::BTreeSet<_> = pic
+        .strokes
+        .iter()
+        .filter(|s| s.opacity == 50)
+        .map(|s| s.element.as_str().to_owned())
+        .collect();
+    assert_eq!(
+        half,
+        std::collections::BTreeSet::from(["wall-a".to_owned()])
+    );
+    assert!(pic.strokes.iter().any(|s| s.opacity == 100));
+    // The same view twice gives the same bytes.
+    assert_eq!(
+        to_svg(&drawing, with_looks(&defaults, &asked), scale).unwrap(),
+        to_svg(&drawing, with_looks(&defaults, &asked), scale).unwrap()
+    );
+}
+
+/// An element hidden in the view leaves its own lines and its own hatch, and no other element's.
+#[test]
+fn a_hidden_element_leaves_only_its_own_lines_and_hatch() {
+    let drawing = two_walls_and_one();
+    let scale = Scale::new(100).unwrap();
+    let defaults = Defaults::new();
+    for (hidden, hatches) in [("wall-c", 1), ("wall-a", 2)] {
+        let looks = per_element(None, Some(hidden), true);
+        let pic = picture(&drawing, with_looks(&defaults, &looks), scale).unwrap();
+        assert!(
+            pic.strokes.iter().all(|s| s.element.as_str() != hidden),
+            "{hidden}"
+        );
+        assert!(pic.strokes.len() > 1);
+        assert_eq!(pic.hatches.len(), hatches, "{hidden}");
+    }
+}
