@@ -40,7 +40,7 @@
 //! - [`transaction`]: every command fully applies or fully rolls back.
 //! - [`spaces`]: models, packages, bridges and links.
 //! - [`directory`]: hubs, projects and teams, in the directory's log.
-//! - [`commands`]: a project's commands, each behind Cedar.
+//! - [`commands`]: a project's commands, each behind Cedar; a tool's are run through [`Tools`].
 //! - [`tool`]: the contract every tool of the commands meets, and the one ordered list of them.
 
 pub mod access;
@@ -73,3 +73,27 @@ pub mod warnings;
 pub use access::{Access, POLICY, SCHEMA, Target};
 pub use commands::ProjectCommands;
 pub use tool::Tool;
+
+// The one list of the tools, in order ([`tool`]; note A96). A new tool adds its `pub mod` line
+// above and its line at the end here, and nothing else outside its own module.
+tool::tools! {
+    elements::ElementTool,
+    params::ParamTool,
+    undo::UndoTool,
+    grids::GridTool,
+    levels::LevelTool,
+    views::ViewTool,
+    schedules::ScheduleTool,
+    dimensions::DimensionTool,
+    sheets::SheetTool,
+    families::FamilyTool,
+    loading::LoadingTool,
+    openings::OpeningTool,
+    hosting::HostingTool,
+    rooms::RoomTool,
+    floors::FloorTool,
+    walls::WallTool,
+    roofs::RoofTool,
+    stairs::StairTool,
+    curtains::CurtainTool,
+}

@@ -53,12 +53,10 @@
 //! document. No step command is refused for what it is; every refusal is found when the undo
 //! runs. Nothing here reads a clock or a random number: the claim's time is the orderer's.
 
+use crate::cloud::Tools;
 use crate::cloud::elements::write_record;
+use crate::cloud::grids;
 use crate::cloud::tool::Tool;
-use crate::cloud::{
-    curtains, dimensions, families, floors, grids, hosting, levels, loading, openings, params,
-    roofs, rooms, schedules, sheets, stairs, views, walls,
-};
 use construct_model::element::Element;
 use construct_regen::parameters::{self as records, TABLE_KIND, TYPE_KIND};
 use construct_types::Types;
@@ -82,13 +80,6 @@ pub const NOTHING_TO_REDO: &str = "There is nothing of yours to redo in this mod
 /// How a refusal by the document's own rules begins.
 pub const CANNOT: &str = "That can't be undone: ";
 
-/// The element commands that are steps; the parameter and type commands and these two are too.
-const ELEMENT_STEPS: [&str; 4] = [
-    "element.create",
-    "element.move",
-    "element.set",
-    "element.delete",
-];
 /// The move command, whose runs are one step.
 const MOVE: &str = "element.move";
 /// How many log entries are read at a time, going back.
@@ -119,27 +110,11 @@ impl Tool for UndoTool {
     }
 }
 
-/// Whether an applied entry of this command is a step.
+/// Whether an applied entry of this command is a step: one of a tool's steps
+/// ([`Tool::STEPS`](crate::cloud::Tool::STEPS)), these two included.
 #[must_use]
 pub fn is_step(cmd: &str) -> bool {
-    ELEMENT_STEPS.contains(&cmd)
-        || params::is_command(cmd)
-        || grids::is_command(cmd)
-        || hosting::is_command(cmd)
-        || families::is_command(cmd)
-        || openings::is_command(cmd)
-        || levels::is_command(cmd)
-        || walls::is_command(cmd)
-        || floors::is_command(cmd)
-        || roofs::is_command(cmd)
-        || curtains::is_command(cmd)
-        || rooms::is_command(cmd)
-        || stairs::is_command(cmd)
-        || views::is_command(cmd)
-        || schedules::is_command(cmd)
-        || sheets::is_command(cmd)
-        || dimensions::is_command(cmd)
-        || is_command(cmd)
+    Tools::is_step(cmd)
 }
 
 /// A step a person could undo or redo now: the newest entry of it, and its command.
@@ -525,31 +500,10 @@ pub async fn apply<T: Txn>(
     if let Err(why) = check(txn, project, document, &written, whole).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
-    if let Err(why) = hosting::undo_rules(txn, project, document, &written, &deleted).await? {
-        return Ok(Err(format!("{CANNOT}{why}")));
-    }
-    // Nor a placed family without the version of its family it names.
-    if let Err(why) = loading::undo_rules(txn, project, document, &written, &deleted).await? {
-        return Ok(Err(format!("{CANNOT}{why}")));
-    }
-    // An undo may not leave an element tied to a level that is no longer in the model.
-    if let Err(why) = levels::ties_hold(txn, project, document, &written, whole).await? {
-        return Ok(Err(format!("{CANNOT}{why}")));
-    }
-    // Nor a view without the levels, phases or options it stands on.
-    if let Err(why) = views::undo_rules(txn, project, document, &written, whole).await? {
-        return Ok(Err(format!("{CANNOT}{why}")));
-    }
-    // Nor a schedule whose category or fields the document no longer has.
-    if let Err(why) = schedules::undo_rules(txn, project, document, &written).await? {
-        return Ok(Err(format!("{CANNOT}{why}")));
-    }
-    // Nor a sheet without its viewports' views, or a view placed twice.
-    if let Err(why) = sheets::undo_rules(txn, project, document, &written, &deleted).await? {
-        return Ok(Err(format!("{CANNOT}{why}")));
-    }
-    // Nor a dimension in a view that is not a plan there.
-    if let Err(why) = dimensions::undo_rules(txn, project, document, &written, &deleted).await? {
+    // Nor anything a tool's undo rules say may not stand (an element without its host, a placed
+    // family without its family's version, a tie to a level that is gone, a view, a schedule, a
+    // sheet or a dimension without what it stands on), in the order of the rules.
+    if let Err(why) = Tools::undo_rules(txn, project, document, &written, &deleted, whole).await? {
         return Ok(Err(format!("{CANNOT}{why}")));
     }
     Ok(Ok(Applied {

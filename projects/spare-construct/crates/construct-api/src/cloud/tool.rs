@@ -121,3 +121,302 @@ pub struct Listed {
     /// [`Tool::UNDO_ORDER`].
     pub undo_order: u16,
 }
+
+/// The one list of the command layer's tools, in order: `module::Type` for each, where the type
+/// implements [`Tool`]. Expands to `Tools`, whose functions are the dispatch the list implies.
+macro_rules! tools {
+    ($($module:ident :: $tool:ident),+ $(,)?) => {
+        /// Every tool of the command layer, in the order of the list in `cloud/mod.rs`
+        /// ([`tool`](crate::cloud::tool)).
+        pub struct Tools;
+
+        impl Tools {
+            /// Every tool, in the list's order.
+            pub const LISTED: &'static [$crate::cloud::tool::Listed] = &[$(
+                $crate::cloud::tool::Listed {
+                    name: <$module::$tool as $crate::cloud::tool::Tool>::NAME,
+                    commands: <$module::$tool as $crate::cloud::tool::Tool>::COMMANDS,
+                    steps: <$module::$tool as $crate::cloud::tool::Tool>::STEPS,
+                    guards: <$module::$tool as $crate::cloud::tool::Tool>::GUARDS,
+                    undo_order: <$module::$tool as $crate::cloud::tool::Tool>::UNDO_ORDER,
+                },
+            )+];
+
+            /// Whether a tool runs this command.
+            #[must_use]
+            pub fn is_command(cmd: &str) -> bool {
+                Self::LISTED.iter().any(|tool| tool.commands.contains(&cmd))
+            }
+
+            /// Whether an applied entry of this command is a step a person can undo.
+            #[must_use]
+            pub fn is_step(cmd: &str) -> bool {
+                Self::LISTED.iter().any(|tool| tool.steps.contains(&cmd))
+            }
+
+            /// Runs the command with the tool whose command it is, behind the guards of the
+            /// tools that guard that tool; `None` when it is no tool's.
+            ///
+            /// # Errors
+            ///
+            /// A store error; a command that cannot be made is the outcome's error instead.
+            pub async fn apply<T: ::kit_store::Txn>(
+                txn: &mut T,
+                project: &::kit_core::Id,
+                context: &::kit_sync::Context<'_>,
+                edit: &::kit_ops::Edit,
+                claim_ms: u64,
+            ) -> Result<Option<::kit_sync::Outcome>, ::kit_store::StoreError> {
+                let cmd = edit.cmd.as_str();
+                $(
+                    if <$module::$tool as $crate::cloud::tool::Tool>::COMMANDS.contains(&cmd) {
+                        return Self::run::<$module::$tool, T>(txn, project, context, edit, claim_ms)
+                            .await
+                            .map(Some);
+                    }
+                )+
+                Ok(None)
+            }
+
+            /// Runs the command with `U`, behind the guards of the tools that guard it.
+            ///
+            /// # Errors
+            ///
+            /// A store error; a command that cannot be made is the outcome's error instead.
+            pub async fn run<U: $crate::cloud::tool::Tool, T: ::kit_store::Txn>(
+                txn: &mut T,
+                project: &::kit_core::Id,
+                context: &::kit_sync::Context<'_>,
+                edit: &::kit_ops::Edit,
+                claim_ms: u64,
+            ) -> Result<::kit_sync::Outcome, ::kit_store::StoreError> {
+                if let Err(refused) = Self::guard(U::NAME, txn, project, edit).await? {
+                    return Ok(Err(refused));
+                }
+                U::apply(txn, project, context, edit, claim_ms).await
+            }
+
+            /// Asks the guard of every tool that guards the tool named `of`, in the list's order;
+            /// the first refusal is the answer.
+            ///
+            /// # Errors
+            ///
+            /// A store error.
+            pub async fn guard<T: ::kit_store::Txn>(
+                of: &str,
+                txn: &mut T,
+                project: &::kit_core::Id,
+                edit: &::kit_ops::Edit,
+            ) -> Result<Result<(), String>, ::kit_store::StoreError> {
+                $(
+                    if <$module::$tool as $crate::cloud::tool::Tool>::GUARDS.contains(&of) {
+                        if let Err(refused) =
+                            <$module::$tool as $crate::cloud::tool::Tool>::guard(txn, project, edit)
+                                .await?
+                        {
+                            return Ok(Err(refused));
+                        }
+                    }
+                )+
+                Ok(Ok(()))
+            }
+
+            /// Asks every tool's undo rules, in the order of their [`UNDO_ORDER`] (the list's
+            /// where two are equal); the first refusal is the answer.
+            ///
+            /// [`UNDO_ORDER`]: crate::cloud::tool::Tool::UNDO_ORDER
+            ///
+            /// # Errors
+            ///
+            /// A store error.
+            pub async fn undo_rules<T: ::kit_store::Txn>(
+                txn: &mut T,
+                project: &::kit_core::Id,
+                document: &::kit_core::Id,
+                written: &[::construct_model::element::Element],
+                deleted: &[::kit_core::Id],
+                whole: bool,
+            ) -> Result<Result<(), String>, ::kit_store::StoreError> {
+                let mut order: Vec<&$crate::cloud::tool::Listed> = Self::LISTED.iter().collect();
+                // A stable sort: two equal places keep the list's order.
+                order.sort_by_key(|tool| tool.undo_order);
+                for listed in order {
+                    $(
+                        if listed.name == <$module::$tool as $crate::cloud::tool::Tool>::NAME {
+                            if let Err(why) =
+                                <$module::$tool as $crate::cloud::tool::Tool>::undo_rules(
+                                    txn, project, document, written, deleted, whole,
+                                )
+                                .await?
+                            {
+                                return Ok(Err(why));
+                            }
+                        }
+                    )+
+                }
+                Ok(Ok(()))
+            }
+        }
+    };
+}
+
+pub(crate) use tools;
+
+#[cfg(test)]
+mod tests {
+    use crate::cloud::Tools;
+    use std::collections::BTreeSet;
+
+    /// The names of the tools that guard the tool named `of`, in the order their guards are asked.
+    fn guarding(of: &str) -> Vec<&'static str> {
+        Tools::LISTED
+            .iter()
+            .filter(|tool| tool.guards.contains(&of))
+            .map(|tool| tool.name)
+            .collect()
+    }
+
+    /// `names` with only those of `known` left, in their order.
+    fn only<'a>(names: &[&'a str], known: &[&str]) -> Vec<&'a str> {
+        names
+            .iter()
+            .copied()
+            .filter(|name| known.contains(name))
+            .collect()
+    }
+
+    #[test]
+    fn every_name_is_kebab_case_and_one_tools() {
+        let mut seen = BTreeSet::new();
+        for tool in Tools::LISTED {
+            assert!(
+                !tool.name.is_empty()
+                    && !tool.name.starts_with('-')
+                    && !tool.name.ends_with('-')
+                    && tool
+                        .name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c == '-'),
+                "{} is not kebab-case",
+                tool.name
+            );
+            assert!(seen.insert(tool.name), "two tools are named {}", tool.name);
+        }
+    }
+
+    /// So the list's order never decides which tool runs a command.
+    #[test]
+    fn no_command_is_two_tools() {
+        let mut seen = BTreeSet::new();
+        for tool in Tools::LISTED {
+            assert!(!tool.commands.is_empty(), "{} runs no command", tool.name);
+            for cmd in tool.commands {
+                assert!(seen.insert(*cmd), "{cmd} is two tools' command");
+            }
+        }
+    }
+
+    #[test]
+    fn every_step_is_its_tools_command() {
+        for tool in Tools::LISTED {
+            for step in tool.steps {
+                assert!(
+                    tool.commands.contains(step),
+                    "{step} is a step of {} but not its command",
+                    tool.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_guarded_tool_is_listed() {
+        for tool in Tools::LISTED {
+            for of in tool.guards {
+                assert!(
+                    Tools::LISTED.iter().any(|other| other.name == *of),
+                    "{} guards {of}, which is not listed",
+                    tool.name
+                );
+            }
+        }
+    }
+
+    /// The chains the list replaced (piece A97) were written by hand in these orders; the tools
+    /// that were in them are still asked in them, so no refusal's words changed. A tool added
+    /// since may come anywhere.
+    #[test]
+    fn the_chains_keep_the_order_they_were_written_in() {
+        let element = [
+            "view",
+            "schedule",
+            "dimension",
+            "sheet",
+            "family",
+            "opening",
+            "hosting",
+            "room",
+            "floor",
+            "wall",
+            "roof",
+            "stair",
+            "curtain-wall",
+        ];
+        assert_eq!(only(&guarding("element"), &element), element);
+        let parameter = ["floor", "wall", "roof", "curtain-wall"];
+        assert_eq!(only(&guarding("parameter"), &parameter), parameter);
+        let hosting = ["family", "opening", "curtain-wall"];
+        assert_eq!(only(&guarding("hosting"), &hosting), hosting);
+
+        let mut undo: Vec<_> = Tools::LISTED
+            .iter()
+            .filter(|tool| tool.undo_order != u16::MAX)
+            .collect();
+        undo.sort_by_key(|tool| tool.undo_order);
+        let undo: Vec<&str> = undo.iter().map(|tool| tool.name).collect();
+        let written = [
+            "hosting",
+            "family-loading",
+            "level",
+            "view",
+            "schedule",
+            "sheet",
+            "dimension",
+        ];
+        assert_eq!(only(&undo, &written), written);
+    }
+
+    /// The generic commands and the steps, as they were before the list.
+    #[test]
+    fn the_commands_and_steps_are_the_tools() {
+        for cmd in [
+            "element.create",
+            "element.claim",
+            "element.release",
+            "parameter.bind",
+            "type.create",
+            "element.param",
+            "edit.undo",
+            "edit.redo",
+            "hosted.place",
+            "family.load",
+            "family.place",
+        ] {
+            assert!(Tools::is_command(cmd), "{cmd}");
+        }
+        for cmd in [
+            "document.checkpoint",
+            "model.add",
+            "link.add",
+            "element.other",
+        ] {
+            assert!(!Tools::is_command(cmd), "{cmd}");
+        }
+        for cmd in ["element.claim", "element.release", "document.checkpoint"] {
+            assert!(!Tools::is_step(cmd), "{cmd}");
+        }
+        for cmd in ["element.move", "edit.undo", "family.reload", "type.set"] {
+            assert!(Tools::is_step(cmd), "{cmd}");
+        }
+    }
+}
