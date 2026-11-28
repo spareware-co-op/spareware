@@ -43,10 +43,13 @@
 //! ([`construct_regen::parameters::Context::view_cut`]). Nothing here reads a clock or a random
 //! number: the claim's time is the orderer's.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
 use crate::cloud::families::{claim_on, rewrite};
+use crate::cloud::hosting::HostingTool;
 use crate::cloud::hosting::{self, Host, Which, fit, length};
 use crate::cloud::levels;
+use crate::cloud::tool::Tool;
 use construct_levels::{Tie, base_of, top_of, write_base, write_top};
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::Recipe;
@@ -107,6 +110,33 @@ pub const SHAFT_DELETE: &str = "shaft.delete";
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The opening tool ([`Tool`]): openings in walls and floors, and shafts through floors.
+pub struct OpeningTool;
+
+impl Tool for OpeningTool {
+    const NAME: &'static str = "opening";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME, HostingTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.

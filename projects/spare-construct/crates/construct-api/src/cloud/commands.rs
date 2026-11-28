@@ -2,14 +2,16 @@
 //! command that isn't listed in `permit` is refused, so a new command can't arrive unguarded.
 //! Each runs on a staged transaction ([`transaction`](crate::cloud::transaction)): what a command
 //! that is turned back wrote is dropped, so every command fully applies or fully rolls back.
+//!
+//! A model's edits are the tools' commands ([`Tools`], the one list in `cloud/mod.rs`): this file
+//! names no tool, and asks the list which commands are a tool's and runs them through it. The
+//! folder, package and link commands and `document.checkpoint` are the project's own, here.
 
+use crate::cloud::Tools;
 use crate::cloud::access::{Access, Target};
+use crate::cloud::elements::{self, ElementTool};
 use crate::cloud::spaces::{self, AddLink, AddModel, Bridge, Publish, Take, folders};
 use crate::cloud::transaction::Staged;
-use crate::cloud::{
-    curtains, dimensions, elements, families, floors, grids, hosting, levels, openings, params,
-    roofs, rooms, schedules, sheets, stairs, undo, views, walls,
-};
 use construct_model::geometry::Edition;
 use construct_model::keys::Place;
 use construct_model::rows::{LinkKind, Model, Project};
@@ -115,59 +117,6 @@ impl<K: Kv, D: Decider> ProjectCommands<K, D> {
     }
 }
 
-impl<K: Kv, D: Decider> ProjectCommands<K, D> {
-    /// An `element.*` command, after the view, hosting, floor, wall, roof and stair rules of the
-    /// generic commands.
-    async fn element<T: kit_store::Txn>(
-        &self,
-        staged: &mut T,
-        project: &Id,
-        context: &Context<'_>,
-        edit: &Edit,
-    ) -> Result<Outcome, StoreError> {
-        if let Err(refused) = views::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = schedules::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = dimensions::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = sheets::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = families::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = openings::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = hosting::element_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = rooms::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = floors::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = walls::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = roofs::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = stairs::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        if let Err(refused) = curtains::generic_rules(staged, project, edit).await? {
-            return Ok(Err(refused));
-        }
-        elements::apply(staged, project, context, edit, self.claim_ms).await
-    }
-}
-
 fn read<T: DeserializeOwned>(edit: &Edit) -> Result<T, String> {
     serde_json::from_value(edit.args.clone()).map_err(|e| format!("That edit isn't valid: {e}"))
 }
@@ -183,29 +132,7 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         };
         let person = &edit.person;
         let allowed = match edit.cmd.as_str() {
-            "element.create" | "element.move" | "element.set" | "element.delete"
-            | "element.claim" | "element.release" => {
-                self.allowed(person, "model.edit", Target::Model(project, &edit.target))
-                    .await?
-            }
-            cmd if params::is_command(cmd)
-                || undo::is_command(cmd)
-                || grids::is_command(cmd)
-                || hosting::is_command(cmd)
-                || families::is_command(cmd)
-                || openings::is_command(cmd)
-                || levels::is_command(cmd)
-                || walls::is_command(cmd)
-                || floors::is_command(cmd)
-                || roofs::is_command(cmd)
-                || curtains::is_command(cmd)
-                || rooms::is_command(cmd)
-                || stairs::is_command(cmd)
-                || views::is_command(cmd)
-                || schedules::is_command(cmd)
-                || sheets::is_command(cmd)
-                || dimensions::is_command(cmd) =>
-            {
+            cmd if Tools::is_command(cmd) => {
                 self.allowed(person, "model.edit", Target::Model(project, &edit.target))
                     .await?
             }
@@ -253,28 +180,11 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
         })
     }
 
-    /// Every element, parameter, type, level, wall, floor and view edit of a model, and every undo and redo,
-    /// has the same answer, so a batch asks Cedar once.
+    /// Every tool's edit of a model (an element's, a parameter's or a type's, an undo or a redo,
+    /// and the rest), and every other `element.*` edit, has the same answer, so a batch asks
+    /// Cedar once.
     fn permit_group(&self, edit: &Edit) -> String {
-        if edit.cmd.starts_with("element.")
-            || params::is_command(&edit.cmd)
-            || undo::is_command(&edit.cmd)
-            || grids::is_command(&edit.cmd)
-            || hosting::is_command(&edit.cmd)
-            || families::is_command(&edit.cmd)
-            || openings::is_command(&edit.cmd)
-            || levels::is_command(&edit.cmd)
-            || walls::is_command(&edit.cmd)
-            || floors::is_command(&edit.cmd)
-            || roofs::is_command(&edit.cmd)
-            || curtains::is_command(&edit.cmd)
-            || rooms::is_command(&edit.cmd)
-            || stairs::is_command(&edit.cmd)
-            || views::is_command(&edit.cmd)
-            || schedules::is_command(&edit.cmd)
-            || sheets::is_command(&edit.cmd)
-            || dimensions::is_command(&edit.cmd)
-        {
+        if edit.cmd.starts_with("element.") || Tools::is_command(&edit.cmd) {
             format!("{}/element/{}", edit.person, edit.target)
         } else {
             format!("{}/{}/{}/{}", edit.person, edit.cmd, edit.target, edit.args)
@@ -291,77 +201,15 @@ impl<K: Kv, D: Decider> Commands<K> for ProjectCommands<K, D> {
             return Ok(Err("These commands act on a project.".to_owned()));
         };
         let mut staged = Staged::new(txn);
-        let outcome = if params::is_command(&edit.cmd) {
-            match floors::generic_rules(&mut staged, project, edit).await? {
-                Ok(()) => match walls::generic_rules(&mut staged, project, edit).await? {
-                    Ok(()) => match roofs::generic_rules(&mut staged, project, edit).await? {
-                        Ok(()) => {
-                            match curtains::generic_rules(&mut staged, project, edit).await? {
-                                Ok(()) => {
-                                    params::apply(
-                                        &mut staged,
-                                        project,
-                                        context,
-                                        edit,
-                                        self.claim_ms,
-                                    )
-                                    .await?
-                                }
-                                Err(refused) => Err(refused),
-                            }
-                        }
-                        Err(refused) => Err(refused),
-                    },
-                    Err(refused) => Err(refused),
-                },
-                Err(refused) => Err(refused),
-            }
-        } else if grids::is_command(&edit.cmd) {
-            grids::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if hosting::is_command(&edit.cmd) {
-            match families::generic_rules(&mut staged, project, edit).await? {
-                Ok(()) => match openings::generic_rules(&mut staged, project, edit).await? {
-                    Ok(()) => match curtains::generic_rules(&mut staged, project, edit).await? {
-                        Ok(()) => {
-                            hosting::apply(&mut staged, project, context, edit, self.claim_ms)
-                                .await?
-                        }
-                        Err(refused) => Err(refused),
-                    },
-                    Err(refused) => Err(refused),
-                },
-                Err(refused) => Err(refused),
-            }
-        } else if families::is_command(&edit.cmd) {
-            families::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if openings::is_command(&edit.cmd) {
-            openings::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if undo::is_command(&edit.cmd) {
-            undo::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if levels::is_command(&edit.cmd) {
-            levels::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if walls::is_command(&edit.cmd) {
-            walls::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if rooms::is_command(&edit.cmd) {
-            rooms::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if floors::is_command(&edit.cmd) {
-            floors::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if roofs::is_command(&edit.cmd) {
-            roofs::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if stairs::is_command(&edit.cmd) {
-            stairs::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if curtains::is_command(&edit.cmd) {
-            curtains::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if views::is_command(&edit.cmd) {
-            views::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if schedules::is_command(&edit.cmd) {
-            schedules::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if dimensions::is_command(&edit.cmd) {
-            dimensions::apply(&mut staged, project, context, edit, self.claim_ms).await?
-        } else if sheets::is_command(&edit.cmd) {
-            sheets::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        let outcome = if let Some(outcome) =
+            Tools::apply(&mut staged, project, context, edit, self.claim_ms).await?
+        {
+            outcome
         } else if edit.cmd.starts_with("element.") {
-            self.element(&mut staged, project, context, edit).await?
+            // An `element.*` command no tool runs: `permit` refuses it alone, but a batch asks
+            // Cedar once for the edits `permit_group` groups together, so it can arrive here, and
+            // it runs as the element commands do.
+            Tools::run::<ElementTool, _>(&mut staged, project, context, edit, self.claim_ms).await?
         } else if edit.cmd == "document.checkpoint" {
             elements::checkpoint(edit)
         } else {

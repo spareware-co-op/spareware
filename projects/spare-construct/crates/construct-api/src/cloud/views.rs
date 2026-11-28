@@ -74,7 +74,9 @@
 //! exists to name. The job that stores phases through the log replaces [`phases`] and
 //! [`options`] with the document's own, and no caller changes.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use construct_categories::{CategoryId, CategoryKind, CategoryTable, VIEWS};
 use construct_levels::{Level, Levels, parse_length};
 use construct_model::element::Element;
@@ -128,6 +130,45 @@ pub const BY_VIEW_COMMANDS: &str = "Views are made and changed by the view comma
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The view tool ([`Tool`]): plans, sections and elevations.
+pub struct ViewTool;
+
+impl Tool for ViewTool {
+    const NAME: &'static str = "view";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const UNDO_ORDER: u16 = 40;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        _deleted: &[Id],
+        whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written, whole).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.

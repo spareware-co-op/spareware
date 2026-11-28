@@ -16,6 +16,7 @@
 
 use crate::cloud::grids;
 use crate::cloud::levels;
+use crate::cloud::tool::Tool;
 use construct_model::element::{Element, Placement, Reference};
 use construct_model::geometry::Recipe;
 use construct_model::rows::Checkpoint;
@@ -27,6 +28,43 @@ use kit_store::{Place, StoreError, Txn, read_row, to_row};
 use kit_sync::{Applied, Context, Outcome, claims};
 use serde::Deserialize;
 use std::collections::BTreeMap;
+
+/// Every command here.
+pub const COMMANDS: [&str; 6] = [
+    "element.create",
+    "element.move",
+    "element.set",
+    "element.delete",
+    "element.claim",
+    "element.release",
+];
+/// The commands here that are steps a person can undo: a claim and its release are not.
+pub const STEPS: [&str; 4] = [
+    "element.create",
+    "element.move",
+    "element.set",
+    "element.delete",
+];
+
+/// The element tool ([`Tool`]): the generic commands, which reach any tool's records, so the tools
+/// whose records they could reach guard them.
+pub struct ElementTool;
+
+impl Tool for ElementTool {
+    const NAME: &'static str = "element";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const STEPS: &'static [&'static str] = &STEPS;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+}
 
 /// The arguments of every command; each uses some of them.
 #[derive(Deserialize, Default)]

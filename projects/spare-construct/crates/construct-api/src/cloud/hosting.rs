@@ -26,7 +26,9 @@
 //! without the engine, from the records as they are now. Nothing reads a clock or a random number:
 //! the claim's time is the orderer's.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::elements::write_record;
+use crate::cloud::tool::Tool;
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{Edition, FaceName, Hosted, Recipe};
 use construct_model::keys::Place as ModelPlace;
@@ -56,6 +58,45 @@ const DOOR: &str = "door";
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The hosting tool ([`Tool`]): hosting an element on a face of another.
+pub struct HostingTool;
+
+impl Tool for HostingTool {
+    const NAME: &'static str = "hosting";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] = &[ElementTool::NAME];
+    const UNDO_ORDER: u16 = 10;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        element_rules(txn, project, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        deleted: &[Id],
+        _whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written, deleted).await
+    }
 }
 
 /// The arguments of both commands; each uses some of them.

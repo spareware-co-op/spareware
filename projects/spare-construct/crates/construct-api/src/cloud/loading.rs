@@ -48,6 +48,7 @@
 use crate::cloud::elements::write_record;
 use crate::cloud::families::{FamilyView, category_of, kind_of, names_of, type_in, view_of};
 use crate::cloud::hosting::{self, Which, fit, length};
+use crate::cloud::tool::Tool;
 use construct_categories::CategoryTable;
 use construct_doorgen::{Family as Generator, Hand, Size, Spec, Template, generate, verify};
 use construct_families::{
@@ -83,6 +84,38 @@ pub const REMOVE: &str = "family.remove";
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The family loading tool ([`Tool`]): the families a document holds, loaded, reloaded, swapped,
+/// generated and taken out. Its guard is asked inside the family tool's
+/// ([`super::families::generic_rules`]).
+pub struct LoadingTool;
+
+impl Tool for LoadingTool {
+    const NAME: &'static str = "family-loading";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const UNDO_ORDER: u16 = 20;
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        _claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit).await
+    }
+
+    async fn undo_rules<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        document: &Id,
+        written: &[Element],
+        deleted: &[Id],
+        _whole: bool,
+    ) -> Result<Result<(), String>, StoreError> {
+        undo_rules(txn, project, document, written, deleted).await
+    }
 }
 
 /// A command's answer: a store failure, or the command's own result.

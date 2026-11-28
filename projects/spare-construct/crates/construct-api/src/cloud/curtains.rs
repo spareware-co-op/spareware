@@ -70,8 +70,12 @@
 //! Typed text is read with construct-params' metric display settings until a project keeps its
 //! own.
 
+use crate::cloud::elements::ElementTool;
 use crate::cloud::floors::{Answer, Run, length, need, why};
+use crate::cloud::hosting::HostingTool;
 use crate::cloud::hosting::{self, Which, fit};
+use crate::cloud::params::ParamTool;
+use crate::cloud::tool::Tool;
 use crate::cloud::walls::{MaterialView, materials_view};
 use crate::cloud::{elements, levels, params};
 use construct_categories::{CURTAIN_WALLS, CategoryId};
@@ -120,6 +124,35 @@ pub const COMMANDS: [&str; 15] = [
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
     COMMANDS.contains(&cmd)
+}
+
+/// The curtain wall tool ([`Tool`]): curtain wall types and curtain walls, their grids, segments
+/// and panels.
+pub struct CurtainTool;
+
+impl Tool for CurtainTool {
+    const NAME: &'static str = "curtain-wall";
+    const COMMANDS: &'static [&'static str] = &COMMANDS;
+    const GUARDS: &'static [&'static str] =
+        &[ElementTool::NAME, ParamTool::NAME, HostingTool::NAME];
+
+    async fn apply<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        context: &kit_sync::Context<'_>,
+        edit: &Edit,
+        claim_ms: u64,
+    ) -> Result<Outcome, StoreError> {
+        apply(txn, project, context, edit, claim_ms).await
+    }
+
+    async fn guard<T: Txn>(
+        txn: &mut T,
+        project: &Id,
+        edit: &Edit,
+    ) -> Result<Result<(), String>, StoreError> {
+        generic_rules(txn, project, edit).await
+    }
 }
 
 /// The arguments of every command here; each uses some of them.
