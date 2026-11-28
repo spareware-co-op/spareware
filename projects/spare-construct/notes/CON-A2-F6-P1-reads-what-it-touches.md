@@ -1,0 +1,42 @@
+# CON-A2-F6-P1: Regenerating an entry reads what it touches
+
+**Status, 2026-11-29:** Decided for the build. The code is construct-regen's `wall_index`, `pass_plan`, `read_memo`, `joins`, `rooms` and `regenerator`; the test that pins it is construct-api's `tests/replay_work.rs`.
+
+## The question
+
+Rebuilding a real architectural model by replaying its edits (about 1,000 straight walls with levels, grids, floors and roofs) took 1,748 s, about 1.7 s a wall, and grew with the model: a real office has thousands of elements. A plan generated for the purpose (a grid of rooms, every room's edge its own wall) gave the same: 1.7 s a wall at 960 walls, the rows regeneration read for one entry growing with the walls (5,894 at 960, 2,230 at 288, 1,225 at 120). The time after the last entry of a script (taken for a slow stair, which was the last entry) was the regeneration of all the walls before it.
+
+## The cause
+
+A layered wall's joints were found by reading every wall of the document from the store and testing every line, every time a wall was built; and building a wall builds again every wall within two meetings of it, each reading the whole document again and filling every neighbour's recipe (parameter table, type, levels) from scratch. A room was found by reading every wall of the document, filling each wall of its level, joining each with every other wall of the level, and cutting every outline's edges against every other's; a wall's change found every room of its level again, and a room's change every other room of its level. Nothing read was shared between the builds of a pass, or between passes. So the work of one entry grew with the model, and a replay with its square.
+
+## The decisions
+
+- **Walls by where their lines run.** A document's layered walls are held in a grid of 5 m cells of each line's box, grown by a millimetre (`WallIndex`, `Grid`). The walls within two meetings of a wall are found among the walls listed in the cells its line touches, by the very test a full read applied (construct-walls' `lines_meet`): two lines meet only within the joins tolerance (0.01 mm), so both are listed in a cell they share, and the set is the same. A line whose box would cover more than 1,024 cells is listed apart and tested by every search. Made from records only, never from built shapes, so it does not depend on what was built first.
+- **Read once a pass, kept in step, kept between passes.** A pass reads each document's walls and rooms from the kind index the first time a build needs them, and changes them with every kind row it writes (`pass_plan::Documents`). When the pass commits they are kept, by project, with the log number it reached; the next pass takes them only when it reads that same number as where regeneration stands, in its own transaction (only a pass that moves the number on writes the kind index; clearing derived rows takes the number away). Otherwise it reads afresh. At most 16 projects are kept.
+- **Worked out once while what it read stands.** A neighbour's plan as the join rule reads it, and a wall's recipe as a room reads it, are kept with the rows their work read (`read_memo`): given back only for the same record, while each row reads the same. Records are named by their hash and never noted. A pass logs every row of the kind index it writes (only the regenerator writes the kind index); work that read nothing else is read again only when one of its rows was logged since.
+- **A room among the walls near it.** Each wall's outline as a room reads it is held (a layered wall's when it is built, and when a room reads its level whole; an old box wall's from its record). When every wall of a room's level is held and the room search takes each, the room is found among the walls whose outline's box meets a square round its point, the square doubled until the loop found lies strictly inside it or the walls are all the level's. A wall left out lies wholly outside the square, so it changes no edge round the room or inside it; a point in a wall is refused naming the first such wall in order, and each such wall's box holds the point.
+- **Rooms found again only where a change reaches.** Each room's loop box (or that it has none) is held when it is built. A wall's change finds again the rooms of its levels whose loop is not held or that have none, and those whose loop's box meets where the outlines of the walls built for the change were or are; all of them when one of those outlines was not held or the search refuses it. A room's change finds again the rooms after it in key order whose loop's box holds where its point was or is, and those with no loop: only a room before another in one loop makes the other redundant.
+- **No room keeps a wall's old outline.** Before, a wall built again because a record it reads changed (its type's layers, a level) did not find the rooms round it again, so a room kept its old loop until a wall or room of its level next changed. Now every room of the levels of the walls and rooms built again for such a change is found again after them, so what every room is built to is always what its walls give. This is the one change to what is stored: in that case a room is right sooner.
+- **The same bytes.** Everything else stored is unchanged: the log, every check, the derived rows' form and what they hold. `tests/replay_work.rs` holds every room's shape to its loop found among every wall of its level, the old way, after each edit of a run that deletes and draws walls, thickens a wall type, moves a level, moves rooms into another's loop and out, places one outside every loop, and undoes and redoes; the derived rows to a rebuild from the log on a fresh regenerator; and `verify`.
+
+## Measured
+
+The generated plan, debug build, each entry regenerated after it as the server keeps up, on one machine; rows are the store's reads (each row got, and each row a scan gave).
+
+| Plan | What | Before | After |
+| --- | --- | --- | --- |
+| 960 walls, two storeys, three rooms a storey | whole replay | 518 s | 33 s |
+| | regenerating a wall entry | 0.51 s, 10,761 rows (most 31,953) | 0.026 s, 130 rows (most 233) |
+| | regenerating a room entry | 2.7 s, 11,561 rows | 0.019 s, 9 rows |
+| | a room command | 1.5 s, 9,882 rows | 0.9 s, 5,862 rows |
+| 288 walls on two storeys, a room in each of the 128 cells | whole replay | 1,223 s | 46 s |
+| | regenerating a wall entry | 0.21 s, 3,579 rows (most 10,897) | 0.023 s, 120 rows (most 233) |
+| | regenerating a room entry | 8.8 s, 61,487 rows (most 127,871) | 0.028 s, 9 rows |
+| | a room command | 0.32 s, 3,442 rows (most 3,824) | 0.27 s, 1,926 rows (most 2,052) |
+
+Before, the rows a wall entry read grew with the walls (1,225 gets at 120 walls, 2,230 at 288, 5,894 at 960); after, the most any wall entry reads is 233 at 288 walls and at 960.
+
+## Not done here
+
+A room command (`room.place`, `room.move`, ...) still reads the whole document once to check the room's number and its loop as the document stands now (it read it twice), since the current records (the pieces) have no index by kind: about as many reads as the model has elements, per room command. An index of the current records by kind, written by the commands in the entry's own transaction, is the next step; it is a change to the stored format, so it is a piece of its own.

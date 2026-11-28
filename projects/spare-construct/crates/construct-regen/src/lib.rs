@@ -50,6 +50,12 @@
 //! - [`joins`]: how a layered wall's recipe is filled with its joints with the walls it meets
 //!   (job 5.1): the walls are found from the stored walls of its level, the rule is
 //!   construct-walls', and the regenerator and the server's `/filled` both fill through it.
+//! - [`wall_index`]: a document's layered walls by where their lines run, which the joins search
+//!   and a room's walls are read from, and what the regenerator keeps of them between passes.
+//! - [`read_memo`]: a value worked out from an element and the rows it read, kept with those rows
+//!   and worked out again only when one of them changed.
+//! - [`pass_plan`]: each document's walls and rooms as a pass of the regenerator reads them, read
+//!   once and kept in step with what the pass writes, and kept between passes.
 //!
 //! - [`curtain_plan`]: a curtain wall (`wall.curtain`, job 14.1) in plan: every panel and mullion
 //!   a quadrilateral on the kernel's grid rising between two heights, and every door panel where
@@ -105,6 +111,10 @@ pub mod levels;
 #[cfg(feature = "server")]
 pub mod parameters;
 #[cfg(feature = "server")]
+pub mod pass_plan;
+#[cfg(feature = "server")]
+pub mod read_memo;
+#[cfg(feature = "server")]
 pub mod regenerator;
 pub mod roof_plan;
 #[cfg(feature = "server")]
@@ -120,6 +130,8 @@ pub mod stair_plan;
 pub mod stairs;
 pub mod stand_in;
 pub mod voids;
+#[cfg(feature = "server")]
+pub mod wall_index;
 #[cfg(feature = "server")]
 pub mod wall_measure;
 pub mod wall_plan;

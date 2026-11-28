@@ -49,6 +49,7 @@ use construct_levels::{Length, Tie, parse_length, write_top};
 use construct_model::element::Element;
 use construct_params::Units;
 use construct_regen::parameters::{self as records, At};
+use construct_regen::pass_plan::Plan;
 use construct_rooms::{
     Limit, NUMBER_KEY, RoomError, at_of, is_room, is_room_recipe, limit_of, next_number, number_of,
     room_recipe, room_record,
@@ -149,6 +150,9 @@ struct Run<'a, T: Txn> {
     edit: &'a Edit,
     now_ms: u64,
     claim_ms: u64,
+    /// The document's walls and rooms as they are now, read once for the command's checks (each
+    /// command reads them before it writes anything).
+    plan: Option<Plan>,
 }
 
 impl<T: Txn> Run<'_, T> {
@@ -214,13 +218,25 @@ impl<T: Txn> Run<'_, T> {
         }))
     }
 
+    /// The document's walls and rooms as they are now, read the first time they are asked for.
+    async fn plan(&mut self) -> Result<&mut Plan, StoreError> {
+        if self.plan.is_none() {
+            let read = Plan::read(self.txn, self.project, self.document, At::Now).await?;
+            self.plan = Some(read);
+        }
+        self.plan
+            .as_mut()
+            .ok_or_else(|| StoreError::Damaged("the document was not read".to_owned()))
+    }
+
     /// The rooms of the document, by ID.
     async fn rooms(&mut self) -> Result<Vec<Element>, StoreError> {
-        let all = records::read_document(self.txn, self.project, self.document).await?;
-        Ok(all
-            .into_values()
-            .map(|(_, record)| record)
-            .filter(is_room)
+        let plan = self.plan().await?;
+        Ok(plan
+            .rooms
+            .all()
+            .filter(|room| is_room(room))
+            .cloned()
             .collect())
     }
 
@@ -248,12 +264,17 @@ impl<T: Txn> Run<'_, T> {
     /// search's own words, when they would refuse it. A room not enclosed, or in a loop an earlier
     /// room already has, is not refused: it is what became of it.
     async fn buildable(&mut self, record: &Element) -> Result<Result<(), String>, StoreError> {
-        let found = construct_regen::rooms::found_at(
+        self.plan().await?;
+        let Some(plan) = self.plan.as_mut() else {
+            return Err(StoreError::Damaged("the document was not read".to_owned()));
+        };
+        let found = construct_regen::rooms::found_among(
             self.txn,
             self.project,
             self.document,
             record,
             At::Now,
+            plan,
         )
         .await?;
         Ok(found.map(|_| ()).map_err(|failed| failed.message))
@@ -283,6 +304,7 @@ pub async fn apply<T: Txn>(
         edit,
         now_ms: context.now_ms,
         claim_ms,
+        plan: None,
     };
     match edit.cmd.as_str() {
         "room.place" => place(&mut run, args).await,

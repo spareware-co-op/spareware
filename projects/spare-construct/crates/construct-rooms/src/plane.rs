@@ -171,6 +171,16 @@ fn checked(bound: &Bound) -> Result<Ring, RoomError> {
     })
 }
 
+/// Whether [`find`] takes a wall's outline: a polygon of three corners or more, within the grid,
+/// with an area. The error is the one [`find`] gives for it, so a reader that holds outlines
+/// checked can tell beforehand whether a search among them would fail on one.
+///
+/// # Errors
+/// [`RoomError::CurvedWall`], [`RoomError::NoOutline`] or [`RoomError::TooBig`], as [`find`].
+pub fn check(bound: &Bound) -> Result<(), RoomError> {
+    checked(bound).map(|_| ())
+}
+
 /// The edges of a ring, each from a corner to the next.
 fn edges(ring: &[Pt]) -> impl Iterator<Item = (&Pt, &Pt)> {
     ring.iter()
