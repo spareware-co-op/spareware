@@ -1,6 +1,6 @@
 # A96: A tool is one module on each side, and the core never names it
 
-**Status, 2026-11-28:** Decided for the build (piece A96). The page half is built by A96; the Rust half is the next job and is written here so that it can start at once. Part: CON-A8 (the page, all of it), and the command layer under it.
+**Status, 2026-11-28:** Decided for the build (piece A96). The page half is built by A96 (below); the Rust half is the next job (job 11.0b) and is written here so that it can start at once. Part: CON-A8 (the page, all of it), and the command layer under it.
 
 ## The question
 
@@ -19,114 +19,114 @@ The rest of Spareware already has the shape the owner wants: the shared ribbon (
 
 The one list per side is the same idea as Transport's pack loading (its `index.html` lists a pack's files in order): a list of names, in a fixed order, holding no logic. Its order is the order the core asks the tools in, so it is what makes the page and the server deterministic.
 
-## The page
+## The page (built by A96)
 
 ### Files
 
 ```
 app/
-  main.js                       loads the core, then the tools in order, then starts
+  connect.js                    the entry: loads the core, then the tools' list, then starts
   core/                         the core (below); never imports from tools/
-  registry.js                   the registry: disciplines, tools, packs
+    registry.js                 the registry: disciplines, tools, their hooks, packs
+    late.js                     the names the core still calls a tool by (below), bound once the tool has loaded
   tools/
     index.js                    the ordered list of tool modules, one line each
-    project/<tool>.js           tools of the whole project (levels, views, schedules, warnings, types and parameters, graphics, crop, the families dialog)
-    architecture/<tool>.js      wall, door, floor, roof, room, grid, dimension, curtain wall, family, opening, stair
-    workshop/<tool>.js          Workshop's parts and assemblies
-  packs/
-    README.md                   how a country or content pack plugs in
+    project/<tool>.js           tools of the whole project: levels, warnings, views, graphics, schedules, crop, families
+    architecture/<tool>.js      wall, floor, roof, room, grid, dimension, curtain, door, family, opening, stair
+    workshop/elements.js        Workshop's parts and assemblies
+  packs/README.md               how a country or content pack plugs in
 ```
 
-Plain ES modules: no framework and no build step. `body.html` loads `app/main.js` as a module where it loaded `connect.js`. The server serves the whole `app/` folder from one embedded tree (the `include_dir` crate, MIT or Apache-2.0, pinned), so a new file needs no route; today every page file is its own `include_str!` and route.
+Plain ES modules: no framework and no build step. `body.html` loads `connect.js` as a module (`type="module"`); its name stays, so everything that knew the page by it (Workshop's page finds the app by that script) still does. The server serves `app/core` and `app/tools` as two trees embedded when it is built (the `include_dir` crate, 0.7.4, MIT), at `/core/...` and `/tools/...`, so a new file needs no route; `server/build.rs` rebuilds the server when a file is added to either.
 
 ### The core
 
-The core is what every tool needs and no tool owns. Each part is a module of `app/core/`:
+The core is what every tool needs and no tool owns:
 
-| Part | What it holds |
+| File | What it holds |
 | --- | --- |
-| State | The connection's state (`C`: me, the project, the open model, its elements, claims, links), the constants, small helpers |
-| Connection and the ordered log | `api` and `post`, the socket, `send`, `receive`, `apply` (an entry from the log into the elements), `edit` (an edit up the socket, drawn at once, confirmed or turned back), `turnBack` |
-| Claims | `heldClaim`, `claimedByOther`, `letGo`, the claim when a drag starts |
-| Undo and redo | the person's own steps from the server, `undoOrRedo`, the quick access bar's two buttons |
-| Selection | `select` and what changes with it |
-| The drawing surface and redraw | the plan viewport (`plan`, `drawPlan`, `queueDraw`, the pointer handlers that pick and drag), the 3D viewport host, shapes and their checks against the server's checkpoints |
-| The side panel host | the properties palette: the core's own rows for any element, then each tool's part |
-| The ribbon host | the demo's ribbon config, changed where the connection gives a button meaning, then each tool's buttons |
-| The palette | the command palette and keyboard keys a tool registers |
-| Problems and dialogs | `problem`, `manage`, `refused`, `done`, the dialog frame |
-| Hub, projects and models | signing in, the project browser, opening a model or a package |
+| `state.js` | The connection's state (`C`: me, the project, the open model, its elements, claims, links), the constants, small helpers, `api` and `post` |
+| `frame.js` | The ribbon host: the demo's frame, with the sample taken out of what is connected, and `connectRibbon` |
+| `hub.js`, `browser.js`, `open.js` | Signing in, the project browser, opening a model or a package |
+| `shapes.js` | What the page builds with the geometry compiled for the browser, and the checks against the server's checkpoints |
+| `channel.js` | The connection and the ordered log: the socket, `edit`, `receive`, `apply`, `turnBack`, claims let go |
+| `undo.js` | This person's own steps, undo and redo |
+| `parameters.js`, `problems.js`, `dialogs.js` | The side panel host's own rows, problems and what a palette or dialog sends, the dialog frame and the Types and Project parameters dialogs |
+| `plan.js` | The drawing surface: the plan viewport, its redraw, picking and dragging, claims held, the properties palette, the hint line |
+| `viewport3d.js` | The 3D viewport, loaded only when the view opens |
 
 ### The contract a tool module meets
 
-A tool module imports what it needs from the core and registers itself once, at load:
+A tool module imports what it needs from the core, holds its own functions, and registers what the core asks it, once, when it loads. The kinds are the registry's, each a list in `order` (then in the order of registration), Transport's way (`demo/transport/js/registry.js`): one call per kind, its fields checked when it registers, so a mistake is a `TypeError` naming the tool and the field at load, not on the first click. The floor tool's, for example:
 
 ```js
-import { register } from '../../registry.js';
-// ...the tool's own functions, moved unchanged...
-register.tool({
-  id: 'floor',                       // kebab-case, unique
-  discipline: 'architecture',        // the discipline whose ribbon shows it
-  commands: ['floor.create', 'floor.type', 'floor.slope', 'floor.edge'],  // what it sends up the log
-  owns: isFloor,                     // which elements are its own, to draw, pick, show and delete
-  ribbon: floorRibbon,               // (config) => adds its buttons to the ribbon config
-  inPlan: floorInPlan,               // (piece, data, scale) => the SVG of an element it owns
-  sketch: floorSketch,               // () => SVG drawn over every element while it is in use
-  palette: floorPalette,             // (piece) => its part of the side panel, or '' when it has none
-  hint: floorHint,                   // () => the line under the ribbon while it is in use
-  place: null,                       // (at, event) => a click in the plan while it is the tool
-  remove: null,                      // (piece) => Delete of a selected element it owns
-  test: 'Floors, from a sketch',     // the label of its section of the two-browser test
-});
+register.tools({ id: 'floor', discipline: 'architecture', order: 20 });
+register.ribbons({ id: 'floor', order: 10, ribbon: (config) => floorRibbon(config) });
+register.hints({ id: 'floor', order: 30, hint: () => (S.tool === 'floor' || S.tool === 'roof' ? floorHint() : undefined) });
+register.palettes({ id: 'floor', order: 10, palette: (piece) => floorPalette(piece) || undefined });
+register.elements({ id: 'floor', order: 20, owns: isFloor, inPlan: (piece, data, scale) => floorInPlan(piece, data, scale) });
+register.drawOrders({ id: 'floor', order: 30, drawOrder: (el) => (isFloor(el) ? 0 : undefined) });
+register.layers({ id: 'floor-sketch', order: 50, over: () => floorSketch() });
 ```
 
-Every field but `id` and `discipline` is optional. The registry checks the fields when a tool registers (Transport's way: a field of the wrong type is a `TypeError` naming the tool and the field), so a mistake shows at load, not on the first click.
+| Kind | What the tool gives | Where the core asks it |
+| --- | --- | --- |
+| `disciplines` | id, label | the discipline a tool's ribbon belongs to |
+| `tools` | its `S.tool` id, discipline, `place(at, event)`, `commands`, `test` (its two-browser section) | a click in the plan while it is the tool |
+| `ribbons` | `ribbon(config)` | the ribbon host: under 1000 beside the demo's own buttons, 1000 and over after the core's (a selection's own Modify tab) |
+| `hints` | `hint()` | the line under the ribbon: the first answer |
+| `palettes` | `palette(piece)` (`always` to be asked after an earlier answer) | the side panel: the first answer |
+| `properties` | `properties(piece)` | rows under the core's own for a selected element: every answer |
+| `selections` | `selection(id)` | the side panel for a selection that is not an element (a dimension, a grid) |
+| `elements` | `owns(el)`, `inPlan`, `unbuilt`, `pickOnly`, `drags(el, hosted)`, `move` | the plan: who draws an element, whether a pick claims and drags it, the command a hosted one moves with |
+| `drawOrders` | `drawOrder(el)` | how the plan stacks the elements |
+| `layers` | `before()`, `under(scale)`, `over(scale)`, `note()` | the plan's layers around the elements |
+| `models` | `open(model)` (awaited in order), `forget()` | a model opening and closing |
+| `logs` | `entry(entry)` | each entry of the log for the open model |
+| `dialogs` | `html(m)` by the dialog's name | the Manage tab's dialog frame |
 
-The core asks the tools, in the list's order, at each place it used to name them:
+A hook that has nothing to say returns `undefined`; for a question one tool answers, the core takes the first answer that is not `undefined`. Every registration names its `order`, unique in its kind: the place the core asked it in before the cut (the if-chain's position, by tens), so the order the files load in never decides anything. A new tool picks the number that puts it where it belongs.
 
-| Where in the core | What it asks |
-| --- | --- |
-| The ribbon host | every tool's `ribbon(config)` |
-| `drawPlan` | for each element, the first tool that `owns` it draws it (`inPlan`); then every tool's `sketch()` |
-| The side panel host | the selected element's owner's `palette(piece)`, or the active tool's panel |
-| The hint line | the active tool's `hint()` |
-| A click in the plan with a tool | the active tool's `place(at, event)` |
-| Delete | the selected element's owner's `remove(piece)`, else the core's own delete |
-| Keys and the command palette | the tool's `keys` and `commands` entries, each with its words and its key |
-| The log | a tool's `open(model)`, `forget()` and `entry(model, into, entry)`, for what it keeps beside the elements |
+A tool's own buttons and fields keep the demo's tables (`ACT.<name>` for a click, `CHG.<name>` for a change, `DTOOLS`, `TOOLNAME`, `WORDS`, `STEP_WORDS`): they are already registries by name, and the ribbon, the palettes and the log already read them.
 
-A tool's own buttons and fields keep the demo's tables (`ACT.<name>` for a click, `CHG.<name>` for a change): they are already a registry by name, and the ribbon and the side panel already call through them.
+**Adding a tool** is a file under `tools/<discipline>/`, its line in `tools/index.js`, and its section of the two-browser test. The core is not edited.
+
+### Where the core still names a tool
+
+The cut moved every tool out and gave the core hooks where it asked tools most (the ribbon, the hint, the side panel, the plan's drawing, picking and dragging, a model opening and closing, the log, the dialogs). The rest the split binds late: where a core file still calls a tool's function, it calls `late.<name>`, filled when the tool's file has loaded (`core/late.js`), so the core never imports a tool and every such place is listed. After the cut there are 33 (the split's report lists them): the seating of families and curtain walls in a wall's shape (`shapes.js`), Workshop's elements, the browser's Views, Schedules and Warnings parts, the levels' names, the 3D view's colours and the status bar's warning count. Each is a hook still to make; the next jobs turn them into kinds as above, one at a time, the same way.
+
+Delete and the tool switch stay chains of `ACT.stackdelete` and `ACT.tool` wrappers, each tool around the last, as before: they work through the demo's own table, and turning them into a `remove(piece)` hook is one of those jobs.
 
 ### Disciplines and packs
 
-A discipline registers as a tool does (`register.discipline({ id, label, tab, order })`): the ribbon tab it owns and whether it is connected to the project. A tool names its discipline, so one ribbon per discipline (the shared ribbon's rule) is built from what is registered.
+A discipline registers as a tool does (`register.disciplines({ id, label, order })`; Architecture and Workshop today), and a tool names its discipline, so one ribbon per discipline (the shared ribbon's rule) is built from what is registered.
 
-Packs follow Transport exactly: a pack's files load between `beginPack({ id, name })` and `endPack()`; everything they register carries the pack's id and takes part only on a project of that pack; a pack that registers the same id as a core tool replaces it for that pack only. A country pack (a country's wall and floor types, its sheet borders, its rules) and a content pack (a firm's or a supplier's tools) plug in the same way. No Construct pack exists yet; `app/packs/README.md` says how one is added, after Transport's `packs/README.md`.
+Packs follow Transport exactly: a pack's files load between `beginPack({ id, name })` and `endPack()`; everything they register carries the pack's id and takes part only on a project of that pack; a pack that registers the same id as a core entry replaces it for that pack only. A country pack (a country's wall and floor types, its sheet borders, its rules) and a content pack (a firm's or a supplier's tools) plug in the same way. No Construct pack exists yet; `app/packs/README.md` says how one is added.
 
-One registry shape across Spareware: Construct's registry has Transport's API (`register.<kind>(def)`, `list`, `get`, `beginPack`, `endPack`, `country`), its field checks and its ordering (`order`, then the order of registration). It is an ES module where Transport's is a classic script. A later job may lift the two into one shared file under `design/`.
+One registry shape across Spareware: Construct's has Transport's kinds, field checks, ordering and packs. It is an ES module where Transport's is a classic script; a later job may lift the two into one shared file under `design/`.
 
-### What does not change at the cut
+### What did not change at the cut
 
 The cut moves code; it does not change what any line does:
 
-- Each tool's functions move to its module unchanged, as text.
-- The core calls a tool's hooks directly, as it called the functions they were, so an exception still goes where it went. (Transport's `Registry.call` catches a plug-in's exception; whether Construct does is decided later, separately.)
-- Every top-level statement that does something when the page loads (a listener added, an `ACT` entry wrapped) runs in the same order as before: the tools' list is the old file's order, and the split checks the order (below).
-- The two-browser test runs unedited.
+- Each tool's functions moved to its module unchanged, as text (only de-indented, outside strings).
+- The core calls a tool's hooks directly, in the order it called the functions they wrap, so an exception still goes where it went. (Transport's `Registry.call` catches a plug-in's exception; whether Construct does is decided later, separately.)
+- Every top-level statement that does something when the page loads (a listener added, an `ACT` entry wrapped) runs in the same order as before, and the split checks it (below).
+- The two-browser test ran unedited.
 
 ### The split, repeatable on any newer main
 
-Other lanes keep changing `connect.js` while this piece is built, so the split is a program, kept beside this piece's lane scripts, and the cut is made by running it on the newest main at the end, never by hand-merging. It:
+Other lanes keep changing `connect.js` while this piece is built, so the split is a program (lane tooling, `page-split`), and the cut is made by running it on the newest main, never by hand-merging. It:
 
-1. Parses `connect.js` with a JavaScript parser (the `oxc` crates, MIT, pinned in the script's own Cargo.toml) and resolves every name to its declaration, so a name a function declares for itself is never mistaken for the core's.
-2. Gives every top-level statement a file, by its section heading (the `// --- ... ---` lines) and, where a section holds two tools, by name. A heading or a name it does not know stops it, naming the line: the table gets a line, and it runs again.
-3. Writes each file: the statements, de-indented, then an `export` of what other files use, and at the top an `import` of what it uses from others.
-4. Refuses what ES modules cannot do as the one file did: a binding assigned from another file (an import is read-only), a name read while the page loads from a file that has not loaded yet, and any change in the order of top-level statements that do something.
-5. Applies the seams: the core's dispatch functions (above) are replaced by their registry versions, kept as files beside the script. Each seam records a hash of the original it replaces; when another lane has changed that original, the split stops and prints the difference, so the seam is brought up to date before the cut, never merged blind.
+1. Parses `connect.js` with a JavaScript parser and its scope analysis (the `oxc` crates, 0.160.0, MIT), so a name a function declares for itself is never mistaken for a top-level one.
+2. Applies the seams first: small edits inside named core statements, each found by its exact text (the place the core named a tool becomes a loop over a kind), and each tool's registrations appended to its file. When another change has moved a seam's text, it stops and names it.
+3. Gives every top-level statement a file, by its section heading (`// --- ... ---`) and, inside a section holding two tools, by cut points (a name). A heading it does not know stops it.
+4. Writes each file: its statements, then `export` of what files loaded after it use, and at the top `import` of what it uses from files loaded before it; a use the other way round is `late.<name>`.
+5. Refuses what ES modules cannot do as one file did: a binding assigned from another file, a name read at load before its file has run (it works out the browser's own evaluation order of the modules), a change of order between two statements that both touch the same thing at load (an `ACT` entry, a listener of one kind, anything it cannot read), two registrations of a kind with one order, and `this` in a top-level function.
 
 ### Carrying open branches across
 
-A branch made before the cut changes `connect.js`. The port helper (beside the split, with `port.md`) carries it over: it takes the branch's change to `connect.js` against its merge base, runs the split on the base and on the branch's version, and applies the difference file by file to the new files. A function the branch added goes to the file the split's table names for its section; one it changed goes to wherever that function now lives. What cannot be placed (a change to a seam function, or a new section) is printed for the branch's owner to place by hand.
+A branch made before the cut changes the one-file `connect.js`. The port helper (beside the split) carries it over: the branch first merges the main the cut was made from (as its owner merges main anyway); then the split runs on that main's `connect.js` and on the branch's, which gives the branch's change in the new files; the branch's other changes merge as usual, with the cut's entry for `connect.js`; and each new file is a three-way merge (`git merge-file`) of the tree's file with the two splits. A branch that adds a section, or changes a line a seam moved, stops the split with its name, for the branch's owner to place.
 
 ## The command layer (the next job)
 
