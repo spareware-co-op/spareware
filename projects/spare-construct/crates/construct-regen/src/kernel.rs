@@ -1297,9 +1297,10 @@ impl<E: Engine> Kernel<E> {
     pub fn layers_hosting(
         &self,
         recipe: &Recipe,
-        hosted: &[Hosted<'_>],
+        hosted: &[HostedAt<'_>],
     ) -> Result<Vec<LayerSolid<E::Solid>>, GeometryError> {
         if wall_plan::is_layered(recipe) {
+            let hosted = on_grid(self.units, hosted)?;
             let wall = Layered::of(recipe)?;
             let mut engine = self
                 .engine
@@ -1309,7 +1310,7 @@ impl<E: Engine> Kernel<E> {
                 &mut *engine,
                 recipe,
                 &wall,
-                hosted,
+                &hosted,
                 self.units,
                 self.band,
                 &*self.families,

@@ -306,7 +306,9 @@ impl Engine for Recording {
 /// named faces; a wall with nothing hosted in it is as [`Kernel::layers`] gives it.
 #[test]
 fn a_layered_walls_drawing_solids_have_a_doors_opening_cut_from_each_layer() {
-    use construct_regen::kernel::{Hosted, Kernel};
+    use construct_model::element::Placement;
+    use construct_model::geometry::Hosted;
+    use construct_regen::kernel::Kernel;
     let engine = Recording::default();
     let tools = engine.tools.clone();
     let k = Kernel::new(engine).unwrap();
@@ -320,7 +322,11 @@ fn a_layered_walls_drawing_solids_have_a_doors_opening_cut_from_each_layer() {
     let hosted = [Hosted {
         key: "D-1",
         recipe: &door,
-        at: k.units().point([1000, -150, 0]).unwrap(),
+        at: Placement {
+            x: 1000,
+            y: -150,
+            z: 0,
+        },
     }];
     let cut = k.layers_hosting(&wall, &hosted).unwrap();
     let asked = tools.lock().unwrap().clone();

@@ -2127,10 +2127,23 @@ async fn an_elevation_is_made_by_the_face_it_shows() {
         .find(|v| v.id == "V-south")
         .and_then(|v| v.line.clone())
         .unwrap();
-    assert_eq!((line.from.x.as_str(), line.from.y.as_str()), ("0 mm", "-5000 mm"));
-    assert_eq!((line.to.x.as_str(), line.to.y.as_str()), ("12000 mm", "-5000 mm"));
-    assert_eq!((line.look.as_str(), line.depth.as_str()), ("left", "20000 mm"));
-    assert!(listed.iter().all(|v| v.line.is_some() == (v.kind != "floor_plan")));
+    assert_eq!(
+        (line.from.x.as_str(), line.from.y.as_str()),
+        ("0 mm", "-5000 mm")
+    );
+    assert_eq!(
+        (line.to.x.as_str(), line.to.y.as_str()),
+        ("12000 mm", "-5000 mm")
+    );
+    assert_eq!(
+        (line.look.as_str(), line.depth.as_str()),
+        ("left", "20000 mm")
+    );
+    assert!(
+        listed
+            .iter()
+            .all(|v| v.line.is_some() == (v.kind != "floor_plan"))
+    );
 }
 
 /// The arguments of the elevation of the south face from (0, -5 m), 12 m wide and 20 m deep, with

@@ -93,7 +93,7 @@ fn level_1_summary() -> Value {
                        "depth": { "level": "1", "offset": "-500 mm" },
                        "heights": { "top": "2300 mm", "cut": "1200 mm", "bottom": "0 mm",
                                     "depth": "-500 mm" } },
-            "crop": null })
+            "line": null, "crop": null })
 }
 
 fn refused<T: std::fmt::Debug>(answer: Result<T, Refusal>) -> bool {
@@ -1734,7 +1734,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
                          "depth": { "level": "1", "offset": "-500 mm" },
                          "heights": { "top": "2300 mm", "cut": "1200 mm", "bottom": "0 mm",
                                       "depth": "-500 mm" } },
-              "crop": null },
+              "line": null, "line": null, "crop": null },
             { "id": "VP-2", "name": "Level 2 plan", "kind": "floor_plan", "level": "2",
               "level_name": "Level 2", "scale": 100, "detail": "medium",
               "range": { "top": { "level": "2", "offset": "2300 mm" },
@@ -1743,7 +1743,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
                          "depth": { "level": "2", "offset": "-500 mm" },
                          "heights": { "top": "5300 mm", "cut": "4200 mm", "bottom": "3000 mm",
                                       "depth": "2500 mm" } },
-              "crop": null },
+              "line": null, "line": null, "crop": null },
         ])
     );
     // A crop and a new range are read back with the view, as text a person reads.

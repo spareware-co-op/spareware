@@ -48,7 +48,7 @@ use construct_drawing::plan::PlanElement;
 use construct_drawing::section::{Look, Part, SectionView, part, section};
 use construct_drawing::svg::Svg;
 use construct_materials::MaterialId;
-use construct_model::geometry::Hosted;
+use construct_model::geometry::{Geometry, Hosted};
 use construct_regen::hosting;
 use construct_regen::kernel::Kernel;
 use construct_regen::kernel::LayerSolid;

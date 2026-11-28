@@ -1533,7 +1533,7 @@ impl<K: Kv, F: FileStore> Service<K, F> {
             if !listing.cut.contains(&id) && !listing.seen.contains(&id) {
                 continue;
             }
-            match to_draw(&mut snapshot, project, model, one).await? {
+            match to_draw(&mut snapshot, project, model, one, &shaped).await? {
                 Ok(element) => elements.push(element),
                 Err(why) => left_out.push(Skipped { element: id, why }),
             }
