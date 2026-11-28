@@ -227,6 +227,17 @@ fn a_shaped_floor_the_engine_cannot_build_is_refused() {
     assert!(k.build(&edged).is_err());
 }
 
+/// A shape-edited floor (job 14.15) on an engine that takes only level boxes is the engine's
+/// refusal too, followed or variable: the server's engine builds it (its tests/kernel.rs runs the
+/// suite's `a_shape_edited_floor_is_its_triangles`).
+#[test]
+fn a_shape_edited_floor_the_engine_cannot_build_is_refused() {
+    use construct_model::geometry::Geometry;
+    let k = construct_regen::kernel::Kernel::new(Cuboids).unwrap();
+    assert!(k.build(&kernel_suite::edited_floor(false)).is_err());
+    assert!(k.build(&kernel_suite::edited_floor(true)).is_err());
+}
+
 #[test]
 fn an_opening_in_a_wall_is_refused_by_name() {
     kernel_suite::an_opening_in_a_wall_is_refused_by_name(|| Cuboids);

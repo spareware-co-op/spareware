@@ -222,6 +222,22 @@ pub enum SlabError {
     Type(TypeError),
     /// A stored text or value is not one this crate writes; the text says why.
     Malformed(String),
+    /// A layer that cannot be its floor type's variable layer (job 14.15).
+    VariableLayer {
+        /// The layer's index from the top.
+        layer: usize,
+        /// Why not.
+        why: &'static str,
+    },
+    /// A floor's shape edits (its top face's points and split lines, job 14.15), refused:
+    /// [`crate::top::EditError`] names what and says why.
+    Edit(crate::top::EditError),
+}
+
+impl From<crate::top::EditError> for SlabError {
+    fn from(error: crate::top::EditError) -> Self {
+        Self::Edit(error)
+    }
 }
 
 impl From<TypeError> for SlabError {
@@ -328,6 +344,10 @@ impl fmt::Display for SlabError {
             Self::Material(error) => error.fmt(f),
             Self::Type(error) => error.fmt(f),
             Self::Malformed(why) => write!(f, "not a stored floor: {why}"),
+            Self::VariableLayer { layer, why } => {
+                write!(f, "layer {layer} cannot be the variable layer: {why}")
+            }
+            Self::Edit(error) => error.fmt(f),
             shaped => shaped.shape_text(f),
         }
     }

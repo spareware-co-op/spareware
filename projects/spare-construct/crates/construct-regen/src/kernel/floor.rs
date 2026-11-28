@@ -53,10 +53,17 @@
 //!   millimetre; holes are not in it nor in a part's outline (a display's outline is one polygon),
 //!   so a plan draws a floor's holes from its record. The bounds are rounded outward.
 //!
+//! - A shape-edited floor (job 14.15): each layer that follows its top face, and its variable
+//!   layer, is the top face's triangles lofted and united (the child module `edited`); a layer
+//!   below the variable one is extruded flat as on a plain floor. Openings and shafts through such
+//!   a floor are refused by name as through a sloped one ([`SHAPED_FLOOR_CUT`]).
+//!
 //! Depends on the parent module's units, naming and errors, and [`crate::floor_plan`]. Interim: as
 //! the parent module's (the engine behind the seam, the body's bytes being the engine's request,
 //! names written from the recipe, not read from the body); an arc edge is refused before it gets
 //! here (construct-slabs, the interim register's row) until the kernel's exact sweep takes arcs.
+
+mod edited;
 
 use super::opening::{Hosted, tool_names};
 use super::{Kernel, Units, as_steps, fault, from_engine, name, op_id, too_big};
@@ -65,6 +72,7 @@ use construct_model::geometry::{
     Bounds, Built, Display, FaceName, GeometryError, Mesh, Part, Recipe,
 };
 use construct_openings::{Cutter, OpeningError, fit_in_floor, is_floor_opening, is_shaft};
+use edited::Stand;
 use engine_geometry::value::engine::{DisplayMesh, Engine, Profile, Section};
 use engine_geometry::value::grid::P3;
 use engine_geometry::value::op::OpId;
@@ -187,23 +195,20 @@ fn floor_cuts(
     // built wrongly, until it is built exactly.
     if let Some(at) = cutting.first() {
         let shaped = if !plan.tops.is_empty() {
-            Some("a slope")
+            Some(("a slope", "the slope"))
         } else if !plan.edges.is_empty() {
-            Some("slab edges")
+            Some(("slab edges", "the slab edges"))
+        } else if !plan.faces.is_empty() {
+            Some(("an edited shape", "the shape edits (reset its shape)"))
         } else {
             None
         };
-        if let (Some(shaped), Some(cutter)) = (shaped, cutters.get(*at)) {
+        if let (Some((shaped, away)), Some(cutter)) = (shaped, cutters.get(*at)) {
             return Err(fault(
                 SHAPED_FLOOR_CUT,
                 format!(
-                    "{}: it would be cut through a floor with {shaped}, and a floor with {shaped} is not cut by openings and shafts yet: take {} away, or put the opening or shaft elsewhere",
+                    "{}: it would be cut through a floor with {shaped}, and a floor with {shaped} is not cut by openings and shafts yet: take {away} away, or put the opening or shaft elsewhere",
                     cutter.element,
-                    if shaped == "a slope" {
-                        "the slope"
-                    } else {
-                        "the slab edges"
-                    }
                 ),
             ));
         }
@@ -245,6 +250,8 @@ pub(super) fn fits(
 struct AskedLayer {
     function: String,
     material: String,
+    /// None on a layer of a shape-edited floor made of its triangles' lofts.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     extrude: Vec<[i64; 3]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     holes: Vec<Vec<[i64; 3]>>,
@@ -257,6 +264,10 @@ struct AskedLayer {
     /// The slab edges united with the lowest layer; none on any other.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     edges: Vec<AskedEdge>,
+    /// A shape-edited floor's layer that follows its top or fills to its flat bottom: each
+    /// triangle's loft, its lower and upper sections, united in order (job 14.15).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    faces: Vec<[Vec<[i64; 3]>; 2]>,
 }
 
 /// The low and high grid points a mesh reaches, in the engine's steps.
@@ -549,9 +560,41 @@ impl<E: Engine> Kernel<E> {
             let slabs = plan.slabs();
             let last = slabs.len().saturating_sub(1);
             let sloped = plan.tops.iter().flatten().any(|&z| z != 0);
-            for (n, (_, layer, bottom, top)) in slabs.into_iter().enumerate() {
+            for (n, (at, layer, bottom, top)) in slabs.into_iter().enumerate() {
                 let up = units.from_q0(top.saturating_sub(bottom))?;
                 let z = units.from_q0(bottom)?;
+                let stand = edited::stand(&plan, at);
+                if stand != Stand::Flat {
+                    let mut entry = AskedLayer {
+                        function: layer.function.clone(),
+                        material: layer.material.clone(),
+                        extrude: Vec::new(),
+                        holes: Vec::new(),
+                        by: [0, 0, up],
+                        lofted: Some(true),
+                        edges: Vec::new(),
+                        faces: Vec::new(),
+                    };
+                    let solid = edited::layer(
+                        &mut *engine,
+                        &plan,
+                        units,
+                        (bottom, top),
+                        stand,
+                        &mut entry.faces,
+                    )?;
+                    asked.layers.push(entry);
+                    let shown = engine.mesh(&solid).map_err(from_engine)?;
+                    let appended = append(&mut mesh, &shown, units, &mut extent)?;
+                    rounded |= appended.rounded;
+                    parts.push(Part {
+                        material: layer.material.clone(),
+                        function: layer.function.clone(),
+                        triangles: appended.triangles,
+                        outline: outline.clone(),
+                    });
+                    continue;
+                }
                 let outer = lifted_ring(&plan, 0, plan.outer(), units, bottom)?;
                 let mut holes = plan
                     .holes()
@@ -575,6 +618,7 @@ impl<E: Engine> Kernel<E> {
                     by,
                     lofted: sloped.then_some(true),
                     edges: Vec::new(),
+                    faces: Vec::new(),
                 };
                 let mut solid = if sloped {
                     sloped_layer(&mut *engine, &outer, &holes, by)?

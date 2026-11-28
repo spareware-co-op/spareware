@@ -57,6 +57,11 @@ html:not([data-stack="signin"]) #stack-signin { display: none; }
 .dw .floor-slab-edge { fill: var(--ink-3); fill-opacity: .35; stroke: var(--ink-3); stroke-width: 1px; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dw .floor-edge-hit { stroke: var(--app-strong); stroke-opacity: .3; stroke-width: 9px; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
 .dw .floor-edge-hit:hover { stroke-opacity: .6; }
+/* A floor's shape edits (job 14.15): the creases of its top, its split lines, its points. None takes a click. */
+.dw .floor-top-crease { stroke: var(--ink-3); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .floor-top-split { stroke: var(--app-strong); stroke-width: 2px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dw .floor-top circle { fill: var(--app-strong); pointer-events: none; }
+.dw .floor-top text { pointer-events: none; }
 /* A stair: its runs and landings as one body to pick it by, each tread's line (dashed where the stair is above the view's cut plane), the cut line, and the walking line with its arrow. */
 .dw .stair { fill: var(--sink); fill-opacity: .35; stroke: var(--ink-2); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 .dw .stair.sel { stroke: var(--app-strong); stroke-width: 1.5px; }

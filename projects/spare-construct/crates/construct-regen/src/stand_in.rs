@@ -299,7 +299,7 @@ fn floor(recipe: &Recipe) -> Result<Built, GeometryError> {
         floor_plan::ceil_mm(y1),
         floor_plan::ceil_mm(plan.top_range().1),
     ];
-    let shaped = !plan.tops.is_empty() || !plan.edges.is_empty();
+    let shaped = !plan.tops.is_empty() || !plan.edges.is_empty() || !plan.faces.is_empty();
     let mut rounded = false;
     let mut outline = Vec::with_capacity(plan.outer().len());
     for corner in plan.outer() {

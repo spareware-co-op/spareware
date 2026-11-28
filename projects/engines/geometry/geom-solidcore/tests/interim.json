@@ -279,6 +279,38 @@
     },
     {
       "program": "spare-construct",
+      "place": "construct-regen's kernel::floor::edited, a shape-edited floor's layers",
+      "operation": "floor version 3 (Kernel: each layer that follows the top face, and the variable layer, one Engine::loft of each top face triangle let down by the layer's depths, two flat sections, then Engine::unite of the triangles' pieces in the recipe's order, each sharing an upright side with one before it; a layer below the variable one the plain floor's Engine::extrude)",
+      "answered_by": "the engine behind the Engine trait: on the server's kernel setting solidcore's loft and the kernel's own exact boolean for the union of flat-faced solids; construct-slabs makes every triangle's corners grid points at whole grid steps of height first, and refuses a variable layer of no thickness under a point",
+      "pinned_by": {
+        "file": "projects/spare-construct/server/tests/kernel.rs",
+        "test": "a_shape_edited_floor_is_its_triangles"
+      },
+      "known_faults": [
+        "a corner not on a whole millimetre is drawn at the nearest one, its display's deviation 1",
+        "each triangle is its own piece of every following layer, so a floor of many triangles is many unions",
+        "an opening or a shaft that would cut a shape-edited floor is refused by name (ShapedFloorCut), not cut",
+        "a shape-edited floor with slab edges is refused, not built"
+      ],
+      "replaced_by": "the kernel's own exact extrusion, loft and union behind the same trait"
+    },
+    {
+      "program": "spare-construct",
+      "place": "construct-slabs' triangles, the division of a shape-edited floor's top face into triangles",
+      "operation": "constrained Delaunay triangulation of a floor's corners, points and split lines (construct-slabs' Top::of)",
+      "answered_by": "construct-slabs' own exact triangulation (src/triangles.rs: orientation in 128 bits, the circle test in num-bigint's integers), because the kernel's own (geom-mesh's triangulate, piece G153) is internal and not on the engine-geometry facade",
+      "pinned_by": {
+        "file": "projects/spare-construct/crates/construct-slabs/tests/top.rs",
+        "test": "the_triangles_cover_the_floor_exactly"
+      },
+      "known_faults": [
+        "four points on one circle (a rectangle's corners) are divided as the order of insertion leaves them, not by the kernel's rule of keys",
+        "split lines that cross are refused, not cut where they cross"
+      ],
+      "replaced_by": "the kernel's exact constrained Delaunay triangulation (geom-mesh, piece G153) once engine-geometry offers it"
+    },
+    {
+      "program": "spare-construct",
       "place": "construct-slabs' Boundary, an arc edge",
       "operation": "floor with an arc in its boundary",
       "answered_by": "refused before any engine is asked (SlabError::Arc, naming the loop and the edge): the engine seam's extrusion takes polygons only; the arc is held in the stored boundary",

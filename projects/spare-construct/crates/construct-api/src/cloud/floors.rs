@@ -27,6 +27,10 @@
 //! | `floor.slope.clear` | `element` | The floor: its slope taken away |
 //! | `floor.edge` | `element`, `edge` (a boundary edge's ID), `profile`: `{"kind":"thickened","width","foot","depth"}` or `{"kind":"downturn","width","depth"}` | The floor: a slab edge on that edge, added or changed |
 //! | `floor.edge.remove` | `element`, `edge` | The floor: the slab edge on that edge taken away |
+//! | `floor.shape.*` | see [`shape`] | The floor: its top face shape-edited by points, split lines and supports, or reset (job 14.15) |
+//!
+//! A floor type's layer may be its variable one (job 14.15): `"variable": true` on one layer of
+//! `floor.type.create` and `floor.type.layers`; a roof type's may not.
 //!
 //! A sketched outline (job 5.2): `boundary` may also hold `constraints`, a list of objects with a
 //! `kind` (`coincident`, `horizontal`, `vertical`, `parallel`, `perpendicular`, `equal_length`,
@@ -76,6 +80,8 @@
 //! their places: a sketch with constraints for its boundary (job 5.2); arc edges, once the
 //! kernel's sweep takes them (the interim register).
 
+mod shape;
+
 use crate::cloud::elements::write_record;
 use crate::cloud::openings::floor_view;
 use crate::cloud::walls::{MaterialView, materials_view};
@@ -121,7 +127,7 @@ pub const COMMANDS: [&str; 13] = [
 /// Whether a command is one of these.
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
-    COMMANDS.contains(&cmd)
+    COMMANDS.contains(&cmd) || shape::COMMANDS.contains(&cmd)
 }
 
 /// The arguments of every command here; each uses some of them.
@@ -155,6 +161,9 @@ pub(super) struct LayerArgs {
     /// Typed text.
     pub(super) thickness: String,
     pub(super) material: String,
+    /// Whether it is the floor type's variable layer (job 14.15); a roof type has none.
+    #[serde(default)]
+    pub(super) variable: bool,
 }
 
 /// A boundary as a person sends it: its outer loop and its holes, each a list of corners.
@@ -208,8 +217,31 @@ pub(super) fn length(text: &str) -> Result<Length, String> {
     parse_length(text, &units()).map_err(why)
 }
 
-/// A floor type's layers from what a person sent, checked by construct-slabs.
+/// A roof type's layers from what a person sent, checked by construct-slabs: a variable layer is
+/// refused (only a floor's top is shape-edited).
 pub(super) fn layers(sent: Vec<LayerArgs>) -> Result<Layers, String> {
+    if sent.iter().any(|layer| layer.variable) {
+        return Err(
+            "A roof type has no variable layer: only a floor's top is shape-edited.".to_owned(),
+        );
+    }
+    floor_layers(sent)
+}
+
+/// A floor type's layers from what a person sent, checked by construct-slabs, with its variable
+/// layer if one is marked (at most one).
+fn floor_layers(sent: Vec<LayerArgs>) -> Result<Layers, String> {
+    let marked: Vec<usize> = sent
+        .iter()
+        .enumerate()
+        .filter(|(_, layer)| layer.variable)
+        .map(|(at, _)| at)
+        .collect();
+    let variable = match marked.as_slice() {
+        [] => None,
+        [one] => Some(*one),
+        _ => return Err("A floor type has at most one variable layer.".to_owned()),
+    };
     let mut layers = Vec::with_capacity(sent.len());
     for (at, layer) in sent.into_iter().enumerate() {
         let thickness = parse_length(&layer.thickness, &units())
@@ -217,7 +249,9 @@ pub(super) fn layers(sent: Vec<LayerArgs>) -> Result<Layers, String> {
         let material = MaterialId::parse(&layer.material).map_err(|e| why(SlabError::from(e)))?;
         layers.push(FloorLayer::new(layer.function, thickness, material));
     }
-    Layers::new(layers).map_err(why)
+    Layers::new(layers)
+        .and_then(|layers| layers.with_variable(variable))
+        .map_err(why)
 }
 
 /// A boundary from what a person sent: each corner's typed text read as a length, then checked by
@@ -485,6 +519,7 @@ pub async fn apply<T: Txn>(
         "floor.slope.clear" => set_slope(&mut run, args, true).await,
         "floor.edge" => set_edge(&mut run, args, false).await,
         "floor.edge.remove" => set_edge(&mut run, args, true).await,
+        cmd if shape::COMMANDS.contains(&cmd) => shape::apply(&mut run).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
 }
@@ -493,7 +528,7 @@ async fn create_type<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args
     let sent = (|| {
         let id = need(args.type_id, "a floor type")?;
         let name = need(args.name, "a name")?;
-        let layers = layers(need(args.layers, "the layers")?)?;
+        let layers = floor_layers(need(args.layers, "the layers")?)?;
         Ok::<_, String>((id, name, layers))
     })();
     let (id, name, layers) = match sent {
@@ -523,7 +558,7 @@ async fn create_type<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args
 async fn set_layers<T: Txn>(run: &mut Run<'_, T>, context: &Context, args: Args) -> Answer {
     let sent = (|| {
         let id = need(args.type_id, "a floor type")?;
-        let layers = layers(need(args.layers, "the layers")?)?;
+        let layers = floor_layers(need(args.layers, "the layers")?)?;
         Ok::<_, String>((id, layers))
     })();
     let (id, layers) = match sent {
@@ -808,6 +843,8 @@ async fn put_floor<T: Txn>(
             let keys: Vec<&str> = view.cuts.iter().map(|cut| cut.key.as_str()).collect();
             let shaped = if shape.slope().is_some() {
                 "a slope"
+            } else if shape.top().is_some() {
+                "an edited shape"
             } else {
                 "slab edges"
             };
@@ -995,9 +1032,17 @@ pub fn layers_args(layers: &Layers) -> Json {
         layers
             .layers()
             .iter()
-            .map(|layer| {
-                json!({ "function": layer.function, "thickness": layer.thickness.to_string(),
-                        "material": layer.material.as_str() })
+            .enumerate()
+            .map(|(at, layer)| {
+                let mut sent = json!({ "function": layer.function,
+                        "thickness": layer.thickness.to_string(),
+                        "material": layer.material.as_str() });
+                if layers.variable() == Some(at)
+                    && let Some(object) = sent.as_object_mut()
+                {
+                    object.insert("variable".to_owned(), Json::Bool(true));
+                }
+                sent
             })
             .collect(),
     )

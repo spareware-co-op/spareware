@@ -95,12 +95,28 @@ impl FloorLayer {
     }
 }
 
-/// A floor type's layers from the top face down. Every value of this type has passed every check.
+/// A floor type's layers from the top face down, and which of them, if any, is variable. Every
+/// value of this type has passed every check.
+///
+/// **A variable layer** (job 14.15, [`Layers::with_variable`]): on a floor whose top face is
+/// shape-edited ([`crate::top`]), every layer keeps its thickness and follows the top face, so
+/// the bottom face follows it too, unless one layer is variable: then the layers above it follow
+/// the top face, the layers below it stay flat where they are on a plain floor, and the variable
+/// layer fills between them, thicker where the top is raised and thinner where it is lowered. So
+/// the structure stays one thickness by default, and a screed laid to falls is the variable layer
+/// over a flat slab. At most one layer is variable, and never a membrane (it keeps its thickness:
+/// a sheet). A floor whose top is not edited builds the same with or without one.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "the layers of a type's Layers are its layers; the name says it best"
+)]
 pub struct Layers {
     layers: Vec<FloorLayer>,
     /// The depth of every layer face below the top face: `n + 1` of them, 0 first.
     depths: Vec<Length>,
+    /// The variable layer's index from the top, if one is.
+    variable: Option<usize>,
 }
 
 impl Layers {
@@ -134,7 +150,44 @@ impl Layers {
         if depth == ZERO {
             return Err(SlabError::NoThickness);
         }
-        Ok(Self { layers, depths })
+        Ok(Self {
+            layers,
+            depths,
+            variable: None,
+        })
+    }
+
+    /// The same layers with layer `variable` (its index from the top) the variable one, or none
+    /// with `None`, as the type's header says.
+    ///
+    /// # Errors
+    /// [`SlabError::VariableLayer`] for an index past the last layer or a membrane.
+    pub fn with_variable(mut self, variable: Option<usize>) -> Result<Self, SlabError> {
+        if let Some(at) = variable {
+            match self.layers.get(at) {
+                None => {
+                    return Err(SlabError::VariableLayer {
+                        layer: at,
+                        why: "there is no such layer",
+                    });
+                }
+                Some(layer) if layer.function == Function::Membrane => {
+                    return Err(SlabError::VariableLayer {
+                        layer: at,
+                        why: "a membrane keeps its thickness",
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+        self.variable = variable;
+        Ok(self)
+    }
+
+    /// The variable layer's index from the top, if one is.
+    #[must_use]
+    pub fn variable(&self) -> Option<usize> {
+        self.variable
     }
 
     /// The layers, from the top face down.

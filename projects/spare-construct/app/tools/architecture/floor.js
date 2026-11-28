@@ -342,6 +342,8 @@ function floorProperties(piece) {
   if (!shape) html += prow('Shape', esc(failed?.message || 'Not built yet'));
   html += `${prow('Claimed by', claim ? esc(claim.name) : 'Nobody')}</table>`;
   html += floorShapeHtml(piece);
+  // Its top face's shape edits: the floor-shape module's part (job 14.15).
+  html += late.floorTopHtml?.(piece) ?? '';
   if (view?.parameters.some((p) => p.from !== READ_ONLY)) html += parametersTable(view);
   if (view) {
     html += readOnlyTable(view);
@@ -606,4 +608,4 @@ register.layers({ id: 'floor-sketch', order: 50, over: () => floorSketch() });
 // What files loaded before this one use from it, bound once it has loaded.
 provide({ get READ_ONLY() { return READ_ONLY; } });
 
-export { FLOOR, READ_ONLY, isFloor, readOnlyTable, ringPath, sketchChanged, sketchHtml };
+export { FLOOR, READ_ONLY, floorTypes, isFloor, readOnlyTable, ringPath, sketchChanged, sketchHtml };

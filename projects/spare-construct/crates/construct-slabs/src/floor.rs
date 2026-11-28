@@ -24,11 +24,20 @@
 //! one with slab edges [`EDGES_ARG`] (each piece as `{"id":<edge ID>,"kind":<kind>,"top":[[x,y,z]
 //! x4],"foot":[[x,y,z] x4]}`, its plan at the floor's underside and at its foot, in grid steps).
 //! Nothing else of a floor reaches the builder.
+//!
+//! A shape-edited floor ([`crate::top`], job 14.15) is op version [`EDITED_VERSION`], its args
+//! holding [`TOP_ARG`] (the stored points and split lines) beside the boundary and layers and
+//! never a slope or slab edges; filled, it also holds [`FACES_ARG`] (each triangle of its top face
+//! as `[[x,y,z] x3]`, anticlockwise seen from above, each sharing an edge with one before it, `z`
+//! from the top face's tied height, in grid steps), and its type's variable layer, if it has one,
+//! carries `"variable":true` in [`LAYERS_ARG`]. A floor whose edits are reset is version
+//! [`OP_VERSION`] again, byte for byte as before.
 
 use crate::boundary::Boundary;
 use crate::error::SlabError;
 use crate::layers::Layers;
 use crate::shape::{Shape, SlabEdge, SlopeArrow};
+use crate::top::Edits;
 use construct_categories::FLOORS;
 use construct_levels::{Tie, write_base};
 use construct_model::element::{Element, Placement};
@@ -58,6 +67,12 @@ pub const SLOPE_ARG: &str = "slope";
 pub const EDGES_ARG: &str = "edges";
 /// The filled recipe's argument that holds a sloped floor's top face height at each corner.
 pub const TOPS_ARG: &str = "tops";
+/// The version of a floor's recipe this crate writes for a shape-edited floor (job 14.15).
+pub const EDITED_VERSION: u32 = 3;
+/// The recipe argument that holds a shape-edited floor's stored points and split lines.
+pub const TOP_ARG: &str = "top";
+/// The filled recipe's argument that holds a shape-edited floor's top face triangles.
+pub const FACES_ARG: &str = "faces";
 
 /// The argument a floor's recipe reads its type's layers with: `{"type":"layers"}`.
 #[must_use]
@@ -90,6 +105,11 @@ pub fn shaped_recipe(shape: &Shape) -> Recipe {
     if shape.is_plain() {
         return recipe;
     }
+    if let Some(edits) = shape.edits() {
+        recipe.op_version = EDITED_VERSION;
+        recipe.args.insert(TOP_ARG.to_owned(), edits.to_value());
+        return recipe;
+    }
     recipe.op_version = SHAPED_VERSION;
     if let Some(slope) = shape.slope() {
         recipe.args.insert(SLOPE_ARG.to_owned(), slope.to_value());
@@ -115,7 +135,7 @@ pub fn shape_of(recipe: &Recipe) -> Result<Shape, SlabError> {
     let version = recipe.op_version;
     if recipe.owner != "construct"
         || recipe.op != FLOOR_OP
-        || !(version == OP_VERSION || version == SHAPED_VERSION)
+        || !(version == OP_VERSION || version == SHAPED_VERSION || version == EDITED_VERSION)
     {
         return Err(SlabError::NotAFloor(format!(
             "a recipe of {}/{} version {} is not a floor's",
@@ -129,6 +149,26 @@ pub fn shape_of(recipe: &Recipe) -> Result<Shape, SlabError> {
     let boundary = Boundary::from_value(stored)?;
     let slope = recipe.args.get(SLOPE_ARG);
     let edges = recipe.args.get(EDGES_ARG);
+    let top = recipe.args.get(TOP_ARG);
+    if version == EDITED_VERSION {
+        let Some(top) = top.filter(|_| slope.is_none() && edges.is_none()) else {
+            return Err(SlabError::NotAFloor(format!(
+                "a floor of version {EDITED_VERSION} has a top and no slope or slab edges"
+            )));
+        };
+        let edits = Edits::from_value(top)?;
+        if edits.is_empty() {
+            return Err(SlabError::Malformed(
+                "a shape-edited floor's top holds at least one point".to_owned(),
+            ));
+        }
+        return Shape::flat(boundary).with_edits(Some(edits));
+    }
+    if top.is_some() {
+        return Err(SlabError::NotAFloor(format!(
+            "a floor of version {version} has no shape-edited top"
+        )));
+    }
     if version == OP_VERSION {
         if slope.is_some() || edges.is_some() {
             return Err(SlabError::NotAFloor(format!(
@@ -177,6 +217,9 @@ fn lifted(points: &[construct_solver::Point; 4], z: i64) -> Value {
 /// grid; [`SlabError::Malformed`] only if the JSON writer fails, which it does not for this data.
 pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, SlabError> {
     let shape = shape_of(recipe)?;
+    if let Some(edits) = shape.edits() {
+        edits.fit_layers(layers)?;
+    }
     let boundary = shape.boundary();
     let loops: Vec<Value> = boundary
         .profile()
@@ -190,19 +233,32 @@ pub fn filled(recipe: &Recipe, layers: &Layers) -> Result<Recipe, SlabError> {
         })
         .collect();
     let mut listed = Vec::with_capacity(layers.layers().len());
-    for layer in layers.layers() {
+    for (at, layer) in layers.layers().iter().enumerate() {
         let function = serde_json::to_value(layer.function)
             .map_err(|e| SlabError::Malformed(format!("a layer's function: {e}")))?;
-        listed.push(json!({
+        let mut entry = json!({
             "function": function,
             "material": layer.material.as_str(),
             "thickness": layer.thickness.steps(),
-        }));
+        });
+        // Only a shape-edited floor reads which layer is variable, so a plain floor's filled
+        // recipe is the same whatever its type says.
+        if shape.top().is_some()
+            && layers.variable() == Some(at)
+            && let Some(object) = entry.as_object_mut()
+        {
+            object.insert("variable".to_owned(), Value::Bool(true));
+        }
+        listed.push(entry);
     }
     let mut out = recipe.clone();
     out.args = BTreeMap::new();
     out.args.insert(LOOPS_ARG.to_owned(), Value::Array(loops));
     out.args.insert(LAYERS_ARG.to_owned(), Value::Array(listed));
+    if let Some(top) = shape.top() {
+        let faces: Vec<Value> = top.faces().iter().map(|f| json!(f.corners)).collect();
+        out.args.insert(FACES_ARG.to_owned(), Value::Array(faces));
+    }
     if !shape.tops().is_empty() {
         out.args.insert(TOPS_ARG.to_owned(), json!(shape.tops()));
     }
@@ -275,9 +331,29 @@ pub fn with_boundary(mut record: Element, boundary: &Boundary) -> Result<Element
         )));
     }
     let shape = match shape_of(&record.recipe) {
-        Ok(old) => Shape::new(boundary.clone(), old.slope().copied(), old.edges().to_vec())?,
+        Ok(old) => Shape::new(boundary.clone(), old.slope().copied(), old.edges().to_vec())?
+            .with_edits(old.edits().cloned())?,
         Err(_) => Shape::flat(boundary.clone()),
     };
+    record.recipe = shaped_recipe(&shape);
+    Ok(record)
+}
+
+/// A floor's record with its top face shape-edited by `edits` (job 14.15), or reset to its plain
+/// top with `None`: its recipe changes, nothing else.
+///
+/// # Errors
+/// [`SlabError::NotAFloor`] for a record that is not a floor's; any refusal of [`shape_of`] of
+/// its recipe and of [`Shape::with_edits`] (a sloped floor, one with slab edges, and every
+/// refusal of the edits on this boundary).
+pub fn with_top(mut record: Element, edits: Option<Edits>) -> Result<Element, SlabError> {
+    let old = floor_shape(&record)?;
+    let shape = Shape::new(
+        old.boundary().clone(),
+        old.slope().copied(),
+        old.edges().to_vec(),
+    )?
+    .with_edits(edits)?;
     record.recipe = shaped_recipe(&shape);
     Ok(record)
 }
@@ -290,7 +366,8 @@ pub fn with_boundary(mut record: Element, boundary: &Boundary) -> Result<Element
 /// its recipe and of [`Shape::new`] with the slope.
 pub fn with_slope(mut record: Element, slope: Option<SlopeArrow>) -> Result<Element, SlabError> {
     let old = floor_shape(&record)?;
-    let shape = Shape::new(old.boundary().clone(), slope, old.edges().to_vec())?;
+    let shape = Shape::new(old.boundary().clone(), slope, old.edges().to_vec())?
+        .with_edits(old.edits().cloned())?;
     record.recipe = shaped_recipe(&shape);
     Ok(record)
 }
@@ -302,7 +379,8 @@ pub fn with_slope(mut record: Element, slope: Option<SlopeArrow>) -> Result<Elem
 /// its recipe and of [`Shape::new`] with the slab edges.
 pub fn with_edges(mut record: Element, edges: Vec<SlabEdge>) -> Result<Element, SlabError> {
     let old = floor_shape(&record)?;
-    let shape = Shape::new(old.boundary().clone(), old.slope().copied(), edges)?;
+    let shape = Shape::new(old.boundary().clone(), old.slope().copied(), edges)?
+        .with_edits(old.edits().cloned())?;
     record.recipe = shaped_recipe(&shape);
     Ok(record)
 }

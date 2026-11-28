@@ -19,9 +19,13 @@
 //! - [`shape`]: a sloped floor and slab edges (job 5.2): [`SlopeArrow`], [`Rise`],
 //!   [`EdgeProfile`], [`SlabEdge`], [`Shape`] (a boundary with both, checked), [`EdgePiece`],
 //!   [`TopArea`].
+//! - [`top`]: a floor's top face shape-edited (job 14.15): [`TopPoint`], [`SplitLine`],
+//!   [`Edits`], [`Top`] (the triangles they make, exactly), [`Face`], [`EditError`]; a floor type's
+//!   variable layer is [`Layers::with_variable`]. The triangles are made by `triangles`, a private
+//!   module, interim (its header says why and what replaces it).
 //! - [`floor`]: the element record and its recipe ([`floor_record`], [`floor_recipe`],
 //!   [`shaped_recipe`], [`shape_of`], [`boundary_of`], [`with_boundary`], [`with_slope`],
-//!   [`with_edges`], [`filled`]).
+//!   [`with_edges`], [`with_top`], [`filled`]).
 //! - [`defaults`]: [`default_floors`], [`default_floor_types`].
 //! - [`error`]: [`SlabError`], every refusal as a value.
 //!
@@ -33,7 +37,8 @@
 //!
 //! A floor's sketch may hold constraints, solved by construct-solver as a family recipe's are
 //! ([`boundary`]); a floor may slope and carry slab edges ([`shape`]); the decisions are in the
-//! note CON-A4-F4-P1-floor-slope-and-edges.
+//! note CON-A4-F4-P1-floor-slope-and-edges. A floor's top may be shape-edited instead ([`top`]),
+//! with a variable layer in its type; the decisions are in the note CON-A4-F4-floor-shape-editing.
 //!
 //! Interim: an arc edge is held in the data and refused ([`SlabError::Arc`]) because the engine
 //! seam's extrusion takes polygons only; it is built once the kernel's exact sweep takes arcs
@@ -50,22 +55,26 @@ pub mod layers;
 pub mod measure;
 pub mod shape;
 pub mod stored;
+pub mod top;
+mod triangles;
 
 pub use boundary::{BOUNDARY_VERSION, Boundary, Corner, Edge, Ring, Segment};
 pub use construct_solver::{ConstraintId, Point};
 pub use defaults::{DefaultFloor, default_floor_types, default_floors};
 pub use error::SlabError;
 pub use floor::{
-    BOUNDARY_ARG, EDGES_ARG, FLOOR_KIND, FLOOR_OP, LAYERS_ARG, LOOPS_ARG, OP_VERSION,
-    SHAPED_VERSION, SLOPE_ARG, TOPS_ARG, boundary_of, filled, floor_recipe, floor_record, is_floor,
-    layers_arg, reads_layers, shape_of, shaped_recipe, with_boundary, with_edges, with_slope,
+    BOUNDARY_ARG, EDGES_ARG, EDITED_VERSION, FACES_ARG, FLOOR_KIND, FLOOR_OP, LAYERS_ARG,
+    LOOPS_ARG, OP_VERSION, SHAPED_VERSION, SLOPE_ARG, TOP_ARG, TOPS_ARG, boundary_of, filled,
+    floor_recipe, floor_record, is_floor, layers_arg, reads_layers, shape_of, shaped_recipe,
+    with_boundary, with_edges, with_slope, with_top,
 };
 pub use floor_type::{layers_of, new_floor_type, with_layers};
 pub use layers::{FloorLayer, Function, Layers, MOST_TOTAL};
 pub use measure::{
     AREA, EdgeQuantity, HIGHEST, LOWEST, LayerQuantity, MASS, PERIMETER, Quantities,
     ShapeQuantities, THICKNESS, TOP_AREA, VOLUME, area, layer_read_only, perimeter, quantities,
-    read_only, shape_quantities, shape_read_only,
+    read_only, shape_layer_quantities, shape_quantities, shape_read_only,
 };
 pub use shape::{EdgePiece, EdgeProfile, Rise, Shape, SlabEdge, SlopeArrow, TopArea};
-pub use stored::{FORMAT_VERSION, OWNER};
+pub use stored::{FORMAT_VERSION, OWNER, VARIABLE_VERSION};
+pub use top::{EditError, Edits, Face, SplitLine, Top, TopPoint};
