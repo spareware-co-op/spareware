@@ -112,6 +112,12 @@ impl Tool for WallTool {
     const NAME: &'static str = "wall";
     const COMMANDS: &'static [&'static str] = &COMMANDS;
     const GUARDS: &'static [&'static str] = &[ElementTool::NAME, ParamTool::NAME];
+    const RULES: &'static [construct_warnings::Rule] = &[construct_warnings::WALL_OVERLAP];
+    const FIELDS: &'static [construct_schedules::Quantity] = &[
+        construct_schedules::WALL_LENGTH,
+        construct_schedules::WALL_AREA,
+        construct_schedules::WALL_VOLUME,
+    ];
 
     async fn apply<T: Txn>(
         txn: &mut T,
