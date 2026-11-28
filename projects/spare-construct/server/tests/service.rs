@@ -81,6 +81,20 @@ async fn seeded() -> Stack {
     }
 }
 
+/// Level 1's plan as the views are listed: 1:100, medium, the default range on its own level
+/// (it stands at 0), no crop.
+fn level_1_summary() -> Value {
+    json!({ "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
+            "level_name": "Level 1", "scale": 100, "detail": "medium",
+            "range": { "top": { "level": "1", "offset": "2300 mm" },
+                       "cut": { "level": "1", "offset": "1200 mm" },
+                       "bottom": { "level": "1", "offset": "0 mm" },
+                       "depth": { "level": "1", "offset": "-500 mm" },
+                       "heights": { "top": "2300 mm", "cut": "1200 mm", "bottom": "0 mm",
+                                    "depth": "-500 mm" } },
+            "crop": null })
+}
+
 fn refused<T: std::fmt::Debug>(answer: Result<T, Refusal>) -> bool {
     answer
         .err()
@@ -1483,6 +1497,111 @@ async fn an_opening_and_a_shaft_cut_a_floors_quantities_and_the_page_is_told() {
     }
 }
 
+/// Through the server's commands on the stand-in: a floor sloped by `floor.slope` shows its
+/// lowest and highest points and its sloped top area (exact where its arrow is whole, as 3 in 4),
+/// built as the box between them; its slope cleared, the rows are gone; a floor given slab edges
+/// shows each edge's length and volume; both on one floor is refused in words, and the page's
+/// filled recipe of a shaped floor holds its tops and its slab edges.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sloped_floor_and_a_floor_with_slab_edges_show_their_quantities() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    s.edit(&anna, &project, &model, "floor.defaults", json!({}))
+        .await
+        .unwrap();
+    let rectangle = |x0: i64| {
+        json!({ "outer": [corner("r0", x0, 0), corner("r1", x0 + 4000, 0),
+                          corner("r2", x0 + 4000, 3000), corner("r3", x0, 3000)] })
+    };
+    for (id, x0) in [("F-901", 60_000), ("F-902", 70_000)] {
+        let floor = json!({ "element": id, "type": "floor-concrete-200", "level": "1",
+                            "boundary": rectangle(x0) });
+        s.edit(&anna, &project, &model, "floor.create", floor)
+            .await
+            .unwrap();
+    }
+    // A plain floor has none of the rows.
+    let plain = quantities(s, &project, &model, "F-901").await;
+    assert!(!plain.contains_key("floor.lowest") && !plain.contains_key("floor.top-area"));
+
+    // A 3 in 4 fall along x: 4 m along, 3 m down; the top face's true area is 5/4 of the plan's.
+    let slope = json!({ "element": "F-901", "slope": { "tail": ["60000", "0"],
+                        "head": ["64000", "0"], "at_tail": "0", "gradient": { "rise": -3, "run": 4 } } });
+    s.edit(&anna, &project, &model, "floor.slope", slope)
+        .await
+        .unwrap();
+    let read = quantities(s, &project, &model, "F-901").await;
+    assert_eq!(read["floor.top-area"].1.as_deref(), Some("15.00 m²"));
+    assert_eq!(read["floor.highest"].1.as_deref(), Some("0 mm"));
+    assert_eq!(read["floor.lowest"].1.as_deref(), Some("-3200 mm"));
+    assert_eq!(read["floor.volume"].1.as_deref(), Some("2.40 m³"));
+    assert_eq!(
+        wall_bounds(s, &project, &model, "F-901").await,
+        ([60_000, 0, -3200], [64_000, 3000, 0])
+    );
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-901"))
+        .await
+        .unwrap();
+    let args = filled.recipe.unwrap().args;
+    assert!(args.contains_key("tops") && !args.contains_key("edges"));
+    let refused_both = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "floor.edge",
+            json!({ "element": "F-901", "edge": "r0",
+                    "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } }),
+        )
+        .await;
+    assert!(refused(refused_both));
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.slope.clear",
+        json!({ "element": "F-901" }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(quantities(s, &project, &model, "F-901").await, plain);
+
+    // A downturn 4 m long, 300 mm wide and 400 mm deep: 0.48 m3.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "floor.edge",
+        json!({ "element": "F-902", "edge": "r0",
+                "profile": { "kind": "downturn", "width": "300 mm", "depth": "400 mm" } }),
+    )
+    .await
+    .unwrap();
+    let read = quantities(s, &project, &model, "F-902").await;
+    assert_eq!(read["floor.edge-r0.length"].1.as_deref(), Some("4000 mm"));
+    assert_eq!(read["floor.edge-r0.volume"].1.as_deref(), Some("0.48 m³"));
+    let filled = s
+        .filled(&anna, &project, &model, &i("F-902"))
+        .await
+        .unwrap();
+    let args = filled.recipe.unwrap().args;
+    assert_eq!(args["edges"].as_array().map(Vec::len), Some(1));
+    assert_eq!(args["edges"][0]["id"], "r0");
+    let refused_both = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "floor.slope",
+            json!({ "element": "F-902", "slope": { "tail": ["70000", "0"], "head": ["74000", "0"],
+                    "at_tail": "0", "at_head": "-40 mm" } }),
+        )
+        .await;
+    assert!(refused(refused_both));
+}
+
 /// The seed draws its walls as a person does, layered walls of construct-walls' default types made
 /// through the log, and writes no old box wall. The page reads a model's wall types with their
 /// layers, the materials and the defaults, and an element's recipe filled as it is built, with how
@@ -1607,11 +1726,82 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
         serde_json::to_value(&listed).unwrap(),
         json!([
             { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
-              "level_name": "Level 1", "scale": 100, "detail": "medium" },
+              "level_name": "Level 1", "scale": 100, "detail": "medium",
+              "range": { "top": { "level": "1", "offset": "2300 mm" },
+                         "cut": { "level": "1", "offset": "1200 mm" },
+                         "bottom": { "level": "1", "offset": "0 mm" },
+                         "depth": { "level": "1", "offset": "-500 mm" },
+                         "heights": { "top": "2300 mm", "cut": "1200 mm", "bottom": "0 mm",
+                                      "depth": "-500 mm" } },
+              "crop": null },
             { "id": "VP-2", "name": "Level 2 plan", "kind": "floor_plan", "level": "2",
-              "level_name": "Level 2", "scale": 100, "detail": "medium" },
+              "level_name": "Level 2", "scale": 100, "detail": "medium",
+              "range": { "top": { "level": "2", "offset": "2300 mm" },
+                         "cut": { "level": "2", "offset": "1200 mm" },
+                         "bottom": { "level": "2", "offset": "0 mm" },
+                         "depth": { "level": "2", "offset": "-500 mm" },
+                         "heights": { "top": "5300 mm", "cut": "4200 mm", "bottom": "3000 mm",
+                                      "depth": "2500 mm" } },
+              "crop": null },
         ])
     );
+    // A crop and a new range are read back with the view, as text a person reads.
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "outline": [
+            { "x": "0", "y": "0" }, { "x": "4 m", "y": "0" }, { "x": "4 m", "y": "3 m" }] },
+            "annotation": { "rectangle": { "min": { "x": "-1 m", "y": "-1 m" },
+                                           "max": { "x": "5 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.show",
+        json!({ "view": "VP-1", "shown": false }),
+    )
+    .await
+    .unwrap();
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.set",
+        json!({ "view": "VP-1", "range": { "cut": { "offset": "1.5 m" } } }),
+    )
+    .await
+    .unwrap();
+    let listed = serde_json::to_value(s.views(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(
+        listed[0]["crop"],
+        json!({ "region": { "shape": "outline", "corners": [
+                    { "x": "0 mm", "y": "0 mm" }, { "x": "4000 mm", "y": "0 mm" },
+                    { "x": "4000 mm", "y": "3000 mm" }] },
+                "annotation": { "shape": "rectangle", "corners": [
+                    { "x": "-1000 mm", "y": "-1000 mm" }, { "x": "5000 mm", "y": "-1000 mm" },
+                    { "x": "5000 mm", "y": "4000 mm" }, { "x": "-1000 mm", "y": "4000 mm" }] },
+                "on": true, "shown": false })
+    );
+    assert_eq!(listed[0]["range"]["cut"]["offset"], "1500 mm");
+    assert_eq!(listed[0]["range"]["heights"]["cut"], "1500 mm");
+    assert_eq!(listed[1]["crop"], json!(null));
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    let listed = serde_json::to_value(s.views(&anna, &project, &model).await.unwrap()).unwrap();
+    assert_eq!(listed[0]["crop"], json!(null));
+    assert_eq!(listed[0]["range"]["heights"]["cut"], "1200 mm");
     // Each model has the plans of its own levels: the riverside model stands on one.
     let riverside = s
         .views(&i("cara"), &i("riverside"), &i("riverside-model"))
@@ -1630,8 +1820,7 @@ async fn the_page_lists_views_and_what_a_plan_shows() {
     assert_eq!(
         serde_json::to_value(&level_1).unwrap(),
         json!({
-            "view": { "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan", "level": "1",
-                      "level_name": "Level 1", "scale": 100, "detail": "medium" },
+            "view": level_1_summary(),
             "cut": ["D-101", "D-102", "D-103", "W-101", "W-102", "W-103", "W-104", "W-105"],
             "seen": [],
             "beyond": [],
@@ -1691,8 +1880,7 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
     let s = &stack.service;
     let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
     let (plan_1, plan_2) = (i("VP-1"), i("VP-2"));
-    let summary = json!({ "id": "VP-1", "name": "Level 1 plan", "kind": "floor_plan",
-                          "level": "1", "level_name": "Level 1", "scale": 100, "detail": "medium" });
+    let summary = level_1_summary();
 
     let none = s.graphics(&anna, &project, &model, &plan_1).await.unwrap();
     let none = serde_json::to_value(&none).unwrap();
@@ -1817,12 +2005,17 @@ async fn a_views_graphics_rules_are_read_as_the_log_has_them() {
     );
 }
 
+/// A crop as the drawer was given it: the view, on, shown and the corners in grid steps.
+type AskedCrop = (String, bool, bool, Vec<(i64, i64)>);
+
 /// A drawer that only records what the server asks of it, so the read path is tested without an
 /// engine: the cut height and scale of the view, and the elements the plan cuts as the model
 /// holds them.
 #[derive(Default)]
 struct Recording {
     asked: std::sync::Mutex<Vec<(Length, u32, Vec<ToDraw>)>>,
+    /// Each request's crop: the view it is of and the crop's on, shown and corners, as text.
+    crops: std::sync::Mutex<Vec<Option<AskedCrop>>>,
 }
 
 impl Drawer for Recording {
@@ -1832,7 +2025,21 @@ impl Drawer for Recording {
         scale: Scale,
         elements: &[ToDraw],
         _looks: Option<&dyn construct_drawing::look::Looks>,
+        crop: Option<spare_server::plan::PlanCrop<'_>>,
     ) -> Result<Drawn, String> {
+        self.crops.lock().unwrap().push(crop.map(|c| {
+            (
+                c.view.to_string(),
+                c.crop.is_on(),
+                c.crop.is_shown(),
+                c.crop
+                    .region()
+                    .corners()
+                    .iter()
+                    .map(|p| (p.x.steps(), p.y.steps()))
+                    .collect(),
+            )
+        }));
         self.asked
             .lock()
             .unwrap()
@@ -1893,6 +2100,30 @@ async fn a_plan_is_the_drawers_picture_of_what_the_views_plane_cuts() {
         let wall = elements.iter().find(|e| e.id.as_str() == "W-201").unwrap();
         assert_eq!(wall.placement.z, 3000);
     }
+
+    // A view with no crop passes none; a crop is passed with its view, switches and corners.
+    assert_eq!(*recording.crops.lock().unwrap(), [None, None]);
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    s.plan(&anna, &project, &model, &i("VP-1")).await.unwrap();
+    let (right, top) = (6000 * 6400, 4000 * 6400);
+    assert_eq!(
+        recording.crops.lock().unwrap().last().cloned().unwrap(),
+        Some((
+            "VP-1".to_owned(),
+            true,
+            true,
+            vec![(0, 0), (right, 0), (right, top), (0, top)]
+        ))
+    );
 
     // Only floor plans are drawn yet: a three-dimensional view says so.
     s.edit(
@@ -2143,64 +2374,227 @@ async fn a_room_in_the_seeded_building_reports_its_state_and_measures() {
     assert_eq!(back.room.unwrap().area, Some(area));
 }
 
-/// A stair made by command in the seeded building, from level 1 to level 2 (3000 mm): a common
-/// stairway in two runs with a landing between, 16 risers of 187.5 mm, 8 to a run, on 280 mm
-/// goings. The stairs view lists it with its layout and the rule set's categories; its parameters
-/// view reads its quantities back read-only; a person off the team can neither make one nor read
-/// the view; deleted, it is gone from the view.
+/// The identities of a model's warnings now, in the order the server gives them.
+async fn warning_identities(
+    s: &Service<Memory, MemoryFiles>,
+    project: &Id,
+    model: &Id,
+) -> Vec<String> {
+    s.warnings(&i("anna"), project, model)
+        .await
+        .unwrap()
+        .warnings
+        .into_iter()
+        .map(|w| w.identity)
+        .collect()
+}
+
+/// The server's list of a model's problems is worked out from the document each time it is read:
+/// a person off the team cannot read it; a room whose wall is deleted is listed not enclosed, with
+/// its words, and is gone again when the wall is back (by undo); a wall drawn far away leaves it
+/// as it was; a second wall drawn along the first is listed as an overlap, both walls named, and
+/// leaves when it is deleted; the same list comes back for the same document.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_stair_made_by_command_is_laid_out_and_read_back() {
+async fn the_warnings_view_lists_a_room_not_enclosed_and_walls_that_overlap() {
     let stack = seeded().await;
     let s = &stack.service;
     let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
-    let none = s.stairs(&anna, &project, &model).await.unwrap();
-    assert_eq!(none.stairs.len(), 0);
-    assert!(none.categories.iter().any(|c| c.id == "common"));
-    assert!(refused(s.stairs(&dan, &project, &model).await));
-    let create = json!({ "element": "S-900", "name": "Stair", "level": "1", "top": "2",
-                         "start": ["20 m", "0"], "runs": [{}, {}],
-                         "landings": [{ "length": "1 m", "turn": "back-left" }] });
+    assert!(refused(s.warnings(&dan, &project, &model).await));
+    let edit = |cmd: &'static str, args: Value| {
+        let (s, anna, project, model) = (s, &anna, &project, &model);
+        async move { s.edit(anna, project, model, cmd, args).await.unwrap() }
+    };
+    let base = warning_identities(s, &project, &model).await;
+    assert!(
+        base.iter().all(|w| !w.starts_with("room.")),
+        "the seeded building has no rooms: {base:?}"
+    );
+    edit(
+        "room.place",
+        json!({ "element": "R-900", "name": "Studio", "number": "101", "level": "1",
+                "at": ["3 m", "4 m"], "top": "2" }),
+    )
+    .await;
+    assert_eq!(warning_identities(s, &project, &model).await, base);
+
+    edit("element.delete", json!({ "element": "W-103" })).await;
+    let open = s.warnings(&anna, &project, &model).await.unwrap();
+    let room: Vec<_> = open
+        .warnings
+        .iter()
+        .filter(|w| w.kind == "room.not_enclosed")
+        .collect();
+    assert_eq!(room.len(), 1, "{open:?}");
+    assert_eq!(room[0].identity, "room.not_enclosed|R-900");
+    assert_eq!(room[0].elements, ["R-900"]);
+    assert_eq!(room[0].severity, "warning");
+    assert_eq!(
+        room[0].words,
+        "Room 101 Studio is not enclosed: the walls round its point do not close"
+    );
+    let open_list = warning_identities(s, &project, &model).await;
+    assert_eq!(open_list.len(), base.len() + 1);
+
+    // An unrelated edit: two walls far away, one along the other.
+    for ty in wall_types() {
+        edit("wall.type.create", ty).await;
+    }
+    let draw = |element: &str, from: &str, to: &str| {
+        json!({ "element": element, "type": "wall-partition", "start": [from, "0"],
+                "end": [to, "0"], "level": "1", "top": "2" })
+    };
+    edit("wall.draw", draw("W-900", "50 m", "54 m")).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    edit("wall.draw", draw("W-901", "52 m", "56 m")).await;
+    let both = warning_identities(s, &project, &model).await;
+    assert_eq!(both.len(), open_list.len() + 1);
+    assert!(both.contains(&"room.not_enclosed|R-900".to_owned()));
+    assert!(
+        both.contains(&"wall.overlap|W-900|W-901".to_owned()),
+        "{both:?}"
+    );
+    let mut sorted = both.clone();
+    sorted.sort();
+    assert_eq!(both, sorted, "by kind, then by elements");
+    assert_eq!(warning_identities(s, &project, &model).await, both);
+
+    // The cause fixed: the second wall is deleted, then the first wall of the room comes back.
+    edit("element.delete", json!({ "element": "W-901" })).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    edit("edit.undo", json!({})).await;
+    assert_eq!(warning_identities(s, &project, &model).await, both);
+    edit("edit.redo", json!({})).await;
+    assert_eq!(warning_identities(s, &project, &model).await, open_list);
+    // Undone step by step, the wall comes back last and the room is enclosed again.
+    for _ in 0..8 {
+        edit("edit.undo", json!({})).await;
+        if !warning_identities(s, &project, &model)
+            .await
+            .contains(&"room.not_enclosed|R-900".to_owned())
+        {
+            break;
+        }
+    }
+    assert_eq!(warning_identities(s, &project, &model).await, base);
+}
+
+/// The page's schedules: made and changed through the log by whoever may edit the model, read by
+/// whoever may read it. A schedule lists the seeded building's doors by name, and its rows are
+/// worked out from the elements on every read, so a door deleted through the log leaves them.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_lists_schedules_and_their_live_rows() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.schedules(&anna, &project, &model).await.unwrap();
+    assert_eq!(none.len(), 0);
+    assert!(refused(s.schedules(&dan, &project, &model).await));
+
+    let make = json!({ "schedule": "SC-1", "name": "Doors", "category": 300,
+                       "fields": ["name", "type"],
+                       "sorting": [{ "field": "name", "order": "descending" }] });
     assert!(refused(
-        s.edit(&dan, &project, &model, "stair.create", create.clone())
+        s.edit(&dan, &project, &model, "schedule.create", make.clone())
             .await
     ));
-    s.edit(&anna, &project, &model, "stair.create", create)
+    s.edit(&anna, &project, &model, "schedule.create", make)
         .await
         .unwrap();
-    let view = s.stairs(&anna, &project, &model).await.unwrap();
-    let layout = view.stairs[0].layout.as_ref().unwrap();
-    assert_eq!(layout.risers, 16);
-    assert_eq!(layout.rise.value, "length:q0:19200000");
-    assert_eq!(layout.riser_height.value, "length:q0:1200000");
+    let listed = s.schedules(&anna, &project, &model).await.unwrap();
     assert_eq!(
-        layout.runs.iter().map(|r| r.risers).collect::<Vec<_>>(),
-        vec![8, 8]
+        serde_json::to_value(&listed).unwrap(),
+        json!([{ "id": "SC-1", "name": "Doors", "category": 300, "category_name": "Doors",
+                 "fields": ["name", "type"], "filters": [],
+                 "sorting": [{ "field": "name", "order": "descending" }], "problem": null }])
     );
-    let read = quantities(s, &project, &model, "S-900").await;
-    assert_eq!(read["stair.risers"].1.as_deref(), Some("16"));
-    assert_eq!(read["stair.going"].1.as_deref(), Some("280 mm"));
-    assert_eq!(read["stair.treads"].1.as_deref(), Some("14"));
-    assert_eq!(
-        read["stair.riser-height"].0.as_deref(),
-        Some("length:q0:1200000")
+
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 7, "the seeded building's doors");
+    // The fields the category offers come with their kinds and the comparisons that fit them.
+    let offered = |key: &str| table.offered.iter().find(|field| field.field == key);
+    let name = offered("name").expect("a door's name is offered");
+    assert_eq!((name.name.as_str(), name.kind), ("Name", "text"));
+    assert!(name.comparisons.contains(&"contains"));
+    assert!(offered("type").is_some());
+    // The categories a schedule may list include the doors, and leave out the views.
+    let listable = s
+        .schedule_categories(&anna, &project, &model)
+        .await
+        .unwrap();
+    assert!(
+        listable
+            .iter()
+            .any(|c| (c.id, c.name.as_str()) == (300, "Doors"))
     );
+    assert!(listable.iter().all(|c| c.name != "Views"));
+    assert!(refused(s.schedule_categories(&dan, &project, &model).await));
+    let names: Vec<String> = table
+        .rows
+        .iter()
+        .map(|row| row.cells[0].shown.clone().unwrap().to_lowercase())
+        .collect();
+    let mut descending = names.clone();
+    descending.sort_by(|a, b| b.cmp(a));
+    assert_eq!(names, descending);
+    assert!(table.rows.iter().any(|row| row.element == "D-101"));
+
+    // The same read after an edit through the log gives the new rows: nothing was stored.
     s.edit(
         &anna,
         &project,
         &model,
-        "stair.delete",
-        json!({ "element": "S-900" }),
+        "element.delete",
+        json!({ "element": "D-101" }),
     )
     .await
     .unwrap();
-    assert_eq!(
-        s.stairs(&anna, &project, &model)
-            .await
-            .unwrap()
-            .stairs
-            .len(),
-        0
-    );
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 6);
+    assert!(table.rows.iter().all(|row| row.element != "D-101"));
+
+    // A filter through the command, in typed text; the generic command is no way round it.
+    let filter = json!({ "schedule": "SC-1",
+        "filters": [{ "field": "name", "is": "begins_with", "to": "zzz" }] });
+    s.edit(&anna, &project, &model, "schedule.filters", filter)
+        .await
+        .unwrap();
+    let table = s
+        .schedule(&anna, &project, &model, &i("SC-1"))
+        .await
+        .unwrap();
+    assert_eq!(table.rows.len(), 0);
+    let hacked = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "element.set",
+            json!({ "element": "SC-1", "name": "Hacked" }),
+        )
+        .await;
+    assert!(refused(hacked));
+
+    // A schedule that is not there, an element that is not a schedule, a person who may not read.
+    let none = s.schedule(&anna, &project, &model, &i("SC-9")).await;
+    assert!(matches!(none, Err(Refusal::NotFound)));
+    let wall = s.schedule(&anna, &project, &model, &i("W-101")).await;
+    assert!(matches!(wall, Err(Refusal::NotFound)));
+    assert!(refused(
+        s.schedule(&dan, &project, &model, &i("SC-1")).await
+    ));
+
+    // A schedule has no shape: the model still publishes, and replays from the log.
+    let item = s
+        .publish(&anna, &project, &i("arch"), &model)
+        .await
+        .unwrap();
+    assert_eq!(item.name, "Arch package v12");
 }
 
 /// A railing made by command on a stair of the seeded building (level 1 to level 2, 3000 mm, a
@@ -2352,4 +2746,416 @@ async fn the_page_lists_sheets_and_where_their_viewports_lie_on_the_paper() {
         s.sheet(&anna, &project, &model, &i("VP-1")).await,
         Err(Refusal::NotFound)
     ));
+}
+
+/// A viewport on a sheet reads its view's crop for its size: while the crop is on, the outline is
+/// the crop's box at the view's scale (exact, not rounded out to whole millimetres), whether or not
+/// the crop is shown; switched off or cleared, it is what the plan shows again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_viewports_outline_is_its_views_crop_while_the_crop_is_on() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    edit(
+        "sheet.create",
+        json!({ "sheet": "SH-1", "number": "A101", "name": "Ground floor plan" }),
+    )
+    .await
+    .unwrap();
+    edit(
+        "viewport.create",
+        json!({ "viewport": "PT-1", "sheet": "SH-1", "view": "VP-1", "x": "300 mm", "y": "300 mm" }),
+    )
+    .await
+    .unwrap();
+    let outline = || async {
+        let sheet = s.sheet(&anna, &project, &model, &i("SH-1")).await.unwrap();
+        serde_json::to_value(&sheet).unwrap()["viewports"][0]["outline"].clone()
+    };
+    let plain = outline().await;
+    assert_eq!(plain["min_x"], "length:q0:1534400");
+
+    // A crop of 6 m by 4 m at 1:100 is 60 by 40 mm on the paper, about the viewport's centre.
+    edit(
+        "view.crop.set",
+        json!({ "view": "VP-1", "region": { "rectangle": {
+            "min": { "x": "0", "y": "0" }, "max": { "x": "6 m", "y": "4 m" } } } }),
+    )
+    .await
+    .unwrap();
+    let cropped = json!({ "min_x": "length:q0:1728000", "min_y": "length:q0:1792000",
+                          "max_x": "length:q0:2112000", "max_y": "length:q0:2048000" });
+    assert_eq!(outline().await, cropped);
+    // A shaped crop's box, and hiding the outline, change nothing about the size.
+    edit("view.crop.show", json!({ "view": "VP-1", "shown": false }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, cropped);
+    // Off, and cleared, the plan's own extent is back.
+    edit("view.crop.set", json!({ "view": "VP-1", "on": false }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, plain);
+    edit("view.crop.set", json!({ "view": "VP-1", "on": true }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, cropped);
+    edit("view.crop.clear", json!({ "view": "VP-1" }))
+        .await
+        .unwrap();
+    assert_eq!(outline().await, plain);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_reads_a_views_dimensions_with_their_values_worked_out() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    let none = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(none.view_name, "Level 1 plan");
+    assert_eq!(none.dimensions.len(), 0);
+
+    // Across the first floor at mid height: the east wall's line, the partition's faces and line,
+    // and the west wall's line (the seed draws them at x = 100, 6100 and 11900 mm).
+    let wall = |id: &str, feature: &str| json!({ "element": id, "feature": feature });
+    edit(
+        "dimension.create",
+        json!({ "dimension": "DM-1", "view": "VP-1",
+                "layout": { "kind": "horizontal", "y": "4000" },
+                "references": [
+                    wall("W-103", "wall.line"),
+                    wall("W-105", "wall.face.interior"),
+                    wall("W-105", "wall.face.exterior"),
+                    wall("W-104", "wall.line"),
+                ] }),
+    )
+    .await
+    .unwrap();
+    let listed = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    let shown = serde_json::to_value(&listed).unwrap();
+    let dimension = &shown["dimensions"][0];
+    assert_eq!(dimension["id"], "DM-1");
+    assert_eq!(dimension["layout"]["kind"], "horizontal");
+    assert_eq!(dimension["layout"]["y"], "length:q0:25600000");
+    let segments = dimension["segments"].as_array().unwrap();
+    assert_eq!(segments.len(), 3);
+    // Its west face is 57.5 mm before 6100 and its east face 57.5 mm after: the distances run
+    // 5942.5, 115 and 5742.5 mm.
+    assert_eq!(segments[1]["text"], "115 mm");
+    assert_eq!(segments[1]["value"], "length:q0:736000");
+    assert_eq!(segments[1]["exact"], true);
+    let whole: i64 = [0, 2]
+        .iter()
+        .map(|at| {
+            let text = segments[*at]["value"].as_str().unwrap();
+            text.strip_prefix("length:q0:")
+                .unwrap()
+                .parse::<i64>()
+                .unwrap()
+        })
+        .sum::<i64>()
+        + 736_000;
+    assert_eq!(whole, 11_800 * 6400);
+    assert_eq!(dimension["overall_text"], "11800 mm");
+    assert_eq!(dimension["warnings"], json!([]));
+    assert_eq!(
+        dimension["references"][0]["words"],
+        "the reference line of W-103"
+    );
+
+    // A wall is deleted: the dimension is not touched, and names the reference that is gone.
+    edit("element.delete", json!({ "element": "W-105" }))
+        .await
+        .unwrap();
+    let after = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    let after = serde_json::to_value(&after).unwrap();
+    let dimension = &after["dimensions"][0];
+    assert_eq!(dimension["segments"][1]["value"], Value::Null);
+    assert_eq!(dimension["overall"], Value::Null);
+    assert_eq!(
+        dimension["warnings"][0]["identity"],
+        "dimension.reference_missing|DM-1|W-105"
+    );
+    assert_eq!(dimension["references"][1]["usable"], false);
+    // The undo gives the wall, and the numbers, back.
+    edit("edit.undo", json!({})).await.unwrap();
+    let back = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(serde_json::to_value(&back).unwrap(), shown);
+
+    assert!(refused(
+        s.dimensions(&dan, &project, &model, &i("VP-1")).await
+    ));
+    assert!(matches!(
+        s.dimensions(&anna, &project, &model, &i("VP-9")).await,
+        Err(Refusal::NotFound)
+    ));
+}
+
+/// A stair made by command in the seeded building, from level 1 to level 2 (3000 mm): a common
+/// stairway in two runs with a landing between, 16 risers of 187.5 mm, 8 to a run, on 280 mm
+/// goings. The stairs view lists it with its layout and the rule set's categories; its parameters
+/// view reads its quantities back read-only; a person off the team can neither make one nor read
+/// the view; deleted, it is gone from the view.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stair_made_by_command_is_laid_out_and_read_back() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.stairs(&anna, &project, &model).await.unwrap();
+    assert_eq!(none.stairs.len(), 0);
+    assert!(none.categories.iter().any(|c| c.id == "common"));
+    assert!(refused(s.stairs(&dan, &project, &model).await));
+    let create = json!({ "element": "S-900", "name": "Stair", "level": "1", "top": "2",
+                         "start": ["20 m", "0"], "runs": [{}, {}],
+                         "landings": [{ "length": "1 m", "turn": "back-left" }] });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "stair.create", create.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "stair.create", create)
+        .await
+        .unwrap();
+    let view = s.stairs(&anna, &project, &model).await.unwrap();
+    let layout = view.stairs[0].layout.as_ref().unwrap();
+    assert_eq!(layout.risers, 16);
+    assert_eq!(layout.rise.value, "length:q0:19200000");
+    assert_eq!(layout.riser_height.value, "length:q0:1200000");
+    assert_eq!(
+        layout.runs.iter().map(|r| r.risers).collect::<Vec<_>>(),
+        vec![8, 8]
+    );
+    let read = quantities(s, &project, &model, "S-900").await;
+    assert_eq!(read["stair.risers"].1.as_deref(), Some("16"));
+    assert_eq!(read["stair.going"].1.as_deref(), Some("280 mm"));
+    assert_eq!(read["stair.treads"].1.as_deref(), Some("14"));
+    assert_eq!(
+        read["stair.riser-height"].0.as_deref(),
+        Some("length:q0:1200000")
+    );
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "stair.delete",
+        json!({ "element": "S-900" }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        s.stairs(&anna, &project, &model)
+            .await
+            .unwrap()
+            .stairs
+            .len(),
+        0
+    );
+}
+
+/// Through the server's commands on the stand-in: the page's curtain wall tool reads the types
+/// (none, then the three defaults once it sends them), a person off the team can read none; a 6 m
+/// by 3 m curtain wall of the 1.5 m by 1 m type drawn on level 1 is built as the box round its
+/// mullions, and its parameters view lists its length, height, area, panels and their area, glazed
+/// area, and mullions and their length, in units and read-only; a grid line added changes them,
+/// and undone puts them back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_curtain_wall_drawn_by_command_shows_its_quantities_in_units() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let none = s.curtain_types(&anna, &project, &model).await.unwrap();
+    assert!(none.types.is_empty());
+    assert_eq!(none.defaults.len(), 3);
+    assert!(none.materials.iter().any(|m| m.id == "glass-plate"));
+    assert!(refused(s.curtain_types(&dan, &project, &model).await));
+    s.edit(&anna, &project, &model, "curtain.defaults", json!({}))
+        .await
+        .unwrap();
+    let types = s.curtain_types(&anna, &project, &model).await.unwrap();
+    let ids: Vec<&str> = types.types.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["curtain-1500x1000", "curtain-glazing", "curtain-storefront"]
+    );
+    let wall = json!({ "element": "CW-900", "type": "curtain-1500x1000", "level": "1",
+                       "start": ["60 m", "0"], "end": ["66 m", "0"], "height": "3 m" });
+    assert!(refused(
+        s.edit(&dan, &project, &model, "curtain.draw", wall.clone())
+            .await
+    ));
+    s.edit(&anna, &project, &model, "curtain.draw", wall)
+        .await
+        .unwrap();
+    let view = serde_json::to_value(
+        s.parameters(&anna, &project, &model, &i("CW-900"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        view["category"],
+        json!({ "id": 200, "name": "Curtain walls" })
+    );
+    let read = quantities(s, &project, &model, "CW-900").await;
+    let ids: Vec<&str> = read.keys().map(String::as_str).collect();
+    assert_eq!(
+        ids,
+        [
+            "curtain.area",
+            "curtain.glazed-area",
+            "curtain.height",
+            "curtain.length",
+            "curtain.mullion-length",
+            "curtain.mullions",
+            "curtain.panel-area",
+            "curtain.panels",
+        ]
+    );
+    assert_eq!(read["curtain.panels"].0.as_deref(), Some("number:12"));
+    assert_eq!(read["curtain.mullions"].0.as_deref(), Some("number:31"));
+    assert_eq!(read["curtain.panel-area"].1.as_deref(), Some("16.10 m²"));
+    assert_eq!(read["curtain.area"].1.as_deref(), Some("18.00 m²"));
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "curtain.grid.add",
+        json!({ "element": "CW-900", "direction": "vertical", "at": "750 mm" }),
+    )
+    .await
+    .unwrap();
+    let more = quantities(s, &project, &model, "CW-900").await;
+    assert_eq!(more["curtain.panels"].0.as_deref(), Some("number:15"));
+    s.edit(&anna, &project, &model, "edit.undo", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(quantities(s, &project, &model, "CW-900").await, read);
+}
+
+/// A dimension whose reference is gone is listed by the warnings view as well as by the dimension
+/// listing: the same kind, elements and sentence, by the same identity; it leaves with an undo.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dimensions_lost_reference_is_in_the_warnings_view() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, project, model) = (i("anna"), i("example-1"), i("arch-model"));
+    let edit = |cmd: &'static str, args: Value| {
+        let (anna, project, model) = (anna.clone(), project.clone(), model.clone());
+        async move { s.edit(&anna, &project, &model, cmd, args).await }
+    };
+    let ours = || async {
+        s.warnings(&anna, &project, &model)
+            .await
+            .unwrap()
+            .warnings
+            .into_iter()
+            .filter(|w| w.kind.starts_with("dimension."))
+            .collect::<Vec<_>>()
+    };
+    let wall = |id: &str, feature: &str| json!({ "element": id, "feature": feature });
+    edit(
+        "dimension.create",
+        json!({ "dimension": "DM-1", "view": "VP-1",
+                "layout": { "kind": "horizontal", "y": "4000" },
+                "references": [wall("W-103", "wall.line"), wall("W-104", "wall.line")] }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(ours().await, Vec::new());
+    edit("element.delete", json!({ "element": "W-104" }))
+        .await
+        .unwrap();
+    let lost = ours().await;
+    assert_eq!(lost.len(), 1, "{lost:?}");
+    assert_eq!(lost[0].identity, "dimension.reference_missing|DM-1|W-104");
+    assert_eq!(lost[0].severity, "warning");
+    let listed = s
+        .dimensions(&anna, &project, &model, &i("VP-1"))
+        .await
+        .unwrap();
+    assert_eq!(listed.dimensions[0].warnings[0].words, lost[0].words);
+    edit("edit.undo", json!({})).await.unwrap();
+    assert_eq!(ours().await, Vec::new());
+}
+
+/// A model's families (job 7.6): a recipe loaded as text is listed first for the page, with where
+/// it came from, before the library's families the model does not hold; a reload, and a remove,
+/// go through the log, each refused in words where they cannot be; someone off the project cannot
+/// read the list.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_models_own_families_are_loaded_and_listed_for_the_page() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, dan, project, model) = (i("anna"), i("dan"), i("example-1"), i("arch-model"));
+    let (_, window) = construct_regen::families::Library::baked()
+        .family("library.doors-windows.fixed-window")
+        .unwrap();
+    let mut office = (*window).clone();
+    office.id = i("office.window");
+    "Office window".clone_into(&mut office.name);
+    let load = json!({ "recipe": office.to_json() });
+    s.edit(&anna, &project, &model, "family.load", load)
+        .await
+        .unwrap();
+    let listed = s.families(&anna, &project, &model).await.unwrap();
+    assert_eq!(listed[0].id, "office.window");
+    assert!(listed[0].in_document);
+    assert_eq!(listed[0].source, "text");
+    assert_eq!(listed[0].placed, 0);
+    assert_eq!(listed[0].types.len(), 8);
+    assert!(listed[1..].iter().all(|f| !f.in_document));
+    assert!(refused(s.families(&dan, &project, &model).await));
+
+    "Office window, second issue".clone_into(&mut office.name);
+    let reload = json!({ "family": "office.window", "recipe": office.to_json() });
+    s.edit(&anna, &project, &model, "family.reload", reload)
+        .await
+        .unwrap();
+    let listed = s.families(&anna, &project, &model).await.unwrap();
+    assert_eq!(listed[0].name, "Office window, second issue");
+    let missing = s
+        .edit(
+            &anna,
+            &project,
+            &model,
+            "family.remove",
+            json!({ "family": "shop.window" }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        missing.to_string(),
+        "There is no family shop.window in this document; it has Office window, second issue \
+         (office.window)."
+    );
+    s.edit(
+        &anna,
+        &project,
+        &model,
+        "family.remove",
+        json!({ "family": "office.window" }),
+    )
+    .await
+    .unwrap();
+    let listed = s.families(&anna, &project, &model).await.unwrap();
+    assert!(listed.iter().all(|f| !f.in_document));
 }

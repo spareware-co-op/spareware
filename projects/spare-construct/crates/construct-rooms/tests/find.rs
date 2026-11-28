@@ -2,8 +2,9 @@
 //! their centre lines, walls that only touch at a corner (and a hair's gap that opens the loop),
 //! T-meetings (two rooms, with a partition run into the walls or stopped at their faces), a wall
 //! ending inside the room (a nib), an island wall and a column (holes), two rooms in one loop,
-//! and the refusals: a point in a wall, a curved wall, a corner off the grid, an area that is not
-//! whole square steps. Every number is pinned exactly.
+//! an L's corner that points into the room (where joined walls' faces meet, along the axes and
+//! turned), and the refusals: a point in a wall, a curved wall, a corner off the grid, an area
+//! that is not whole square steps. Every number is pinned exactly.
 //!
 //! A doorway does not break a loop because a wall's outline is read whole, openings and all: the
 //! search is given no opening. construct-regen's tests put a door in a wall of the loop and find
@@ -413,4 +414,139 @@ fn a_curved_wall_a_point_in_a_wall_and_no_height_are_refused() {
         find(&flat, [5, 5]).unwrap_err(),
         RoomError::NoOutline { wall: i("w-flat") }
     );
+}
+
+/// A polygon of millimetre corners in steps, each turned by `turn`.
+fn turned(id: &str, corners: &[[i64; 2]], turn: fn([i64; 2]) -> [i64; 2]) -> Bound {
+    Bound {
+        wall: i(id),
+        outline: Outline::Polygon(corners.iter().map(|&[x, y]| turn(at(x, y))).collect()),
+    }
+}
+
+/// The plan as it is.
+fn as_drawn(p: [i64; 2]) -> [i64; 2] {
+    p
+}
+
+/// The plan turned by the angle whose cosine is 4/5 and sine 3/5 (36.87 degrees) about the
+/// origin: exact on the grid for a point whose steps are multiples of 5, as every whole
+/// millimetre is (6400 steps). It keeps every length and area.
+fn three_four_five(p: [i64; 2]) -> [i64; 2] {
+    let [x, y] = p;
+    assert_eq!((x % 5, y % 5), (0, 0));
+    [(4 * x - 3 * y) / 5, (3 * x + 4 * y) / 5]
+}
+
+/// The six walls of an L, 250 mm thick on their centre lines from (0,0) to (8000,0), (8000,3000),
+/// (4000,3000), (4000,6000), (0,6000) and back, as the outlines the search is handed, in
+/// millimetres. `inward` is how the two walls at (4000,3000), the corner that points into the
+/// room, are shaped there: `Plain`, each its own rectangle to its line's end, unjoined; `Butt`,
+/// the second running through the corner's 250 mm square and the first stopping at it; `Mitre`,
+/// the square split on its diagonal, so the two outlines touch at the room's corner only. The
+/// other corners are butt joints, the wall drawn second running through.
+fn l_walls(inward: Inward, turn: fn([i64; 2]) -> [i64; 2]) -> Vec<Bound> {
+    let rect = |id: &str, [x0, y0]: [i64; 2], [x1, y1]: [i64; 2]| {
+        turned(id, &[[x0, y0], [x1, y0], [x1, y1], [x0, y1]], turn)
+    };
+    let (w3, w4) = match inward {
+        Inward::Plain => (
+            rect("w-3", [4000, 2875], [8125, 3125]),
+            rect("w-4", [3875, 3000], [4125, 5875]),
+        ),
+        Inward::Butt => (
+            rect("w-3", [4125, 2875], [8125, 3125]),
+            rect("w-4", [3875, 2875], [4125, 5875]),
+        ),
+        Inward::Mitre => (
+            turned(
+                "w-3",
+                &[[3875, 2875], [8125, 2875], [8125, 3125], [4125, 3125]],
+                turn,
+            ),
+            turned(
+                "w-4",
+                &[[3875, 2875], [4125, 3125], [4125, 5875], [3875, 5875]],
+                turn,
+            ),
+        ),
+    };
+    vec![
+        rect("w-1", [-125, -125], [7875, 125]),
+        rect("w-2", [7875, -125], [8125, 2875]),
+        w3,
+        w4,
+        rect("w-5", [125, 5875], [4125, 6125]),
+        rect("w-6", [-125, 125], [125, 6125]),
+    ]
+}
+
+#[derive(Clone, Copy)]
+enum Inward {
+    Plain,
+    Butt,
+    Mitre,
+}
+
+/// Issue 1329, worked by hand. The L of [`l_walls`] with a room at (2000,2000): each inner face
+/// is 125 mm in from its line, so the room's outline is (125,125) (7875,125) (7875,2875)
+/// (3875,2875) (3875,5875) (125,5875), and at the corner that points into the room the two inner
+/// faces meet at the one point (3875,2875).
+/// - Area: 7750 x 2750 + 3750 x 3000 = 32,562,500 mm2 (the centre lines' 36,000,000, less the
+///   perimeter 28,000 x 125, plus 5 outward corners and less 1 inward corner of 125 x 125).
+/// - Perimeter: 7750 + 2750 + 4000 + 3000 + 3750 + 5750 = 27,000 mm.
+///
+/// Whether the walls meet there in a butt joint or a mitre (their outlines touching at the room's
+/// corner only), the room is that outline, exactly. Handed the walls' plain rectangles instead,
+/// unjoined at that corner, the search finds what they leave: a 125 by 125 mm notch,
+/// (4000,2875) (4000,3000) (3875,3000), and 32,578,125 mm2, one 15,625 mm2 square more. The
+/// search is right in each case; a room's faces are the walls' as joined only if the outlines it
+/// is handed are the joined ones. All the same turned by 36.87 degrees: nothing here leans on the
+/// plan's axes.
+#[test]
+fn an_inward_corner_is_where_the_joined_walls_faces_meet_at_any_angle() {
+    let joined = [
+        [125, 125],
+        [7875, 125],
+        [7875, 2875],
+        [3875, 2875],
+        [3875, 5875],
+        [125, 5875],
+    ];
+    let notched = [
+        [125, 125],
+        [7875, 125],
+        [7875, 2875],
+        [4000, 2875],
+        [4000, 3000],
+        [3875, 3000],
+        [3875, 5875],
+        [125, 5875],
+    ];
+    for turn in [as_drawn as fn([i64; 2]) -> [i64; 2], three_four_five] {
+        for (inward, outline, area) in [
+            (Inward::Butt, &joined[..], 32_562_500),
+            (Inward::Mitre, &joined[..], 32_562_500),
+            (Inward::Plain, &notched[..], 32_578_125),
+        ] {
+            let walls = l_walls(inward, turn);
+            let found = find(&walls, turn(at(2000, 2000))).unwrap().unwrap();
+            let mut want: Vec<[i64; 2]> = outline.iter().map(|&[x, y]| turn(at(x, y))).collect();
+            // The loop starts at its least corner, by x then y.
+            let least = (0..want.len()).min_by_key(|&k| want[k]).unwrap();
+            want.rotate_left(least);
+            let got: Vec<[i64; 2]> = found.outer.iter().map(|c| c.at).collect();
+            assert_eq!(got, want);
+            assert_eq!(found.walls.len(), 6);
+            let m = measure(&found, Length::from_mm(3000)).unwrap();
+            assert_eq!(m.area, Area::from_mm2(area));
+            assert_eq!(m.perimeter, Length::from_mm(27_000));
+            assert_eq!(
+                m.volume,
+                Area::from_mm2(area)
+                    .checked_mul(Length::from_mm(3000))
+                    .unwrap()
+            );
+        }
+    }
 }

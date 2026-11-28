@@ -26,7 +26,9 @@ server = [
     "dep:construct-railings",
     "dep:construct-materials",
     "dep:construct-views",
+    "dep:construct-schedules",
     "dep:construct-sheets",
+    "dep:construct-dimensions",
 ]
 
 [dependencies]
@@ -74,12 +76,19 @@ construct-materials = { path = "../construct-materials", optional = true }
 construct-families = { path = "../construct-families" }
 # A view is a record with no shape, so the regenerator passes it over.
 construct-views = { path = "../construct-views", optional = true }
+# A schedule is a record with no shape, so the regenerator passes it over.
+construct-schedules = { path = "../construct-schedules", optional = true }
 # Openings and shafts (job 4.2): their recipes, outlines and fit, which both builders read
 # (src/voids.rs, src/kernel/floor.rs, src/kernel/opening.rs), so it is not optional. Same
 # workspace.
 construct-openings = { path = "../construct-openings" }
 # A sheet and a viewport are records with no shape too (the viewport commands, A74).
 construct-sheets = { path = "../construct-sheets", optional = true }
+# A dimension is a record with no shape as well (the dimension commands, A81).
+construct-dimensions = { path = "../construct-dimensions", optional = true }
+# Curtain walls (job 14.1): their layout, solids and quantities, which both builders read
+# (src/curtain_plan.rs), so it is not optional. Same workspace.
+construct-curtain = { path = "../construct-curtain" }
 # The geometry kernel's facade, the only kernel crate a program depends on: its engine seam, grid
 # and names, for the builder in src/kernel.rs. This repository's own, Apache-2.0.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }

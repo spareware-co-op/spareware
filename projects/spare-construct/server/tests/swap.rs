@@ -213,6 +213,22 @@ fn only_the_regen_crate_knows_the_stand_in() {
         format!("{root}/app/connect.js"),
         format!("{root}/app/view3d.js"),
     ];
+    // The page's core and its tools, every module in their folders (note A96).
+    let mut folders = vec![format!("{root}/app/core"), format!("{root}/app/tools")];
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                folders.push(path.display().to_string());
+            } else {
+                files.push(path.display().to_string());
+            }
+        }
+    }
+    assert!(
+        files.len() > 2,
+        "the page's modules are not where this test looks"
+    );
     for folder in [
         "server/src",
         "crates/construct-api/src/cloud",

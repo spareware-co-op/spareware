@@ -24,10 +24,15 @@ cloud = [
     "dep:construct-openings",
     "dep:construct-roofs",
     "dep:construct-rooms",
+    "dep:construct-warnings",
     "dep:construct-stairs",
     "dep:construct-railings",
     "dep:construct-phases",
+    "dep:construct-doorgen",
+    "dep:construct-schedules",
     "dep:construct-styles",
+    "dep:construct-dimensions",
+    "dep:construct-curtain",
 ]
 
 [dependencies]
@@ -62,18 +67,29 @@ construct-openings = { path = "../construct-openings", optional = true }
 construct-roofs = { path = "../construct-roofs", optional = true }
 # The room commands: construct-rooms checks every room.
 construct-rooms = { path = "../construct-rooms", optional = true }
+# The warnings view: construct-warnings works the list out from walls and rooms read as rooms read them.
+construct-warnings = { path = "../construct-warnings", optional = true }
 # The stair commands: construct-stairs checks every stair and lays it out by its rule set.
 construct-stairs = { path = "../construct-stairs", optional = true }
 # The railing commands: construct-railings checks every railing and its type.
 construct-railings = { path = "../construct-railings", optional = true }
+# The curtain wall commands: construct-curtain checks every grid, panel and mullion.
+construct-curtain = { path = "../construct-curtain", optional = true }
 # The view commands: a view's staging and phase settings are the phases crate's values.
 construct-phases = { path = "../construct-phases", optional = true }
+# The generated door and window types: construct-doorgen makes and verifies each before it is stored.
+construct-doorgen = { path = "../construct-doorgen", optional = true }
+# The schedule commands: construct-schedules checks every schedule and works out its rows.
+construct-schedules = { path = "../construct-schedules", optional = true }
 # The view graphics commands: the pens, line patterns and object styles a rule is checked against.
 construct-styles = { path = "../construct-styles", optional = true }
 construct-elements = { path = "../construct-elements" }
 construct-families = { path = "../construct-families" }
 construct-views = { path = "../construct-views" }
 construct-sheets = { path = "../construct-sheets" }
+# Dimensions bound to references: the dimension commands read and write them (cloud/dimensions.rs),
+# so the browser's build leaves it, and its exact arithmetic, out.
+construct-dimensions = { path = "../construct-dimensions", optional = true }
 construct-clash = { path = "../construct-clash" }
 construct-versions = { path = "../construct-versions" }
 construct-interop = { path = "../construct-interop" }

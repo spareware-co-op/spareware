@@ -32,12 +32,22 @@
 //! record is not rewritten. Each such rebuild is one step deep, from the record each built row
 //! names, as the elements of a changed type are.
 //!
+//! A layered wall is built with its joints with the walls it meets ([`crate::joins`]): its recipe
+//! is filled with them as regeneration has reached, and its `reads` row lists every wall that
+//! filling read (the walls it meets, and the walls they meet). When a wall is built, the walls its
+//! row listed before and lists now are built again too, one step deep: so drawing, moving,
+//! retyping or deleting a wall builds every wall it meets or met again, and the joints are the
+//! same however the log was reached.
+//!
 //! A placed family (`family.instance`, job 6.4) is hosted the same way and rides the same rows:
 //! it is seated in its wall ([`crate::hosting::seat`]: its place and its turn, read from the wall
 //! each time, never stored), both in its own build and in the wall's, so the solids it is built
-//! with and the opening its wall cuts are in one place. A wall moved, or its type changed, builds
+//! with and the opening its wall cuts are in one place. In a wall at an angle every hosted
+//! element is seated so (piece A83: its seat in place of a turn, the same in both builds). A wall moved, or its type changed, builds
 //! it again with the wall; a change to its own record (its type, or the recipe version it names)
-//! builds its wall again; nothing else is.
+//! builds its wall again; nothing else is. One of a family the document holds (job 7.6) reads
+//! the family's record too: its `reads` row names it, so a family's record written again builds
+//! every copy that names it, and their walls with them.
 //!
 //! A floor is cut by its openings, which are hosted on it as a door is on a wall, and by every
 //! shaft of its document that passes wholly through its thickness (construct-openings' `reach`,
@@ -57,9 +67,11 @@
 //! not enclosed, or redundant, keeps its record and its built row says so.
 
 use crate::hosting::{self, Hosting};
+use crate::joins;
 use crate::levels;
 use crate::parameters::{self, At};
 use crate::rooms;
+use crate::wall_plan;
 use construct_model::element::{Element, Placement};
 use construct_model::geometry::{Built, Edition, Geometry, GeometryError, Hosted, Recipe};
 use construct_model::keys::{Place, list};
@@ -465,10 +477,11 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             Some(Fed::Shape {
                 hosts,
                 hosted,
+                joined,
                 spaces,
             }) => {
-                self.dependents(txn, project, document, hosts.iter().chain(&hosted), built)
-                    .await?;
+                let fed = hosts.iter().chain(&hosted).chain(&joined);
+                self.dependents(txn, project, document, fed, built).await?;
                 self.railings_on(txn, project, document, &change.piece, built)
                     .await?;
                 return self
@@ -489,9 +502,15 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 continue;
             };
             built.push((document.clone(), element, body));
-            if let Some(Fed::Shape { hosts, hosted, .. }) = fed {
-                self.dependents(txn, project, document, hosts.iter().chain(&hosted), built)
-                    .await?;
+            if let Some(Fed::Shape {
+                hosts,
+                hosted,
+                joined,
+                ..
+            }) = fed
+            {
+                let fed = hosts.iter().chain(&hosted).chain(&joined);
+                self.dependents(txn, project, document, fed, built).await?;
             }
         }
         Ok(())
@@ -642,7 +661,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         };
         // What is hosted on it is listed by what is hosted, so it stays through its own rebuild.
         let kept: Option<Reads> = read_row(txn, &reads.key()).await?;
-        let hosted = kept.map(|kept| kept.hosted).unwrap_or_default();
+        let (hosted, joined_before) = kept
+            .map(|kept| (kept.hosted, kept.joins))
+            .unwrap_or_default();
         txn.delete(reads.key()).await?;
         let place = Place::Built {
             project: project.clone(),
@@ -711,6 +732,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                     hosts,
                     hosted: ids(&hosted)?,
                     spaces,
+                    joined: ids(&joined_before.into_iter().collect::<Vec<_>>())?,
                 }),
             ));
         };
@@ -752,6 +774,7 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
             records,
             host: new_host.as_ref().map(ToString::to_string),
             hosted: hosted.clone(),
+            joins: inputs.joins.clone(),
         };
         if !row.is_empty() {
             txn.put(reads.key(), to_row(&row)?).await?;
@@ -813,12 +836,14 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         {
             spaces.push(level.clone());
         }
+        let joined: Vec<String> = joined_before.union(&inputs.joins).cloned().collect();
         Ok((
             body,
             Some(Fed::Shape {
                 hosts,
                 hosted: ids(&hosted)?,
                 spaces,
+                joined: ids(&joined)?,
             }),
         ))
     }
@@ -916,6 +941,9 @@ enum Fed {
         /// For a wall or a room ([`rooms::is_spatial`]), the levels it was and is on: the rooms
         /// on them are built again.
         spaces: Vec<Id>,
+        /// The walls its joints read, before and now, in key order: a wall it meets, or met, is
+        /// built again with it.
+        joined: Vec<Id>,
     },
 }
 
@@ -981,16 +1009,18 @@ struct HostedInput {
     at: Placement,
 }
 
-/// What an element is built from: its recipe, the elements hosted on it, where it sits, and the
-/// level and base height its built row records.
+/// What an element is built from: its recipe, the elements hosted on it, where it sits, the
+/// level and base height its built row records, and the walls its joints read.
 struct Inputs {
     recipe: Result<Recipe, GeometryError>,
     placement: Result<Placement, GeometryError>,
     hosted: Result<Vec<HostedInput>, GeometryError>,
     placed: Placed,
+    joins: BTreeSet<String>,
 }
 
-/// What `element` is built from, as regeneration has reached: its filled recipe ([`input_of`]),
+/// What `element` is built from, as regeneration has reached: its filled recipe ([`input_of`])
+/// with its joints with the walls it meets ([`joins::fill`]),
 /// where it sits (its own placement, or for an element hosted on a face, read from its host),
 /// each element `hosted` lists as hosted on it, and its level. A failure of any is the element's
 /// build failure.
@@ -1002,7 +1032,17 @@ async fn inputs<R: Reader>(
     element: &Element,
     hosted: &[String],
 ) -> Result<Inputs, StoreError> {
-    let (mut recipe, placed) = input_of(reader, project, document, element).await?;
+    let (recipe, placed) = input_of(reader, project, document, element).await?;
+    let (mut recipe, joins) = match recipe {
+        Ok(recipe) if wall_plan::is_layered(&recipe) => {
+            let elevation = stored_length(placed.elevation.as_ref());
+            let at = At::Regenerated;
+            let (recipe, read) =
+                joins::fill(reader, project, document, element, &recipe, elevation, at).await?;
+            (Ok(recipe), read)
+        }
+        other => (other, BTreeSet::new()),
+    };
     let (placement, hosted) = match &recipe {
         Ok(own) => (
             placement_of(reader, project, document, edition, element, own).await?,
@@ -1010,7 +1050,8 @@ async fn inputs<R: Reader>(
         ),
         Err(_) => (Ok((element.placement, None)), Ok(Vec::new())),
     };
-    // A placed family is built as it is seated in its wall: turned as it stands there.
+    // A hosted element is built as it is seated in its wall: a placed family turned as it stands
+    // there, and anything in a wall at an angle with its seat.
     let placement = match placement {
         Ok((at, seated)) => {
             if let Some(seated) = seated {
@@ -1025,6 +1066,7 @@ async fn inputs<R: Reader>(
         placement,
         hosted,
         placed,
+        joins,
     })
 }
 
@@ -1137,7 +1179,13 @@ async fn hosted_in<R: Reader>(
                 }));
             }
         };
-        match hosting::seat(edition, host, own, &record, &recipe, &hosting) {
+        // An embedded curtain wall is handed to its host as the opening it cuts.
+        let seated = match hosting::cut_of(edition, host, own, &record, &recipe, &hosting) {
+            Ok(Some(cut)) => Ok(cut),
+            Ok(None) => hosting::seat(edition, host, own, &record, &recipe, &hosting),
+            Err(e) => Err(e),
+        };
+        match seated {
             Ok((at, recipe)) => found.push(HostedInput {
                 key: key.clone(),
                 recipe,
@@ -1270,6 +1318,10 @@ fn reads_of(element: &Element) -> BTreeSet<String> {
         if let Some(type_id) = parameters::type_of(element) {
             read.insert(type_id.to_string());
         }
+    }
+    // A placed family of a family in the document is built from the family's record.
+    if let Some(family) = crate::families::in_document(&element.recipe) {
+        read.insert(family.to_string());
     }
     read
 }

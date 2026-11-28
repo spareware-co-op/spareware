@@ -27,6 +27,7 @@ construct-drawing = { path = "../crates/construct-drawing" }
 construct-materials = { path = "../crates/construct-materials" }
 construct-params = { path = "../crates/construct-params" }
 construct-styles = { path = "../crates/construct-styles" }
+construct-views = { path = "../crates/construct-views" }
 engine-geometry = { path = "../../engines/crates/engine-geometry" }
 construct-model = { path = "../crates/construct-model" }
 construct-regen = { path = "../crates/construct-regen", features = ["server"] }
@@ -46,6 +47,9 @@ clap = { version = "=4.5.51", features = ["derive", "env"] }  # MIT OR Apache-2.
 flate2 = "=1.1.5"                  # MIT OR Apache-2.0
 futures = "=0.3.31"                # MIT OR Apache-2.0
 hex = "=0.4.3"                     # MIT OR Apache-2.0
+# The page's core and tools (app/core, app/tools), embedded as two trees so a new file needs no
+# route (note A96); build.rs makes a new file rebuild the server.
+include_dir = "=0.7.4"             # MIT
 rand = "=0.9.2"                    # MIT OR Apache-2.0
 serde = { version = "=1.0.229", features = ["derive"] }  # MIT OR Apache-2.0
 serde_json = "=1.0.154"            # MIT OR Apache-2.0

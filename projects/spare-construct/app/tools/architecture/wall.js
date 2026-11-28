@@ -1,0 +1,213 @@
+// Tool: the wall tool.
+
+import { provide } from '../../core/late.js';
+import { register } from '../../core/registry.js';
+import { C, api, levelOf, modelUrl, say } from '../../core/state.js';
+import { LAYERED, STEPS_PER_MM, around, lineOf } from '../../core/shapes.js';
+import { refreshSide } from '../../core/parameters.js';
+import { canEdit, capital, manage, newId, problem } from '../../core/problems.js';
+import { hint, queueDraw, snap } from '../../core/plan.js';
+import { modelLevels } from '../project/levels.js';
+
+// --- The wall tool ---
+// A wall is drawn as a line between two clicked points, of the wall type chosen in the properties
+// palette, its base on the plan's level and its top on the level chosen there or a height typed
+// there: one `wall.draw` edit (construct-model's FORMAT.md, "Walls"). The wall types, their layers
+// and the colours their materials are drawn in come from the server; where a model has no wall
+// types, the page sends the server's default ones through the log (`wall.type.create`). A refusal
+// is the server's reason, under the tool's options.
+
+C.wallTypes = null; // { key, view } of the open model
+C.wallTool = { type: null, top: undefined, height: '3000 mm' }; // top: a level's ID, '' for a height, undefined for the level above
+C.madeDefaults = null; // the model the default wall types were sent for
+
+/** The open model's wall types, materials and defaults; null until they have come. */
+function wallTypes() {
+  if (!C.model) return null;
+  const model = C.model.id;
+  const key = `${model}/${C.paramsEpoch}`;
+  if (C.wallTypes?.key !== key && C.wallTypesLoading !== key) {
+    C.wallTypesLoading = key;
+    api(`${modelUrl(model)}/wall-types`)
+      .then((view) => {
+        C.wallTypes = { key, view };
+        refreshSide();
+        queueDraw();
+      })
+      .catch(() => {});
+  }
+  return C.wallTypes?.key.startsWith(`${model}/`) ? C.wallTypes.view : null;
+}
+
+/** A material's colour where a view cuts it (`cut`) or seen beyond (`surface`); null for a material not listed. */
+function colourOf(material, which) {
+  const found = wallTypes()?.materials.find((m) => m.id === material);
+  return found ? found[which] : null;
+}
+
+const materialName = (view, id) => view.materials.find((m) => m.id === id)?.name ?? id;
+
+function chosenWallType(view) {
+  return view.types.find((t) => t.id === C.wallTool.type) ?? view.types[0] ?? null;
+}
+
+/** The top the tool draws to: a level's ID, or '' for a height. By default the level above the plan's. */
+function wallTop(levels) {
+  const here = levelOf();
+  const others = (levels || []).filter((level) => level.id !== here);
+  const chosen = C.wallTool.top;
+  if (chosen === '' || others.some((level) => level.id === chosen)) return chosen;
+  const at = (levels || []).findIndex((level) => level.id === here);
+  return (at >= 0 && levels[at + 1]?.id) || '';
+}
+
+/** Sends the server's default wall types, once for a model, where it has none. */
+function makeDefaultWalls(view) {
+  if (!canEdit() || C.madeDefaults === C.model.id) return;
+  C.madeDefaults = C.model.id;
+  for (const args of view.defaults) manage('wall.type.create', args, 'wall-draw');
+}
+
+function wallToolHtml() {
+  let html = typeSel('wall', 'Wall', '<b>New wall</b>');
+  const view = wallTypes();
+  if (!view) return `${html}<p class="pad small faint">Loading the wall types.</p>`;
+  if (!view.types.length) {
+    queueMicrotask(() => makeDefaultWalls(view));
+    return `${html}<p class="pad small faint" data-wall-tool="making">This model has no wall types yet, so the default ones are being made.</p>${problem('wall-draw')}`;
+  }
+  const chosen = chosenWallType(view);
+  const levels = modelLevels() || [];
+  const here = levelOf();
+  const top = wallTop(levels);
+  const types = view.types.map((t) => `<option value="${esc(t.id)}"${t.id === chosen.id ? ' selected' : ''}>${esc(t.name)}</option>`);
+  const tops = levels
+    .filter((level) => level.id !== here)
+    .map((level) => `<option value="${esc(level.id)}"${level.id === top ? ' selected' : ''}>${esc(level.name)}</option>`);
+  tops.push(`<option value=""${top === '' ? ' selected' : ''}>A height</option>`);
+  const base = levels.find((level) => level.id === here)?.name ?? here;
+  html += '<table class="props">';
+  html += prow('Type', `<select class="inp" data-chg="stackwalltype" data-key="wall-type" aria-label="Wall type">${types.join('')}</select>`);
+  html += prow('Thickness', esc(chosen.thickness));
+  html += prow('Base', esc(base));
+  html += prow('Top', `<select class="inp" data-chg="stackwalltop" data-key="wall-top" aria-label="Top of the wall">${tops.join('')}</select>`);
+  if (top === '') {
+    html += prow('Height', `<input class="inp" data-chg="stackwallheight" data-key="wall-height" value="${esc(C.wallTool.height)}" aria-label="Height of the wall">`);
+  }
+  html += '</table>';
+  html += `<span class="lbl">Layers, exterior first</span><table class="props" data-layers="${esc(chosen.id)}">`;
+  for (const layer of chosen.assembly.layers) {
+    html += prow(esc(capital(layer.function)), `${esc(layer.thickness)} · ${esc(materialName(view, layer.material))}`);
+  }
+  html += '</table>';
+  html += '<p class="pad small muted">Pick two points in the plan. Walking from the first to the second, the exterior is on the right. Hold Shift on the second for any angle.</p>';
+  return html + problem('wall-draw');
+}
+
+CHG.stackwalltype = (select) => {
+  C.wallTool.type = select.value;
+  refreshSide();
+};
+CHG.stackwalltop = (select) => {
+  C.wallTool.top = select.value;
+  refreshSide();
+};
+CHG.stackwallheight = (input) => {
+  C.wallTool.height = input.value;
+};
+
+/** The open model's wall types, read now if they have not come yet. */
+async function wallTypesNow() {
+  const view = wallTypes();
+  if (view) return view;
+  const model = C.model.id;
+  const fresh = await api(`${modelUrl(model)}/wall-types`);
+  C.wallTypes = { key: `${model}/${C.paramsEpoch}`, view: fresh };
+  return fresh;
+}
+
+/**
+ * The wall tool's second point draws the wall: straight along x or y, whichever the second point
+ * is further along, as the plan draws walls, of the chosen type, from the plan's level to the
+ * chosen top. What the server makes of it, or its reason for refusing, comes back through the log.
+ */
+async function placeWall(at, anyAngle = false) {
+  const point = [snap(at.x), snap(at.y)];
+  if (!S.pend) {
+    S.pend = point;
+    $('#hint').innerHTML = hint();
+    return;
+  }
+  const [ax, ay] = S.pend;
+  S.pend = null;
+  $('#hint').innerHTML = hint();
+  // A wall runs along x or y, whichever is nearer the pointer; with Shift held, to the point itself, at any angle.
+  const along = Math.abs(point[0] - ax) >= Math.abs(point[1] - ay);
+  const end = anyAngle ? point : along ? [point[0], ay] : [ax, point[1]];
+  const level = levelOf();
+  let view;
+  try {
+    view = await wallTypesNow();
+  } catch (error) {
+    say(error.message);
+    return;
+  }
+  const args = { element: newId('W'), start: [`${ax} mm`, `${ay} mm`], end: [`${end[0]} mm`, `${end[1]} mm`], level };
+  const type = chosenWallType(view);
+  if (type) args.type = type.id;
+  const top = wallTop(modelLevels());
+  if (top === '') args.height = C.wallTool.height;
+  else args.top = top;
+  manage('wall.draw', args, 'wall-draw');
+}
+
+/**
+ * Where a click lands on a wall, for a door: the wall's side clicked (`exterior` or `interior`),
+ * how far along the wall from its start the door's near end is when the click is its middle, how
+ * thick the wall is, and the axis the wall runs along. A layered wall reads its line and faces from
+ * its filled recipe; the old box runs along x, its exterior at its low y side, or along y, its
+ * exterior at its high x side.
+ */
+function onWall(wall, at, width) {
+  if (wall.el.recipe.op === LAYERED) {
+    const line = lineOf(wall);
+    if (!line) return null;
+    const { x, y } = wall.el.placement;
+    const p = [snap(at.x) - x - line.start[0] / STEPS_PER_MM, snap(at.y) - y - line.start[1] / STEPS_PER_MM];
+    const length = Math.hypot(line.d[0], line.d[1]);
+    const alongIt = (p[0] * line.d[0] + p[1] * line.d[1]) / length;
+    const right = (p[0] * line.d[1] - p[1] * line.d[0]) / length;
+    const middle = (line.exterior + line.interior) / 2 / STEPS_PER_MM;
+    const exterior = right > middle === line.exterior > line.interior;
+    return {
+      exterior,
+      offset: Math.round(alongIt - width / 2),
+      thickness: Math.ceil(Math.abs(line.exterior - line.interior) / STEPS_PER_MM),
+      axis: line.axis === 1 ? 'y' : 'x',
+    };
+  }
+  const box = around(wall);
+  const along = box.w >= box.d;
+  const middle = along ? box.y + box.d / 2 : box.x + box.w / 2;
+  return {
+    exterior: along ? at.y < middle : at.x > middle,
+    offset: (along ? snap(at.x) - box.x : snap(at.y) - box.y) - width / 2,
+    thickness: along ? box.d : box.w,
+    axis: along ? 'x' : 'y',
+  };
+}
+
+// What this tool plugs into the core with (core/registry.js; note A96-tool-architecture.md).
+register.disciplines({ id: 'architecture', label: 'Architecture', order: 10 });
+register.tools({ id: 'wall', discipline: 'architecture', order: 10, place: (at, event) => placeWall(at, event.shiftKey) });
+register.hints({
+  id: 'wall',
+  order: 70,
+  hint: () => (S.tool === 'wall' ? (S.pend ? '<b>Wall:</b> pick the end point. Esc to stop.' : '<b>Wall:</b> pick a start point. Choose its type in the properties palette.') : undefined),
+});
+register.palettes({ id: 'wall', order: 60, palette: () => (S.tool === 'wall' && canEdit() ? wallToolHtml() : undefined) });
+
+// What files loaded before this one use from it, bound once it has loaded.
+provide({ get colourOf() { return colourOf; } });
+
+export { colourOf, materialName, onWall, wallTop };

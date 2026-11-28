@@ -238,6 +238,7 @@ pub fn filled(recipe: &Recipe, placed: &Placed) -> Result<Recipe, GeometryError>
             || construct_openings::is_shaft(recipe)
             || crate::room_plan::is_room(recipe)
             || crate::stair_plan::is_stair(recipe)
+            || crate::curtain_plan::is_curtain(recipe)
         {
             serde_json::Value::from(Value::Length(height).stored())
         } else {

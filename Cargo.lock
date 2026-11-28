@@ -512,6 +512,9 @@ dependencies = [
  "construct-api",
  "construct-categories",
  "construct-clash",
+ "construct-curtain",
+ "construct-dimensions",
+ "construct-doorgen",
  "construct-elements",
  "construct-families",
  "construct-formulas",
@@ -527,6 +530,7 @@ dependencies = [
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-sheets",
  "construct-slabs",
  "construct-stairs",
@@ -536,6 +540,7 @@ dependencies = [
  "construct-versions",
  "construct-views",
  "construct-walls",
+ "construct-warnings",
  "engine-sim",
  "kit-core",
  "kit-mcp",
@@ -570,6 +575,36 @@ name = "construct-cli"
 version = "0.0.0"
 dependencies = [
  "construct-api",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-curtain"
+version = "0.0.0"
+dependencies = [
+ "bolero",
+ "construct-categories",
+ "construct-families",
+ "construct-materials",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-dimensions"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-grids",
+ "construct-model",
+ "construct-params",
+ "construct-warnings",
+ "kit-core",
+ "num-bigint",
  "serde_json",
 ]
 
@@ -634,6 +669,7 @@ dependencies = [
  "hex",
  "jsonschema",
  "kit-core",
+ "num-bigint",
  "serde_json",
  "sha2",
 ]
@@ -775,6 +811,8 @@ version = "0.0.0"
 dependencies = [
  "bolero",
  "construct-categories",
+ "construct-curtain",
+ "construct-dimensions",
  "construct-families",
  "construct-formulas",
  "construct-grids",
@@ -787,6 +825,7 @@ dependencies = [
  "construct-regen",
  "construct-roofs",
  "construct-rooms",
+ "construct-schedules",
  "construct-sheets",
  "construct-slabs",
  "construct-stairs",
@@ -842,6 +881,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-schedules"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-model",
+ "construct-params",
+ "construct-phases",
+ "kit-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "construct-shapes"
 version = "0.0.0"
 dependencies = [
@@ -878,6 +930,7 @@ dependencies = [
  "construct-types",
  "construct-walls",
  "kit-core",
+ "num-bigint",
  "serde",
  "serde_json",
 ]
@@ -988,6 +1041,13 @@ dependencies = [
  "kit-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "construct-warnings"
+version = "0.0.0"
+dependencies = [
+ "kit-core",
 ]
 
 [[package]]
