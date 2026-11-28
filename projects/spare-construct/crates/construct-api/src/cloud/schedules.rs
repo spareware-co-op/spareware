@@ -367,6 +367,10 @@ pub async fn subjects<R: Reader>(
     let mut types: BTreeMap<Id, Option<ElementType>> = BTreeMap::new();
     let mut found = Vec::new();
     for record in world.records.iter().filter(|r| records::has_shape(r)) {
+        // A line bounds rooms or areas and is no row of their schedules.
+        if construct_rooms::is_room_line(record) || construct_rooms::is_area_line(record) {
+            continue;
+        }
         let Some(category) = Context::category_of_element(record) else {
             continue;
         };
@@ -423,6 +427,9 @@ pub async fn subjects<R: Reader>(
             )
             .await?;
         }
+        if construct_regen::rooms::is_area(record) {
+            area_readings(reader, project, document, record, world, &mut readings).await?;
+        }
         found.push(Subject {
             id: record.id.clone(),
             category,
@@ -443,13 +450,12 @@ async fn room_readings<R: Reader>(
     units: &Units,
     readings: &mut BTreeMap<String, Reading>,
 ) -> Result<(), StoreError> {
-    let worked =
-        construct_regen::rooms::worked_at(reader, project, document, room, records::At::Now)
+    let viewed =
+        crate::cloud::rooms::view_of(reader, project, document, room, units, records::At::Now)
             .await?;
-    let Ok(worked) = worked else {
+    let Ok((worked, view)) = viewed else {
         return Ok(());
     };
-    let view = construct_regen::rooms::RoomView::of(&worked, units);
     let mut put = |name: &str, value: Value, shown: String| {
         readings.insert(
             Field::Quantity(name.to_owned()).key(),
@@ -478,6 +484,64 @@ async fn room_readings<R: Reader>(
             "Volume",
             Value::Volume(measures.volume),
             view.volume.unwrap_or_default(),
+        );
+    }
+    Ok(())
+}
+
+/// An area's number, scheme, state, area and perimeter, exact, from its loop as the document
+/// stands.
+async fn area_readings<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    area: &Element,
+    world: &World,
+    readings: &mut BTreeMap<String, Reading>,
+) -> Result<(), StoreError> {
+    let units = &world.context.units;
+    let mut put = |name: &str, value: Value, shown: String| {
+        readings.insert(
+            Field::Quantity(name.to_owned()).key(),
+            Reading { value, shown },
+        );
+    };
+    if let Some(number) = construct_rooms::area_number_of(area) {
+        put("Number", Value::Text(number.to_owned()), number.to_owned());
+    }
+    if let Some(scheme) = construct_rooms::scheme_of(area)
+        && let Some(record) = world.records.iter().find(|record| record.id == scheme)
+    {
+        put(
+            "Scheme",
+            Value::Text(record.name.clone()),
+            record.name.clone(),
+        );
+    }
+    let worked =
+        construct_regen::rooms::area_worked_at(reader, project, document, area, records::At::Now)
+            .await?;
+    let Ok(worked) = worked else {
+        return Ok(());
+    };
+    let view = construct_regen::rooms::AreaView::of(&worked, units);
+    put(
+        "State",
+        Value::Text(view.state.to_owned()),
+        view.state.to_owned(),
+    );
+    if worked.0.is_ok()
+        && let Some(measures) = worked.1
+    {
+        put(
+            "Area",
+            Value::Area(measures.area),
+            view.area.unwrap_or_default(),
+        );
+        put(
+            "Perimeter",
+            Value::Length(measures.perimeter),
+            view.perimeter.unwrap_or_default(),
         );
     }
     Ok(())

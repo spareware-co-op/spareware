@@ -21,6 +21,8 @@
 //!   through the same log.
 //! - [`rooms`]: placing and changing rooms (a point, a name, a number, an upper limit), through the
 //!   same log.
+//! - [`areas`]: area schemes, area boundary lines and areas, and the area plan views that show them,
+//!   through the same log.
 //! - [`views`]: making and changing views (plans, sections, elevations), through the same log.
 //! - [`warnings`]: the problems a model holds (a room not enclosed, two walls overlapping), read-only
 //!   and worked out each time from the document.
@@ -34,6 +36,7 @@
 //! - [`commands`]: a project's commands, each behind Cedar.
 
 pub mod access;
+pub mod areas;
 pub mod commands;
 pub mod directory;
 pub mod elements;

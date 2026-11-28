@@ -13,7 +13,7 @@
 //! there for every category.
 
 use crate::error::ScheduleError;
-use construct_categories::{CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS};
+use construct_categories::{AREAS, CategoryId, CategoryKind, CategoryTable, FLOORS, ROOFS, ROOMS};
 use construct_params::{Definition, Holder, Kind, ProjectParams};
 use kit_core::Id;
 
@@ -109,7 +109,7 @@ const fn quantity(
 /// Not here: a roof's pitch (its kind is a slope or an angle by how the roof is set, which a
 /// field's kind cannot follow) and a floor's or roof's per-layer volumes and masses (their number
 /// follows the type's layers).
-pub const QUANTITIES: [Quantity; 15] = [
+pub const QUANTITIES: [Quantity; 20] = [
     quantity(FLOORS, "floor.area", "Area", Kind::Area),
     quantity(FLOORS, "floor.perimeter", "Perimeter", Kind::Length),
     quantity(FLOORS, "floor.thickness", "Thickness", Kind::Length),
@@ -125,6 +125,12 @@ pub const QUANTITIES: [Quantity; 15] = [
     quantity(ROOMS, "room.area", "Area", Kind::Area),
     quantity(ROOMS, "room.perimeter", "Perimeter", Kind::Length),
     quantity(ROOMS, "room.volume", "Volume", Kind::Volume),
+    // An area's (job 14.6): its number and scheme are read from its record, the rest as a room's.
+    quantity(AREAS, "area.number", "Number", Kind::Text),
+    quantity(AREAS, "area.scheme", "Scheme", Kind::Text),
+    quantity(AREAS, "area.state", "State", Kind::Text),
+    quantity(AREAS, "area.area", "Area", Kind::Area),
+    quantity(AREAS, "area.perimeter", "Perimeter", Kind::Length),
 ];
 
 /// What a document gives a schedule to read its fields against: its categories and its

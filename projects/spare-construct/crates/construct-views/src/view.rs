@@ -5,7 +5,7 @@
 use crate::cut::{CutLine, Point, Side};
 use crate::error::ViewError;
 use crate::graphics::{GRAPHICS_KEY, Graphics};
-use crate::kind::{DetailLevel, PlanSetup, ViewKind};
+use crate::kind::{AreaPlan, DetailLevel, PlanSetup, ViewKind};
 use crate::listing::Model;
 use crate::range::ViewRange;
 use construct_categories::VIEWS;
@@ -291,6 +291,9 @@ impl View {
         if let Some(plan) = self.kind.plan() {
             write_plan(&mut props, plan);
         }
+        if let Some(scheme) = self.kind.area_scheme() {
+            props.insert(AREA_SCHEME_KEY.to_owned(), scheme.to_string());
+        }
         if let Some(line) = self.kind.cut_line() {
             write_line(&mut props, line);
         }
@@ -400,6 +403,17 @@ fn read_kind(record: &Element, key: &str) -> Result<ViewKind, String> {
     match key {
         "floor_plan" => Ok(ViewKind::FloorPlan(read_plan(record)?)),
         "ceiling_plan" => Ok(ViewKind::CeilingPlan(read_plan(record)?)),
+        "area_plan" => {
+            let scheme = record
+                .props
+                .get(AREA_SCHEME_KEY)
+                .and_then(|text| Id::parse(text).ok())
+                .ok_or_else(|| "is an area plan with no area scheme".to_owned())?;
+            Ok(ViewKind::AreaPlan(AreaPlan {
+                plan: read_plan(record)?,
+                scheme,
+            }))
+        }
         "section" => Ok(ViewKind::Section(read_line(record)?)),
         "elevation" => Ok(ViewKind::Elevation(read_line(record)?)),
         "three_d" => Ok(ViewKind::ThreeD),
@@ -500,6 +514,10 @@ fn write_line(props: &mut BTreeMap<String, String>, line: &CutLine) {
     );
     props.insert(FAR_KEY.to_owned(), Value::Length(line.far()).stored());
 }
+
+/// On an area plan's record: the ID of the area scheme it shows (the same key an area and an area
+/// boundary line carry their scheme under, construct-rooms' `SCHEME_KEY`).
+pub const AREA_SCHEME_KEY: &str = "@area.scheme";
 
 /// The keys of a plan's level tie, which are construct-levels' own.
 pub const PLAN_LEVEL_KEYS: [&str; 2] = [LEVEL_KEY, LEVEL_OFFSET_KEY];

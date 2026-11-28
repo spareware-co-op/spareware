@@ -660,7 +660,7 @@ fn edition_of(report: &EngineEdition, units: Units) -> Edition {
 ///
 /// As [`Geometry::build`] for a recipe it cannot build.
 pub fn names(recipe: &Recipe) -> Result<Vec<FaceName>, GeometryError> {
-    if construct_openings::is_void(recipe) {
+    if construct_openings::is_void(recipe) || crate::flat::is_flat(recipe) {
         return Ok(Vec::new());
     }
     if families::is_instance(recipe) {
@@ -1177,6 +1177,9 @@ impl<E: Engine + Send + 'static> Geometry for Kernel<E> {
         }
         if let Some(void) = crate::voids::build(recipe) {
             return void;
+        }
+        if let Some(flat) = crate::flat::build(recipe) {
+            return flat;
         }
         self.build_hosting(recipe, &[])
     }

@@ -74,6 +74,16 @@ impl Pt {
     }
 }
 
+impl Pt {
+    /// The grid point nearest it, each coordinate rounded once to the nearest whole step (a half
+    /// rounding up), if it is within the type's reach.
+    pub(crate) fn nearest_grid(&self) -> Option<[i64; 2]> {
+        let half = whole(1) / whole(2);
+        let near = |v: &RBig| i64::try_from((v + &half).floor()).ok();
+        Some([near(&self.x)?, near(&self.y)?])
+    }
+}
+
 /// `a x b`, the cross product of two plan vectors.
 pub(crate) fn cross(a: &Pt, b: &Pt) -> RBig {
     &a.x * &b.y - &a.y * &b.x
@@ -126,6 +136,31 @@ pub(crate) fn meeting(from: &Pt, to: &Pt, start: &Pt, end: &Pt) -> Vec<RBig> {
     } else {
         Vec::new()
     }
+}
+
+/// The edge of the closed `outline` that runs nearest the point `near`, by exact squared distance;
+/// a tie goes to the first edge.
+pub(crate) fn nearest_edge(outline: &[[i64; 2]], near: [i64; 2]) -> Option<[[i64; 2]; 2]> {
+    let p = Pt::grid(near);
+    let mut best: Option<(RBig, [[i64; 2]; 2])> = None;
+    for (k, &a) in outline.iter().enumerate() {
+        let b = *outline
+            .get(k.saturating_add(1))
+            .or_else(|| outline.first())?;
+        if a == b {
+            continue;
+        }
+        let (pa, pb) = (Pt::grid(a), Pt::grid(b));
+        let along = pb.less(&pa);
+        let reach = dot(&p.less(&pa), &along) / dot(&along, &along);
+        let reach = reach.clamp(RBig::ZERO, RBig::ONE);
+        let gap = p.less(&pa.toward(&pb, &reach));
+        let squared = dot(&gap, &gap);
+        if best.as_ref().is_none_or(|(least, _)| squared < *least) {
+            best = Some((squared, [a, b]));
+        }
+    }
+    best.map(|(_, edge)| edge)
 }
 
 /// Twice the signed area of a closed loop of points: above zero anticlockwise.

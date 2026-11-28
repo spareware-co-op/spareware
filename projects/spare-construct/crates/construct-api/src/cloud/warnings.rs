@@ -82,6 +82,26 @@ pub async fn read_warnings<R: Reader>(
             state,
         });
     }
+    for area in of_kind(reader, project, document, construct_rooms::AREA_KIND, at).await? {
+        let state =
+            match construct_regen::rooms::area_found_at(reader, project, document, &area, at)
+                .await?
+            {
+                Ok(Outcome::Enclosed { .. }) => RoomState::Enclosed,
+                Ok(Outcome::NotEnclosed) => RoomState::NotEnclosed,
+                Ok(Outcome::Redundant { first }) => RoomState::Redundant(first),
+                Err(refusal) => RoomState::Refused(refusal.message),
+            };
+        let who = match construct_rooms::area_number_of(&area) {
+            Some(number) if !number.is_empty() => format!("area {number} {}", area.name),
+            _ => format!("area {}", area.name),
+        };
+        model.areas.push(Room {
+            id: area.id,
+            who,
+            state,
+        });
+    }
     Ok(WarningsView {
         warnings: warnings(&model)
             .into_iter()

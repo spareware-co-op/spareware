@@ -3,12 +3,18 @@
 //!
 //! - Area: the shoelace sum over the loop's grid corners, in square steps, the holes taken away.
 //!   Every corner is a grid point, so twice the area is whole; an odd twice-area is refused
-//!   ([`RoomError::AreaNotExact`]), never halved with a remainder lost.
+//!   ([`RoomError::AreaNotExact`]), never halved with a remainder lost, unless a corner where a
+//!   line met a face was rounded to the grid ([`Found::rounded`]): the area is then rounded once,
+//!   a half up.
 //! - Perimeter: the outer loop's and every hole's edges, each to the nearest grid step (the one
 //!   rounding here, as a floor's perimeter is rounded; exact for every edge along an axis and for
 //!   every edge whose length is whole steps). A person reads it in their units, rounded only then.
 //! - Volume: the area times the room's height, from its base to its upper limit, in cubic steps,
 //!   exactly.
+//!
+//! An area (job 14.6) measures the first two only ([`Flat`], [`measure_flat`]): it has no height.
+//! A room's volume here is its area times its height; what floors in the space take from it is
+//! [`crate::volume`]'s, read from the document's floors by the layer that has them.
 //!
 //! Which room keeps a loop two rooms share: the one whose ID comes first. The other is
 //! [`Outcome::Redundant`], naming it, and takes the loop back if the first goes.
@@ -27,6 +33,15 @@ pub struct Measures {
     pub perimeter: Length,
     /// Its area times its height, in cubic steps.
     pub volume: Volume,
+}
+
+/// What a found area (a flat region with no height) measures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Flat {
+    /// The area inside its boundary, holes taken away, in square steps.
+    pub area: Area,
+    /// The length of its boundary, holes included, each edge to the nearest step.
+    pub perimeter: Length,
 }
 
 /// The nearest whole number to the square root of `n` (never a tie, since `n` is whole).
@@ -69,6 +84,21 @@ pub fn measure(found: &Found, height: Length) -> Result<Measures, RoomError> {
     if height.steps() <= 0 {
         return Err(RoomError::NoHeight);
     }
+    let flat = measure_flat(found)?;
+    let volume = flat.area.checked_mul(height).ok_or(RoomError::TooBig)?;
+    Ok(Measures {
+        area: flat.area,
+        perimeter: flat.perimeter,
+        volume,
+    })
+}
+
+/// What `found` measures in plan: its area and its perimeter.
+///
+/// # Errors
+/// [`RoomError::AreaNotExact`] for an odd twice-area; [`RoomError::TooBig`] when a sum does not
+/// fit.
+pub fn measure_flat(found: &Found) -> Result<Flat, RoomError> {
     let mut twice = twice_area_of(&found.outer)?;
     let mut perimeter = loop_length(&found.outer)?;
     for hole in &found.holes {
@@ -80,15 +110,21 @@ pub fn measure(found: &Found, height: Length) -> Result<Measures, RoomError> {
             .checked_add(loop_length(hole)?)
             .ok_or(RoomError::TooBig)?;
     }
-    if twice.checked_rem(2) != Some(0) {
+    let odd = twice.checked_rem(2) != Some(0);
+    if odd && !found.rounded {
         return Err(RoomError::AreaNotExact);
     }
+    // A corner a line's meeting rounded to the grid is the one place an area is rounded, once, a
+    // half up.
+    let twice = if odd {
+        twice.checked_add(1).ok_or(RoomError::TooBig)?
+    } else {
+        twice
+    };
     let area = Area::from_square_steps(twice.checked_div(2).ok_or(RoomError::TooBig)?);
-    let volume = area.checked_mul(height).ok_or(RoomError::TooBig)?;
-    Ok(Measures {
+    Ok(Flat {
         area,
         perimeter: Length::from_steps(perimeter),
-        volume,
     })
 }
 
@@ -101,15 +137,15 @@ pub struct Neighbour {
     pub at: [i64; 2],
 }
 
-/// What becomes of a room.
+/// What becomes of a room (or, with [`Flat`] measures, an area).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Outcome {
+pub enum Outcome<M = Measures> {
     /// Enclosed: its loop and what it measures.
     Enclosed {
         /// Its loop.
         found: Found,
         /// What it measures.
-        measures: Measures,
+        measures: M,
     },
     /// The open space round its point is not closed by walls. The record stays, with no area.
     NotEnclosed,
@@ -120,7 +156,7 @@ pub enum Outcome {
     },
 }
 
-impl Outcome {
+impl<M> Outcome<M> {
     /// The word a page, a script or an AI reads it by: `enclosed`, `not enclosed`, `redundant`.
     #[must_use]
     pub fn word(&self) -> &'static str {
@@ -145,6 +181,31 @@ pub fn assess(
     bounds: &[Bound],
     others: &[Neighbour],
 ) -> Result<Outcome, RoomError> {
+    assess_with(id, at, bounds, others, |found| measure(found, height))
+}
+
+/// What becomes of the area `id` at the point `at` among the area boundary lines `bounds` of its
+/// level and scheme and the other areas `others` of that level and scheme: as [`assess`], with no
+/// height.
+///
+/// # Errors
+/// [`find`]'s refusals and [`measure_flat`]'s.
+pub fn assess_flat(
+    id: &Id,
+    at: [i64; 2],
+    bounds: &[Bound],
+    others: &[Neighbour],
+) -> Result<Outcome<Flat>, RoomError> {
+    assess_with(id, at, bounds, others, measure_flat)
+}
+
+fn assess_with<M>(
+    id: &Id,
+    at: [i64; 2],
+    bounds: &[Bound],
+    others: &[Neighbour],
+    measure_it: impl FnOnce(&Found) -> Result<M, RoomError>,
+) -> Result<Outcome<M>, RoomError> {
     let Some(found) = find(bounds, at)? else {
         return Ok(Outcome::NotEnclosed);
     };
@@ -156,6 +217,6 @@ pub fn assess(
     {
         return Ok(Outcome::Redundant { first });
     }
-    let measures = measure(&found, height)?;
+    let measures = measure_it(&found)?;
     Ok(Outcome::Enclosed { found, measures })
 }

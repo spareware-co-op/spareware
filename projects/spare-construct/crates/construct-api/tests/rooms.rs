@@ -672,3 +672,443 @@ async fn replaying_the_log_from_empty_gives_the_same_bytes() {
     stack.regen.rebuild(&i("p")).await.unwrap();
     assert_eq!(stack.derived().await, incremental);
 }
+
+/// A room separation line splits an open plan into two rooms through the log: drawn, moved and
+/// deleted by its own commands, each one step to undo and redo; the rooms it touches follow it by
+/// regeneration alone; a line that crosses nothing is kept; the refusals are in words; and the
+/// generic commands name the right one.
+#[tokio::test]
+async fn a_separation_line_splits_two_rooms_and_follows_its_commands() {
+    let stack = Stack::new().await;
+    a_box(&stack).await;
+    stack
+        .edit("room.place", place("R-1", 500, 1500))
+        .await
+        .unwrap();
+    // The second room, in the same loop: it is redundant until the line is drawn.
+    stack
+        .edit("room.place", place("R-2", 3000, 1500))
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome(&stack, "R-2").await,
+        Outcome::Redundant { first: i("R-1") }
+    );
+
+    let draw =
+        json!({ "element": "RL-1", "level": "L-g", "from": ["2000", "0"], "to": ["2000", "3 m"] });
+    undone_and_redone(&stack, "roomline.draw", draw).await;
+    // The walls' faces are 57.5 mm either side of their centre lines: 2000 - 57.5 = 1942.5 mm, by
+    // the 2885 mm between the south and north walls' faces.
+    let half = Area::from_square_steps(i128::from(19_425 * 640) * i128::from(2885 * 6400));
+    assert_eq!(area_of(&outcome(&stack, "R-1").await), Ok(half));
+    assert_eq!(area_of(&outcome(&stack, "R-2").await), Ok(half));
+    assert_eq!(
+        stack.bounds("R-2").await,
+        Ok(([2000, 57, 0], [3943, 2943, 3000]))
+    );
+    let line = stack.record("RL-1").await.unwrap();
+    assert_eq!(line.kind, "room_line");
+    assert_eq!(
+        stack.bounds("RL-1").await,
+        Ok(([2000, 0, 0], [2000, 3000, 0]))
+    );
+
+    // Moved 1 m west: the left room narrows to 942.5 mm and the right widens to 2942.5 mm.
+    let moved = json!({ "element": "RL-1", "from": ["1000", "0"], "to": ["1000", "3 m"] });
+    undone_and_redone(&stack, "roomline.move", moved).await;
+    let narrow = Area::from_square_steps(i128::from(9_425 * 640) * i128::from(2885 * 6400));
+    let wide = Area::from_square_steps(i128::from(29_425 * 640) * i128::from(2885 * 6400));
+    assert_eq!(area_of(&outcome(&stack, "R-1").await), Ok(narrow));
+    assert_eq!(area_of(&outcome(&stack, "R-2").await), Ok(wide));
+
+    // A line that crosses nothing is kept, and changes nothing.
+    let far =
+        json!({ "element": "RL-2", "level": "L-g", "from": ["20 m", "0"], "to": ["20 m", "3 m"] });
+    stack.edit("roomline.draw", far).await.unwrap();
+    assert_eq!(area_of(&outcome(&stack, "R-1").await), Ok(narrow));
+    assert!(stack.record("RL-2").await.is_some());
+
+    // Deleted: one loop again, and the later room is redundant.
+    undone_and_redone(&stack, "roomline.delete", json!({ "element": "RL-1" })).await;
+    assert!(stack.record("RL-1").await.is_none());
+    assert_eq!(
+        outcome(&stack, "R-2").await,
+        Outcome::Redundant { first: i("R-1") }
+    );
+
+    // Refused, in words.
+    for (cmd, args, words) in [
+        (
+            "roomline.draw",
+            json!({ "element": "RL-3", "level": "L-g", "from": ["1 m", "1 m"], "to": ["1 m", "1 m"] }),
+            "A line needs two different ends.",
+        ),
+        (
+            "roomline.draw",
+            json!({ "element": "RL-3", "from": ["1 m", "1 m"], "to": ["2 m", "1 m"] }),
+            "A room separation line is drawn on a level: this command needs a level.",
+        ),
+        (
+            "roomline.draw",
+            json!({ "element": "RL-3", "level": "L-g", "to": ["2 m", "1 m"] }),
+            "This command needs a first end, `from`.",
+        ),
+        (
+            "roomline.draw",
+            json!({ "element": "RL-2", "level": "L-g", "from": ["1 m", "1 m"], "to": ["2 m", "1 m"] }),
+            "That element already exists.",
+        ),
+        (
+            "roomline.move",
+            json!({ "element": "W-s", "from": ["1 m", "1 m"], "to": ["2 m", "1 m"] }),
+            "W-s is not a room separation line.",
+        ),
+        (
+            "roomline.delete",
+            json!({ "element": "nobody" }),
+            "That element no longer exists.",
+        ),
+        (
+            "element.delete",
+            json!({ "element": "RL-2" }),
+            "A room separation line RL-2 is changed with roomline.move or roomline.delete, which checks it.",
+        ),
+        (
+            "element.create",
+            json!({ "element": "RL-9", "kind": "room_line", "level": 0 }),
+            "A room separation line is made with roomline.draw, which checks it.",
+        ),
+    ] {
+        assert_eq!(stack.edit(cmd, args).await.unwrap_err(), words, "{cmd}");
+    }
+}
+
+/// The cubic steps of the room `R-1`'s volume as its view reads it.
+async fn room_volume(stack: &Stack) -> i128 {
+    let record = stack.record("R-1").await.unwrap();
+    let mut snapshot = stack.store.snapshot().await.unwrap();
+    let units = construct_params::Units::default();
+    let (worked, view) = construct_api::cloud::rooms::view_of(
+        &mut snapshot,
+        &i("p"),
+        &i(DOCUMENT),
+        &record,
+        &units,
+        At::Now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(view.volume.is_some());
+    worked.1.unwrap().volume.cubic_steps()
+}
+
+/// A room's volume is its area times its height less what the floors in its space take: the floor
+/// of the level above takes its thickness from the top, a sloped one by its slope; the number is
+/// exact and is what the room's view reads.
+#[tokio::test]
+async fn a_rooms_volume_is_less_what_the_floors_in_its_space_take() {
+    let stack = Stack::new().await;
+    a_box(&stack).await;
+    stack
+        .edit("room.place", place("R-1", 2000, 1500))
+        .await
+        .unwrap();
+    let area_steps = i128::from(3885 * 6400) * i128::from(2885 * 6400);
+    let height = i128::from(3000 * 6400);
+    assert_eq!(room_volume(&stack).await, area_steps * height);
+
+    // A 200 mm floor on First, over the whole box: its underside is 200 mm below the room's top.
+    let own = json!({ "type": "ft-200", "name": "Slab 200", "layers": [
+        { "function": "structure", "thickness": "200 mm", "material": "concrete-regular" }] });
+    stack.edit("floor.type.create", own).await.unwrap();
+    let floor = json!({ "element": "F-1", "type": "ft-200", "level": "L-1",
+        "boundary": { "outer": [
+            { "id": "r0", "at": ["0", "0"] }, { "id": "r1", "at": ["4000", "0"] },
+            { "id": "r2", "at": ["4000", "3000"] }, { "id": "r3", "at": ["0", "3000"] }] } });
+    stack.edit("floor.create", floor).await.unwrap();
+    let thick = i128::from(200 * 6400);
+    assert_eq!(room_volume(&stack).await, area_steps * (height - thick));
+
+    // Sloped: its top rises 500 mm over the 4 m along x, so its underside crosses the room's top
+    // 1600 mm from the west wall's centre line, and before it the floor takes 200 - x/8 of every
+    // column, from the room's west face 57.5 mm in.
+    let slope = json!({ "element": "F-1", "slope": { "tail": ["0", "0"], "head": ["4000", "0"],
+        "at_tail": "0", "at_head": "500 mm" } });
+    stack.edit("floor.slope", slope).await.unwrap();
+    let (a, b, t) = (
+        i128::from(368_000),
+        i128::from(10_240_000),
+        i128::from(1_280_000),
+    );
+    let per_depth = t * (b - a) - (b * b - a * a) / 16;
+    let depth = i128::from(2885 * 6400);
+    assert_eq!(
+        room_volume(&stack).await,
+        area_steps * height - per_depth * depth
+    );
+}
+
+/// An area scheme, an area plan and areas through the log: a gross scheme with an area plan of
+/// Ground, six boundary lines drawn round an L, an area placed inside it with the gross area of
+/// the L (56 square metres); a boundary line picked from a wall's face; every refusal in words;
+/// each command one step to undo and redo; a scheme in use cannot be deleted.
+#[tokio::test]
+async fn an_area_plan_finds_an_areas_gross_area_from_its_boundary_lines() {
+    let stack = Stack::new().await;
+    a_box(&stack).await;
+    undone_and_redone(
+        &stack,
+        "areascheme.add",
+        json!({ "element": "S-g", "name": "Gross", "measure": "gross" }),
+    )
+    .await;
+    stack
+        .edit(
+            "areascheme.add",
+            json!({ "element": "S-r", "name": "Rentable", "measure": "rentable" }),
+        )
+        .await
+        .unwrap();
+    undone_and_redone(
+        &stack,
+        "view.create",
+        json!({ "view": "V-a", "kind": "area_plan", "name": "Ground areas", "level": "L-g",
+                "scheme": "S-g" }),
+    )
+    .await;
+    let plan = stack.record("V-a").await.unwrap();
+    assert_eq!(
+        plan.props.get("@area.scheme").map(String::as_str),
+        Some("S-g")
+    );
+
+    let corners = [
+        ["0", "0"],
+        ["10 m", "0"],
+        ["10 m", "4 m"],
+        ["4 m", "4 m"],
+        ["4 m", "8 m"],
+        ["0", "8 m"],
+    ];
+    for k in 0..corners.len() {
+        let args = json!({ "element": format!("AL-{k}"), "scheme": "S-g", "level": "L-g",
+                           "from": corners[k], "to": corners[(k + 1) % corners.len()] });
+        if k == 0 {
+            undone_and_redone(&stack, "arealine.draw", args).await;
+        } else {
+            stack.edit("arealine.draw", args).await.unwrap();
+        }
+    }
+    let at = json!({ "element": "A-1", "scheme": "S-g", "level": "L-g", "at": ["2 m", "2 m"],
+                     "name": "Ground gross" });
+    undone_and_redone(&stack, "area.place", at).await;
+    let area = stack.record("A-1").await.unwrap();
+    assert_eq!(
+        (area.name.as_str(), construct_rooms::area_number_of(&area)),
+        ("Ground gross", Some("1"))
+    );
+    assert_eq!(
+        stack.bounds("A-1").await,
+        Ok(([0, 0, 0], [10_000, 8000, 0]))
+    );
+    let measures = {
+        let mut snapshot = stack.store.snapshot().await.unwrap();
+        construct_regen::rooms::area_worked_at(&mut snapshot, &i("p"), &i(DOCUMENT), &area, At::Now)
+            .await
+            .unwrap()
+            .unwrap()
+            .1
+            .unwrap()
+    };
+    // 10000 x 4000 + 4000 x 4000 = 56 square metres; 36 metres round.
+    assert_eq!(measures.area, Area::from_mm2(56_000_000));
+    assert_eq!(
+        measures.perimeter,
+        construct_params::Length::from_mm(36_000)
+    );
+    // The same boundary lines in another scheme are no part of it, and walls bound no area.
+    let other = json!({ "element": "AL-x", "scheme": "S-r", "level": "L-g",
+                        "from": ["2 m", "0"], "to": ["2 m", "8 m"] });
+    stack.edit("arealine.draw", other).await.unwrap();
+    assert_eq!(
+        stack.bounds("A-1").await,
+        Ok(([0, 0, 0], [10_000, 8000, 0]))
+    );
+
+    // A boundary line picked from a wall's face: the south wall's face nearest the click.
+    undone_and_redone(
+        &stack,
+        "arealine.pick",
+        json!({ "element": "AL-p", "scheme": "S-r", "wall": "W-s", "near": ["2000", "-300"] }),
+    )
+    .await;
+    let picked = stack.record("AL-p").await.unwrap();
+    let ends = construct_rooms::ends_of(&picked.recipe).unwrap();
+    assert_eq!(
+        ends[0][1], -368_000,
+        "the outer face, 57.5 mm south of the wall's line"
+    );
+    assert_eq!(ends[1][1], -368_000);
+    assert!((ends[0][0] - ends[1][0]).abs() >= 4000 * 6400);
+
+    // Moved and deleted, as the room's lines are.
+    undone_and_redone(
+        &stack,
+        "arealine.move",
+        json!({ "element": "AL-p", "from": ["0", "-1 m"], "to": ["4 m", "-1 m"] }),
+    )
+    .await;
+    undone_and_redone(&stack, "arealine.delete", json!({ "element": "AL-p" })).await;
+    undone_and_redone(
+        &stack,
+        "area.rename",
+        json!({ "element": "A-1", "name": "Gross L" }),
+    )
+    .await;
+    undone_and_redone(
+        &stack,
+        "area.number",
+        json!({ "element": "A-1", "number": "G1" }),
+    )
+    .await;
+    undone_and_redone(
+        &stack,
+        "area.move",
+        json!({ "element": "A-1", "at": ["1 m", "1 m"] }),
+    )
+    .await;
+    undone_and_redone(
+        &stack,
+        "areascheme.rename",
+        json!({ "element": "S-r", "name": "Net lettable" }),
+    )
+    .await;
+
+    // A line deleted leaves the area, not enclosed; the record is kept.
+    stack
+        .edit("arealine.delete", json!({ "element": "AL-3" }))
+        .await
+        .unwrap();
+    let failed = stack.bounds("A-1").await.unwrap_err();
+    assert!(
+        failed.starts_with("NotEnclosed: area G1 Gross L is not enclosed"),
+        "{failed}"
+    );
+    // The warnings say so too, naming the area.
+    let warned = {
+        let mut snapshot = stack.store.snapshot().await.unwrap();
+        construct_api::cloud::warnings::read_warnings(&mut snapshot, &i("p"), &i(DOCUMENT))
+            .await
+            .unwrap()
+    };
+    let area_warnings: Vec<_> = warned
+        .warnings
+        .iter()
+        .filter(|w| w.kind == "area.not_enclosed")
+        .collect();
+    assert_eq!(area_warnings.len(), 1);
+    assert_eq!(area_warnings[0].elements, ["A-1"]);
+    assert_eq!(
+        area_warnings[0].words,
+        "Area G1 Gross L is not enclosed: the area boundary lines round its point do not close"
+    );
+
+    // Refused, in words.
+    for (cmd, args, words) in [
+        (
+            "areascheme.delete",
+            json!({ "element": "S-g" }),
+            "Gross is used by 7 areas, boundary lines or area plans: delete those first.",
+        ),
+        (
+            "areascheme.add",
+            json!({ "element": "S-9", "name": "gross" }),
+            "There is already an area scheme named gross: give this one another name.",
+        ),
+        (
+            "areascheme.add",
+            json!({ "element": "S-9", "name": "X", "measure": "volume" }),
+            "\"volume\" is not a measure. The measures are gross, rentable and other.",
+        ),
+        (
+            "area.place",
+            json!({ "element": "A-2", "level": "L-g", "at": ["1 m", "1 m"] }),
+            "This command needs an area scheme, `scheme`.",
+        ),
+        (
+            "area.place",
+            json!({ "element": "A-2", "scheme": "W-s", "level": "L-g", "at": ["1 m", "1 m"] }),
+            "W-s is not an area scheme of this model.",
+        ),
+        (
+            "area.place",
+            json!({ "element": "A-2", "scheme": "S-g", "at": ["1 m", "1 m"] }),
+            "An area stands on a level: this command needs a level.",
+        ),
+        (
+            "area.place",
+            json!({ "element": "A-2", "scheme": "S-g", "level": "L-g", "at": ["1 m", "1 m"],
+                    "number": "G1" }),
+            "Number G1 is already used by area Gross L in this scheme: give this area another number.",
+        ),
+        (
+            "area.place",
+            json!({ "element": "A-1", "scheme": "S-g", "level": "L-g", "at": ["1 m", "1 m"] }),
+            "That element already exists.",
+        ),
+        (
+            "arealine.draw",
+            json!({ "element": "AL-9", "scheme": "S-g", "level": "L-g", "from": ["0", "0"],
+                    "to": ["0", "0"] }),
+            "A line needs two different ends.",
+        ),
+        (
+            "arealine.pick",
+            json!({ "element": "AL-9", "scheme": "S-g", "wall": "A-1", "near": ["0", "0"] }),
+            "Gross L is not a wall.",
+        ),
+        (
+            "arealine.move",
+            json!({ "element": "RL-0", "from": ["0", "0"], "to": ["1 m", "0"] }),
+            "That element no longer exists.",
+        ),
+        (
+            "view.create",
+            json!({ "view": "V-b", "kind": "area_plan", "name": "No scheme", "level": "L-g" }),
+            "An area plan needs an area scheme (scheme).",
+        ),
+        (
+            "view.create",
+            json!({ "view": "V-b", "kind": "area_plan", "name": "Nowhere", "level": "L-g",
+                    "scheme": "W-s" }),
+            "W-s is not an area scheme of this model: make one first.",
+        ),
+        (
+            "view.create",
+            json!({ "view": "V-b", "kind": "floor_plan", "name": "Plain", "level": "L-g",
+                    "scheme": "S-g" }),
+            "A floor plan has no area scheme.",
+        ),
+        (
+            "element.delete",
+            json!({ "element": "A-1" }),
+            "An area Gross L is changed with area.rename, area.number, area.move or area.delete, which checks it.",
+        ),
+        (
+            "element.create",
+            json!({ "element": "S-9", "kind": "area_scheme", "level": 0 }),
+            "An area scheme is made with areascheme.add, which checks it.",
+        ),
+    ] {
+        assert_eq!(stack.edit(cmd, args).await.unwrap_err(), words, "{cmd}");
+    }
+    // Deleting the line it holds frees the scheme to go.
+    stack
+        .edit("arealine.delete", json!({ "element": "AL-x" }))
+        .await
+        .unwrap();
+    undone_and_redone(&stack, "areascheme.delete", json!({ "element": "S-r" })).await;
+    assert!(stack.record("S-r").await.is_none());
+}

@@ -365,7 +365,7 @@ async fn a_view_is_refused_with_the_reason_it_has_in_the_crate() {
     );
     assert_eq!(
         refused(json!({ "view": "V-2", "kind": "wall", "name": "Roof" })).await,
-        "\"wall\" is not a kind of view. The kinds are floor_plan, ceiling_plan, section, \
+        "\"wall\" is not a kind of view. The kinds are floor_plan, ceiling_plan, area_plan, section, \
          elevation, three_d, drafting, legend."
     );
     // The same ID twice, and an ID another element has.

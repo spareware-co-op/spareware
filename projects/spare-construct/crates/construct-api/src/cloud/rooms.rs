@@ -21,6 +21,14 @@
 //! | `room.move` | `element`, `at` | The room: its point |
 //! | `room.upper` | `element`, then `top` and `top_offset` or `height` | The room: its upper limit |
 //! | `room.delete` | `element` | The room goes |
+//! | `roomline.draw` | `element`, `level`, `offset` (default `0`), `from` and `to` (`[x, y]` typed text) | A new room separation line |
+//! | `roomline.move` | `element`, `from`, `to` | The line: its two ends |
+//! | `roomline.delete` | `element` | The line goes |
+//!
+//! A room separation line (job 6.3) bounds the rooms of its level as a wall does, a line with
+//! nothing to bound is kept, and moving or deleting one finds again the rooms it touches (they are
+//! built again by regeneration, never by a command). The area commands (job 14.6) are
+//! [`crate::cloud::areas`]'s; this module routes them with its own.
 //!
 //! `at` is the room's point in the model's plan, two lengths as typed text. The upper limit is the
 //! level `top` (its ID), `top_offset` above it, or `height` (typed text) above the room's base:
@@ -37,21 +45,32 @@
 //! command to use.
 //!
 //! For the page, without the log: [`read_rooms`], the next free number it offers a person placing
-//! a room.
+//! a room; and [`view_of`], what a room is built from and what it measures, its volume with the
+//! floors in its space taken out ([`construct_rooms::net_volume`]): a floor whose top is above the
+//! room's base takes what stands above it, and the floor of the level above takes its thickness
+//! from the room's top, a sloped one by its slope, and a floor's openings and shafts are holes in
+//! what it takes. Ceilings are not built yet (job 6.8): until they are a room is bounded below and
+//! above by its levels and floors only, and a floor's slab edges (thickened or downturned) hang
+//! below its underside and are not counted.
 //!
 //! Typed text is read with construct-params' metric display settings until a project keeps its
 //! own. Later, with their places: room separation lines and rooms bounded by floors and ceilings
 //! (job 6.3), and a sloped upper limit (the interim register).
 
+use crate::cloud::areas;
 use crate::cloud::elements::write_record;
 use crate::cloud::levels;
 use construct_levels::{Length, Tie, parse_length, write_top};
 use construct_model::element::Element;
+use construct_model::geometry::GeometryError;
 use construct_params::Units;
+use construct_regen::floor_plan::FloorPlan;
 use construct_regen::parameters::{self as records, At};
+use construct_regen::rooms::{RoomView, Worked, of_kind};
 use construct_rooms::{
-    Limit, NUMBER_KEY, RoomError, at_of, is_room, is_room_recipe, limit_of, next_number, number_of,
-    room_recipe, room_record,
+    Limit, LineKind, Measures, NUMBER_KEY, RoomError, Slab, at_of, is_room, is_room_line,
+    is_room_recipe, limit_of, line_recipe, next_number, number_of, room_line_record, room_recipe,
+    room_record,
 };
 use kit_core::Id;
 use kit_ops::{Change, Claim, ClaimChange, Edit};
@@ -60,19 +79,23 @@ use kit_sync::{Applied, Context as Ordered, Outcome, claims};
 use serde::{Deserialize, Serialize};
 
 /// Every command here.
-pub const COMMANDS: [&str; 6] = [
+pub const COMMANDS: [&str; 9] = [
     "room.place",
     "room.rename",
     "room.number",
     "room.move",
     "room.upper",
     "room.delete",
+    "roomline.draw",
+    "roomline.move",
+    "roomline.delete",
 ];
 
-/// Whether a command is one of these.
+/// Whether a command is one of these, or an area command ([`crate::cloud::areas`]), which this
+/// module routes.
 #[must_use]
 pub fn is_command(cmd: &str) -> bool {
-    COMMANDS.contains(&cmd)
+    COMMANDS.contains(&cmd) || areas::is_command(cmd)
 }
 
 /// The name a room is given when none is.
@@ -80,15 +103,29 @@ const DEFAULT_NAME: &str = "Room";
 
 /// The arguments of every command here; each uses some of them.
 #[derive(Deserialize, Default)]
-struct Args {
+pub(crate) struct Args {
     #[serde(default, with = "kit_ops::id::option")]
-    element: Option<Id>,
-    name: Option<String>,
-    number: Option<String>,
+    pub(crate) element: Option<Id>,
+    pub(crate) name: Option<String>,
+    pub(crate) number: Option<String>,
     /// The base level: its ID, or an old page's integer ([`levels::tie_of_new`]).
-    level: Option<serde_json::Value>,
-    offset: Option<String>,
-    at: Option<[String; 2]>,
+    pub(crate) level: Option<serde_json::Value>,
+    pub(crate) offset: Option<String>,
+    pub(crate) at: Option<[String; 2]>,
+    /// An area boundary line's area scheme, an area's and an area plan's: its ID.
+    #[serde(default, with = "kit_ops::id::option")]
+    pub(crate) scheme: Option<Id>,
+    /// The wall an area boundary line is picked from.
+    #[serde(default, with = "kit_ops::id::option")]
+    pub(crate) wall: Option<Id>,
+    /// The point clicked beside a wall, `[x, y]` typed text: which face is picked.
+    pub(crate) near: Option<[String; 2]>,
+    /// What an area scheme measures: `gross`, `rentable` or `other`.
+    pub(crate) measure: Option<String>,
+    /// A line's first end.
+    pub(crate) from: Option<[String; 2]>,
+    /// A line's second end.
+    pub(crate) to: Option<[String; 2]>,
     #[serde(default, with = "kit_ops::id::option")]
     top: Option<Id>,
     top_offset: Option<String>,
@@ -102,14 +139,14 @@ struct Named {
 }
 
 /// A command's answer: a store failure, or the command's own result.
-type Answer = Result<Outcome, StoreError>;
+pub(crate) type Answer = Result<Outcome, StoreError>;
 
-fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
+pub(crate) fn need<T>(value: Option<T>, what: &str) -> Result<T, String> {
     value.ok_or_else(|| format!("This command needs {what}."))
 }
 
 /// Turns a data crate's refusal into the command's result.
-fn why(error: impl std::fmt::Display) -> String {
+pub(crate) fn why(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
@@ -120,12 +157,12 @@ fn units() -> Units {
 }
 
 /// A typed length, or construct-levels' refusal of the text.
-fn length(text: &str) -> Result<Length, String> {
+pub(crate) fn length(text: &str) -> Result<Length, String> {
     parse_length(text, &units()).map_err(why)
 }
 
 /// A room's point from what a person sent.
-fn point(sent: Option<[String; 2]>) -> Result<[Length; 2], String> {
+pub(crate) fn point(sent: Option<[String; 2]>) -> Result<[Length; 2], String> {
     let [x, y] = need(sent, "a point, `at`")?;
     Ok([length(&x)?, length(&y)?])
 }
@@ -142,18 +179,18 @@ fn named(name: Option<String>, default: Option<&str>) -> Result<String, String> 
 }
 
 /// What a command is run against: the store, where, who, and when the orderer says it is.
-struct Run<'a, T: Txn> {
-    txn: &'a mut T,
-    project: &'a Id,
-    document: &'a Id,
-    edit: &'a Edit,
-    now_ms: u64,
-    claim_ms: u64,
+pub(crate) struct Run<'a, T: Txn> {
+    pub(crate) txn: &'a mut T,
+    pub(crate) project: &'a Id,
+    pub(crate) document: &'a Id,
+    pub(crate) edit: &'a Edit,
+    pub(crate) now_ms: u64,
+    pub(crate) claim_ms: u64,
 }
 
 impl<T: Txn> Run<'_, T> {
     /// The claim this person takes on a piece, or who else holds it.
-    async fn claim(&mut self, piece: &Id) -> Result<Result<Claim, String>, StoreError> {
+    pub(crate) async fn claim(&mut self, piece: &Id) -> Result<Result<Claim, String>, StoreError> {
         let holder = claims::held_by_another(
             self.txn,
             self.project,
@@ -178,12 +215,12 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// The document's current record of a piece, and its hash.
-    async fn current(&mut self, id: &Id) -> Result<Option<(Id, Element)>, StoreError> {
+    pub(crate) async fn current(&mut self, id: &Id) -> Result<Option<(Id, Element)>, StoreError> {
         records::read_element(self.txn, self.project, self.document, id).await
     }
 
     /// Writes a record and points its piece at it; the change, from what it was.
-    async fn put(&mut self, record: &Element) -> Result<Change, StoreError> {
+    pub(crate) async fn put(&mut self, record: &Element) -> Result<Change, StoreError> {
         let before = self.current(&record.id).await?.map(|(hash, _)| hash);
         let hash = write_record(self.txn, self.project, record).await?;
         let pointer = Place::Piece {
@@ -200,7 +237,7 @@ impl<T: Txn> Run<'_, T> {
     }
 
     /// Writes one record whose piece this person claims, as the command's whole result.
-    async fn put_claimed(&mut self, record: &Element) -> Answer {
+    pub(crate) async fn put_claimed(&mut self, record: &Element) -> Answer {
         let claim = match self.claim(&record.id).await? {
             Ok(claim) => claim,
             Err(refusal) => return Ok(Err(refusal)),
@@ -291,6 +328,10 @@ pub async fn apply<T: Txn>(
         "room.move" => move_to(&mut run, args).await,
         "room.upper" => upper(&mut run, args).await,
         "room.delete" => delete(&mut run, args).await,
+        "roomline.draw" => line_draw(&mut run, args).await,
+        "roomline.move" => line_move(&mut run, args).await,
+        "roomline.delete" => line_delete(&mut run, args).await,
+        cmd if areas::is_command(cmd) => areas::apply_run(&mut run, args).await,
         other => Ok(Err(format!("Unknown command {other}."))),
     }
 }
@@ -540,6 +581,248 @@ async fn delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
     }))
 }
 
+/// The room separation line a command is about: its record and hash, or the refusal.
+async fn line_target<T: Txn>(
+    run: &mut Run<'_, T>,
+    element: Option<Id>,
+) -> Result<Result<(Id, Element), String>, StoreError> {
+    let id = match need(element, "an element") {
+        Ok(id) => id,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let Some((hash, record)) = run.current(&id).await? else {
+        return Ok(Err("That element no longer exists.".to_owned()));
+    };
+    if !is_room_line(&record) {
+        return Ok(Err(format!("{id} is not a room separation line.")));
+    }
+    Ok(Ok((hash, record)))
+}
+
+/// A line's two ends from what a person sent.
+pub(crate) fn ends(
+    from: Option<[String; 2]>,
+    to: Option<[String; 2]>,
+) -> Result<([Length; 2], [Length; 2]), String> {
+    Ok((
+        point(from).map_err(|_| "This command needs a first end, `from`.".to_owned())?,
+        point(to).map_err(|_| "This command needs a second end, `to`.".to_owned())?,
+    ))
+}
+
+async fn line_draw<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let id = match need(args.element.clone(), "an element") {
+        Ok(id) => id,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    if run.current(&id).await?.is_some() {
+        return Ok(Err("That element already exists.".to_owned()));
+    }
+    let (from, to) = match ends(args.from.clone(), args.to.clone()) {
+        Ok(ends) => ends,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let base =
+        match levels::tie_of_new(run.txn, run.project, run.document, args.level.as_ref()).await? {
+            Ok(Some(base)) => base,
+            Ok(None) => {
+                return Ok(Err(
+                    "A room separation line is drawn on a level: this command needs a level."
+                        .to_owned(),
+                ));
+            }
+            Err(refusal) => return Ok(Err(refusal)),
+        };
+    let base = match args.offset.as_deref().map(length) {
+        None => base,
+        Some(Ok(offset)) => Tie { offset, ..base },
+        Some(Err(refusal)) => return Ok(Err(refusal)),
+    };
+    let record = match room_line_record(&id, run.document, &base, from, to) {
+        Ok(record) => record,
+        Err(refusal) => return Ok(Err(why(refusal))),
+    };
+    run.put_claimed(&record).await
+}
+
+async fn line_move<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (_, mut record) = match line_target(run, args.element.clone()).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    let (from, to) = match ends(args.from, args.to) {
+        Ok(ends) => ends,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    record.recipe = match line_recipe(LineKind::Room, from, to) {
+        Ok(recipe) => recipe,
+        Err(refusal) => return Ok(Err(why(refusal))),
+    };
+    run.put_claimed(&record).await
+}
+
+async fn line_delete<T: Txn>(run: &mut Run<'_, T>, args: Args) -> Answer {
+    let (hash, record) = match line_target(run, args.element).await? {
+        Ok(found) => found,
+        Err(refusal) => return Ok(Err(refusal)),
+    };
+    run.take_away(&record.id, hash).await
+}
+
+impl<T: Txn> Run<'_, T> {
+    /// Deletes a piece this person claims: its pointer goes, its claim is released.
+    pub(crate) async fn take_away(&mut self, piece: &Id, hash: Id) -> Answer {
+        if let Err(refusal) = self.claim(piece).await? {
+            return Ok(Err(refusal));
+        }
+        let pointer = Place::Piece {
+            project: self.project.clone(),
+            document: self.document.clone(),
+            piece: piece.clone(),
+        };
+        self.txn.delete(pointer.key()).await?;
+        let claim: ClaimChange =
+            claims::release(self.txn, self.project, self.document, piece).await?;
+        Ok(Ok(Applied {
+            changes: vec![Change {
+                piece: piece.clone(),
+                before: Some(hash),
+                after: None,
+            }],
+            claims: vec![claim],
+            ..Applied::default()
+        }))
+    }
+}
+
+/// The floors of the document as the volume reads them: each one's loops (its outer loop, its
+/// holes and what cuts it) and its top face and thickness as heights above the project's zero.
+/// A floor that does not build, stands on no level or has no thickness is not there.
+async fn slabs_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    at: At,
+) -> Result<Vec<Slab>, StoreError> {
+    let mut slabs = Vec::new();
+    for floor in of_kind(reader, project, document, construct_slabs::FLOOR_KIND, at).await? {
+        let Ok(recipe) =
+            construct_regen::levels::recipe_at(reader, project, document, &floor, at).await?
+        else {
+            continue;
+        };
+        let Ok(plan) = FloorPlan::of(&recipe) else {
+            continue;
+        };
+        let Ok(placed) =
+            construct_regen::levels::placed(reader, project, document, &floor, at).await?
+        else {
+            continue;
+        };
+        let (Some(elevation), Some(thickness)) = (placed.elevation, plan.total()) else {
+            continue;
+        };
+        let mut loops: Vec<Vec<[i64; 2]>> = plan
+            .loops
+            .iter()
+            .map(|ring| ring.iter().map(|corner| corner.at).collect())
+            .collect();
+        loops.extend(crate::cloud::openings::floor_cuts(reader, project, document, &floor).await?);
+        let base = elevation.steps();
+        let points: Vec<[i64; 3]> = plan
+            .loops
+            .iter()
+            .enumerate()
+            .flat_map(|(ring, corners)| {
+                corners
+                    .iter()
+                    .enumerate()
+                    .map(move |(k, corner)| (ring, k, corner))
+            })
+            .map(|(ring, k, corner)| {
+                [
+                    corner.at[0],
+                    corner.at[1],
+                    base.saturating_add(plan.top_at(ring, k)),
+                ]
+            })
+            .collect();
+        if let Ok(slab) = Slab::of_corners(loops, &points, thickness) {
+            slabs.push(slab);
+        }
+    }
+    Ok(slabs)
+}
+
+/// What becomes of a room and what a person is told of it, as the document stands `at` that
+/// state: [`construct_regen::rooms::worked_at`] and its [`RoomView`], the volume less what the
+/// floors in the room's space take ([`construct_rooms::net_volume`]). The inner error is a level
+/// that cannot be read, in words.
+///
+/// # Errors
+/// A [`StoreError`] when the store fails.
+pub async fn view_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    units: &Units,
+    at: At,
+) -> Result<Result<(Worked, RoomView), GeometryError>, StoreError> {
+    let mut worked =
+        match construct_regen::rooms::worked_at(reader, project, document, room, at).await? {
+            Ok(worked) => worked,
+            Err(e) => return Ok(Err(e)),
+        };
+    if let (Ok(recipe), Some(measures)) = (&worked.0, worked.1) {
+        let net = net_of(reader, project, document, room, recipe, at).await?;
+        if let Some(volume) = net {
+            worked.1 = Some(Measures { volume, ..measures });
+        }
+    }
+    let view = RoomView::of(&worked, units);
+    Ok(Ok((worked, view)))
+}
+
+/// A room's volume with its floors taken out, or `None` when it cannot be worked out (its levels
+/// cannot be read, or its loop is not found: the room's own view says why).
+async fn net_of<R: Reader>(
+    reader: &mut R,
+    project: &Id,
+    document: &Id,
+    room: &Element,
+    filled: &construct_model::geometry::Recipe,
+    at: At,
+) -> Result<Option<construct_params::Volume>, StoreError> {
+    let Ok(placed) = construct_regen::levels::placed(reader, project, document, room, at).await?
+    else {
+        return Ok(None);
+    };
+    let Some(base) = placed.elevation else {
+        return Ok(None);
+    };
+    let Some(construct_params::Value::Length(height)) = filled
+        .args
+        .get(construct_rooms::HEIGHT_ARG)
+        .and_then(serde_json::Value::as_str)
+        .and_then(construct_params::Value::from_stored)
+    else {
+        return Ok(None);
+    };
+    let Ok(found) = construct_regen::rooms::found_at(reader, project, document, room, at).await?
+    else {
+        return Ok(None);
+    };
+    let construct_rooms::Outcome::Enclosed { found, .. } = found else {
+        return Ok(None);
+    };
+    let Some(upper) = base.steps().checked_add(height.steps()) else {
+        return Ok(None);
+    };
+    let slabs = slabs_of(reader, project, document, at).await?;
+    Ok(construct_rooms::net_volume(&found, base.steps(), upper, &slabs).ok())
+}
+
 /// The words for a room command that should have been used.
 fn use_instead(what: &str, command: &str) -> String {
     format!("{what} with {command}, which checks it as a room.")
@@ -573,6 +856,9 @@ pub async fn generic_rules<T: Txn>(
     let Ok(args) = serde_json::from_value::<GenericArgs>(edit.args.clone()) else {
         return Ok(Ok(()));
     };
+    if let Err(refused) = areas::generic_rules(txn, project, edit).await? {
+        return Ok(Err(refused));
+    }
     let a_room_recipe = args.recipe.as_ref().is_some_and(is_room_recipe);
     let made = a_room_recipe || args.kind.as_deref() == Some(construct_rooms::ROOM_KIND);
     let cmd = edit.cmd.as_str();

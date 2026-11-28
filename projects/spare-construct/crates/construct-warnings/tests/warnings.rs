@@ -58,7 +58,11 @@ fn room(id: &str, state: RoomState) -> Room {
 }
 
 fn model(walls: Vec<Wall>, rooms: Vec<Room>) -> Model {
-    Model { walls, rooms }
+    Model {
+        walls,
+        rooms,
+        areas: Vec::new(),
+    }
 }
 
 fn identities(model: &Model) -> Vec<String> {
@@ -96,6 +100,25 @@ fn a_room_that_is_not_enclosed_is_a_warning_naming_it() {
         "Room R-7 is not enclosed: the walls round its point do not close"
     );
     assert_eq!(w.identity(), "room.not_enclosed|R-7");
+}
+
+#[test]
+fn an_area_that_is_not_enclosed_is_a_warning_naming_it() {
+    let m = Model {
+        areas: vec![
+            room("A-1", RoomState::NotEnclosed),
+            room("A-2", RoomState::Enclosed),
+        ],
+        ..Model::default()
+    };
+    let list = warnings(&m);
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].kind, "area.not_enclosed");
+    assert_eq!(list[0].elements, [i("A-1")]);
+    assert_eq!(
+        list[0].words,
+        "Room A-1 is not enclosed: the area boundary lines round its point do not close"
+    );
 }
 
 #[test]
@@ -253,7 +276,10 @@ fn the_list_is_ordered_by_kind_then_elements_whatever_order_it_was_given() {
 #[test]
 fn every_kind_is_one_entry_with_its_own_name() {
     let names: Vec<&str> = RULES.iter().map(|r| r.kind).collect();
-    assert_eq!(names, ["room.not_enclosed", "wall.overlap"]);
+    assert_eq!(
+        names,
+        ["room.not_enclosed", "area.not_enclosed", "wall.overlap"]
+    );
     assert_eq!(Severity::Warning.word(), "warning");
     assert!(Severity::Notice < Severity::Warning && Severity::Warning < Severity::Error);
 }

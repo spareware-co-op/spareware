@@ -2927,5 +2927,243 @@ for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
   check(mismatched.length === 0, `every body ${name}'s page built, after the schedules, matches the server's`);
 }
 
+console.log('\n   Room separation lines and area plans');
+// Anna places a room beside Studio A, in the seed building's west half: one open space, so one of
+// the two is redundant. She draws a room separation line between them with the Room separation
+// tool (two clicks); Ben's browser draws the line and both rooms are enclosed, each tagged with
+// its own area, the two adding up to the open space's. She lets go of the line; Ben deletes it and
+// the space is one room again, then undoes that, and a fresh load agrees. Then Anna makes an area
+// scheme and an area plan of Level 1 from the browser; Ben sees the plan in his list. In it she
+// draws three boundary lines of a gross area, 10 m by 6 m, Ben the fourth; Anna places an
+// area inside them and both tag it with the server's area (60 m²). Ben deletes his line: the area
+// stays, not enclosed; his undo closes it again. A floor plan draws no area and an area plan no
+// rooms. Every body either page built agrees with the server's.
+{
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+await anna.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await ben.locator('#ribbon [role="tab"]', { hasText: 'Architecture' }).click();
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:room"]');
+await anna.waitForSelector(roomNameField);
+await anna.locator(roomNameField).fill('Kitchen');
+await anna.locator(roomNameField).press('Enter');
+const kitchenClick = await onPlan(anna, 1000, 4000);
+await anna.mouse.click(kitchenClick.x, kitchenClick.y);
+const kitchenOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'room' && p.el.name === 'Kitchen')?.el.id;
+await ben.waitForFunction(kitchenOf);
+const kitchenId = await ben.evaluate(kitchenOf);
+await anna.keyboard.press('Escape');
+const roomView = (id) => asAnna(`filled/${id}`);
+const loopStates = await until(
+  () => Promise.all([roomView(kitchenId), roomView(roomId)]),
+  (views) => views.every((view) => view.room),
+  'the server tells both rooms',
+);
+const holder = loopStates.find((view) => view.room.state === 'enclosed');
+check(
+  holder && loopStates.some((view) => view.room.state === 'redundant'),
+  'before the line the two rooms are one open space: one holds the loop, the other is redundant',
+);
+const openSpace = Number.parseFloat(holder.room.area);
+
+// Anna draws the line from the middle of the south wall to the middle of the north wall.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:room-line"]');
+await anna.waitForSelector('#pv-side [data-line-sketch="empty"]');
+const lineFrom = await onPlan(anna, 2000, 100);
+await anna.mouse.click(lineFrom.x, lineFrom.y);
+await anna.waitForSelector('#pv-side [data-line-sketch="open"]');
+const lineTo = await onPlan(anna, 2000, 7900);
+await anna.mouse.click(lineTo.x, lineTo.y);
+const sepLineOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'room_line')?.el.id;
+await ben.waitForFunction(sepLineOf);
+const sepLineId = await ben.evaluate(sepLineOf);
+const sepLine = (id) => `#pv-canvas g.element[data-id="${id}"] line.room-line`;
+await ben.waitForSelector(sepLine(sepLineId));
+await anna.keyboard.press('Escape');
+const bothEnclosed = await until(
+  () => Promise.all([roomView(kitchenId), roomView(roomId)]),
+  (views) => views.every((view) => view.room?.state === 'enclosed'),
+  'the server finds both rooms enclosed once the line is drawn',
+);
+const [kitchenArea, studioArea] = bothEnclosed.map((view) => view.room.area);
+check(kitchenArea !== studioArea, `Anna draws a separation line and the server finds two rooms: ${kitchenArea} and ${studioArea}`);
+check(
+  Math.abs(Number.parseFloat(kitchenArea) + Number.parseFloat(studioArea) - openSpace) < 0.011,
+  `the two rooms add up to the open space they were, ${holder.room.area}`,
+);
+const roomTagOf = (id, part) => `#pv-canvas g.room-tag[data-room-tag="${id}"] text.${part}`;
+const tagIs = (page, selector, text) =>
+  page.waitForFunction(([found, want]) => document.querySelector(found)?.textContent === want, [selector, text]);
+for (const page of [anna, ben]) {
+  await tagIs(page, roomTagOf(kitchenId, 'room-area'), kitchenArea);
+  await tagIs(page, roomTagOf(roomId, 'room-area'), studioArea);
+}
+pass('both browsers tag the two rooms, each with its own area, and draw the separation line between them');
+await shot(ben, 'ben-separation-line');
+
+// Anna picks the line and lets go of it by clicking off, so Ben may change it.
+const lineMid = await onPlan(anna, 2000, 4000);
+await anna.mouse.click(lineMid.x, lineMid.y);
+await anna.waitForSelector('#pv-side [data-flat-element]');
+await anna.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), sepLineId);
+
+// Ben picks it and deletes it: one loop again.
+const benMid = await onPlan(ben, 2000, 4000);
+await ben.mouse.click(benMid.x, benMid.y);
+await ben.waitForSelector('#pv-side [data-flat-element]');
+await ben.locator('#pv-side [data-key="flat-delete"]').click();
+for (const page of [anna, ben]) await page.waitForSelector(sepLine(sepLineId), { state: 'detached' });
+const oneLoop = await until(
+  () => Promise.all([roomView(kitchenId), roomView(roomId)]),
+  (views) => views.some((view) => view.room?.state === 'redundant'),
+  'the server finds one of the rooms redundant again once the line is deleted',
+);
+check(
+  oneLoop.find((view) => view.room.state === 'enclosed').room.area === holder.room.area,
+  `Ben deletes the line: the open space is one room again, ${holder.room.area}`,
+);
+
+// His undo puts the line back, and the two rooms with it.
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'roomline.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await page.waitForSelector(sepLine(sepLineId));
+for (const page of [anna, ben]) {
+  await tagIs(page, roomTagOf(kitchenId, 'room-area'), kitchenArea);
+  await tagIs(page, roomTagOf(roomId, 'room-area'), studioArea);
+}
+pass("Ben's undo puts the line back, and both browsers show the two rooms again");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+await ben.waitForFunction((id) => !window.spare.claims.has(id), sepLineId);
+
+const linesFresh = await signIn('anna');
+await linesFresh.waitForSelector(sepLine(sepLineId));
+await tagIs(linesFresh, roomTagOf(kitchenId, 'room-area'), kitchenArea);
+await tagIs(linesFresh, roomTagOf(roomId, 'room-area'), studioArea);
+pass('a fresh load draws the line and tags the same two rooms');
+await linesFresh.context().close();
+
+// Anna makes an area scheme and an area plan of Level 1, from the browser's Area plans part.
+await anna.waitForSelector('#browser [data-key="new-scheme-name"]');
+await anna.locator('#browser [data-key="new-scheme-name"]').fill('Gross');
+await anna.locator('#browser [data-key="new-scheme-measure"]').selectOption('gross');
+await anna.click('#browser [data-act="stacknewscheme"]');
+await anna.waitForSelector('#browser [data-key="new-areaplan-name"]');
+await anna.locator('#browser [data-key="new-areaplan-name"]').fill('Level 1 gross');
+await anna.click('#browser [data-act="stacknewareaplan"]');
+const areaPlanLeaf = viewLeaf('Level 1 gross');
+await anna.waitForSelector(areaPlanLeaf);
+await ben.waitForSelector(areaPlanLeaf);
+const schemes = await asAnna('areas');
+check(
+  schemes.schemes.length === 1 && schemes.schemes[0].name === 'Gross' && schemes.schemes[0].measure === 'gross' && schemes.schemes[0].next_number === '1',
+  'the server lists the gross scheme, with 1 the next area number',
+);
+const plans = await asAnna('views');
+check(
+  plans.some((view) => view.kind === 'area_plan' && view.name === 'Level 1 gross' && view.scheme === schemes.schemes[0].id),
+  "Anna's area plan is in the server's list of views, of the gross scheme",
+);
+pass("Anna makes an area scheme and an area plan, and Ben's list shows the plan");
+await anna.click(areaPlanLeaf);
+await ben.click(areaPlanLeaf);
+await anna.waitForSelector('#pv-canvas g.element[data-id="W-101"]');
+await ben.waitForSelector('#pv-canvas g.element[data-id="W-101"]');
+for (const page of [anna, ben]) {
+  check((await page.locator('#pv-canvas g.room-tag').count()) === 0, 'an area plan draws no rooms');
+  check((await page.locator('#pv-canvas line.room-line').count()) === 0, 'an area plan draws no room separation lines');
+}
+
+// Anna draws three boundary lines of a 10 m by 6 m rectangle inside the building's footprint.
+const boundaryLines = () => [...window.spare.elements.values()].filter((p) => p.el.kind === 'area_line').length;
+const drawBoundary = async (page, from, to, count) => {
+  const a = await onPlan(page, ...from);
+  await page.mouse.click(a.x, a.y);
+  const b = await onPlan(page, ...to);
+  await page.mouse.click(b.x, b.y);
+  await anna.waitForFunction((n) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'area_line').length === n, count);
+  await ben.waitForFunction((n) => [...window.spare.elements.values()].filter((p) => p.el.kind === 'area_line').length === n, count);
+};
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:area-line"]');
+await anna.waitForSelector('#pv-side [data-line-sketch="empty"]');
+await drawBoundary(anna, [1000, 1000], [11000, 1000], 1);
+await drawBoundary(anna, [11000, 1000], [11000, 7000], 2);
+await drawBoundary(anna, [11000, 7000], [1000, 7000], 3);
+await anna.keyboard.press('Escape');
+// Ben draws the fourth, closing the loop, and the line is his own.
+await ben.click('#ribbon [data-act="dtool"][data-a="architecture:area-line"]');
+await ben.waitForSelector('#pv-side [data-line-sketch="empty"]');
+await drawBoundary(ben, [1000, 7000], [1000, 1000], 4);
+await ben.keyboard.press('Escape');
+const areaLineIds = await ben.evaluate(() => [...window.spare.elements.values()].filter((p) => p.el.kind === 'area_line').map((p) => p.el.id));
+for (const page of [anna, ben]) {
+  check((await page.locator('#pv-canvas line.area-line').count()) === 4, 'the area plan draws the four boundary lines');
+}
+pass('Anna draws three area boundary lines and Ben the fourth, and both plans draw all four');
+
+// Anna places an area inside the loop.
+await anna.click('#ribbon [data-act="dtool"][data-a="architecture:area"]');
+const areaNameField = '#pv-side input[data-key="area-tool-name"]';
+const areaNumberField = '#pv-side input[data-key="area-tool-number"]';
+await anna.waitForSelector(`${areaNumberField}[value="1"]`);
+await anna.locator(areaNameField).fill('Level 1 gross');
+await anna.locator(areaNameField).press('Enter');
+const areaClick = await onPlan(anna, 3000, 2000);
+await anna.mouse.click(areaClick.x, areaClick.y);
+const areaOf = () => [...window.spare.elements.values()].find((p) => p.el.kind === 'area')?.el.id;
+await ben.waitForFunction(areaOf);
+const areaId = await ben.evaluate(areaOf);
+await anna.keyboard.press('Escape');
+const areaTag = (id, part) => `#pv-canvas g.area-tag[data-area-tag="${id}"] text.${part}`;
+const grossView = await until(
+  () => asAnna(`filled/${areaId}`),
+  (view) => view.area?.state === 'enclosed' && view.area.area,
+  'the server finds the area enclosed by its four boundary lines',
+);
+check(Number.parseFloat(grossView.area.area) === 60, `the server gives the gross area, 10 m by 6 m: ${grossView.area.area}`);
+for (const page of [anna, ben]) {
+  await tagIs(page, areaTag(areaId, 'area-area'), grossView.area.area);
+  await tagIs(page, areaTag(areaId, 'area-name'), 'Level 1 gross');
+  await tagIs(page, areaTag(areaId, 'area-number'), '1');
+}
+pass("Anna places an area inside the lines, and both browsers tag it with its name, number and the server's area");
+await shot(ben, 'ben-area-plan');
+
+// Ben deletes the line he drew: the area stays, not enclosed; his undo closes it again.
+const benLine = await ben.evaluate(() => {
+  const mine = [...window.spare.elements.values()].filter((p) => p.el.kind === 'area_line');
+  return mine.find((p) => p.el.recipe.args.to[0] === p.el.recipe.args.from[0] && p.el.recipe.args.from[0] === 'length:q0:6400000')?.el.id;
+});
+check(Boolean(benLine) && areaLineIds.includes(benLine), "Ben's line is the west one, at x = 1 m");
+await ben.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+const benPick = await onPlan(ben, 1000, 4000);
+await ben.mouse.click(benPick.x, benPick.y);
+await ben.waitForSelector('#pv-side [data-flat-element]');
+await ben.locator('#pv-side [data-key="flat-delete"]').click();
+for (const page of [anna, ben]) await tagIs(page, areaTag(areaId, 'area-state'), 'Not enclosed');
+const openArea = await until(
+  () => asAnna(`filled/${areaId}`),
+  (view) => view.area?.state === 'not enclosed',
+  'the server says the area is not enclosed',
+);
+check(!openArea.area.area, `Ben deletes his line: the server says "${openArea.area.words}", and gives no area`);
+await ben.waitForFunction(() => window.spare.pending.length === 0 && window.spare.steps.undo?.cmd === 'arealine.delete');
+await ben.locator('#qat [data-act="stackundo"]:not([aria-disabled="true"])').click();
+for (const page of [anna, ben]) await tagIs(page, areaTag(areaId, 'area-area'), grossView.area.area);
+pass("Ben's undo puts the line back, and both browsers show the area enclosed again, as it was");
+
+// A floor plan draws the rooms and the separation line and no area; the area plan again draws the area.
+for (const page of [anna, ben]) await page.click('#browser [data-act="view"][data-a="l1"]');
+for (const page of [anna, ben]) {
+  await page.waitForSelector(sepLine(sepLineId));
+  check((await page.locator('#pv-canvas g.area-tag').count()) === 0, 'a floor plan draws no area');
+  check((await page.locator('#pv-canvas line.area-line').count()) === 0, 'a floor plan draws no area boundary line');
+}
+await ben.waitForTimeout(1500);
+for (const [name, page] of [['Anna', anna], ['Ben', ben]]) {
+  const mismatched = await page.evaluate(() => window.spare.mismatches);
+  check(mismatched.length === 0, `every body ${name}'s page built, the lines and the area included, matches the server's`);
+}
+}
+
 await browser.close();
 console.log('\nThe browser checks passed.');

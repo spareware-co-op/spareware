@@ -17,6 +17,16 @@ pub enum RoomError {
         /// The wall.
         wall: Id,
     },
+    /// The room's point is on a separation line or an area boundary line.
+    PointOnLine {
+        /// The line.
+        line: Id,
+    },
+    /// A line whose two ends are one point.
+    ZeroLine,
+    /// A thing that is not what it was taken for in a slab's surface: a plane through points on
+    /// one straight line, or no points at all.
+    NoPlane,
     /// A curved wall is on the room's level. Until the kernel's exact arcs reach the walls, a
     /// room is never found from a chord standing in for an arc.
     CurvedWall {
@@ -58,6 +68,9 @@ impl RoomError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::PointInWall { .. } => "PointInWall",
+            Self::PointOnLine { .. } => "PointOnLine",
+            Self::ZeroLine => "ZeroLine",
+            Self::NoPlane => "NoPlane",
             Self::CurvedWall { .. } => "CurvedWall",
             Self::SlopedLimit => "SlopedLimit",
             Self::OffGrid { .. } => "OffGrid",
@@ -87,6 +100,12 @@ impl fmt::Display for RoomError {
                 f,
                 "The room's point is in wall {wall}: place it in the open space the room is."
             ),
+            Self::PointOnLine { line } => write!(
+                f,
+                "The point is on line {line}: place it on one side of the line, in the space it is."
+            ),
+            Self::ZeroLine => f.write_str("A line needs two different ends."),
+            Self::NoPlane => f.write_str("A floor's top is not a plane the room can be cut by."),
             Self::CurvedWall { wall } => write!(
                 f,
                 "Wall {wall} is curved, and a room is not found from curved walls yet: the kernel's exact arcs come first."

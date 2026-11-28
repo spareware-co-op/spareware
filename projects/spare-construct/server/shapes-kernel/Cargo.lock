@@ -206,11 +206,27 @@ dependencies = [
  "construct-model",
  "construct-openings",
  "construct-params",
+ "construct-rooms",
  "engine-geometry",
  "hex",
  "kit-core",
  "kit-ops",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "construct-rooms"
+version = "0.0.0"
+dependencies = [
+ "construct-categories",
+ "construct-levels",
+ "construct-model",
+ "construct-params",
+ "construct-types",
+ "dashu-int",
+ "dashu-ratio",
+ "kit-core",
  "serde_json",
 ]
 

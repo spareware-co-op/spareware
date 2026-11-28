@@ -32,6 +32,16 @@
 //! loop and clockwise for each hole, each corner a grid point with the wall whose face runs from
 //! it; a corner off the grid is refused, never rounded ([`RoomError::OffGrid`]).
 //!
+//! A separation line (job 6.3) is a [`Bound`] of a different kind: a segment with no thickness
+//! ([`Outline::Line`]). It is two-sided: both of its directions are kept as pieces, so the open
+//! space on either side of it is walled by it, as a wall's face is for one side. Where it runs
+//! inside a wall's outline or along a wall's face the wall stands and the line is dropped; where
+//! two lines lie along each other the earlier one stands. A line with one end loose is a spike in
+//! a face's walk and is cut out of it, and a line that joins one loop to another (a column to a
+//! wall) is cut out and leaves them two loops, so every loop returned is simple. A line that
+//! crosses nothing or bounds nothing changes nothing here and is no refusal. Area boundary lines
+//! (job 14.6) are lines too: [`find`] over lines alone is the search for an area.
+//!
 //! Interim: a curved wall is refused by name ([`RoomError::CurvedWall`]) until the kernel's exact
 //! arcs reach the walls (the interim register's row); nothing else here is interim.
 
@@ -52,6 +62,9 @@ pub enum Outline {
     /// A closed polygon of grid points, either way round, with an area: a straight wall's four
     /// outer corners, or a column's outline.
     Polygon(Vec<[i64; 2]>),
+    /// A segment of no thickness between two grid points, which bounds the open space on both
+    /// sides of it: a room separation line or an area boundary line.
+    Line([[i64; 2]; 2]),
     /// A curved wall, which is refused until the kernel's exact arcs reach the walls.
     Curved,
 }
@@ -84,6 +97,11 @@ pub struct Found {
     pub holes: Vec<Vec<Corner>>,
     /// Every wall that bounds the room, by ID, ascending.
     pub walls: BTreeSet<Id>,
+    /// Whether a corner where a line meets a wall's face (or another line) was off the grid and
+    /// was rounded, once, to the nearest grid step: the area's twice-area may then be odd, and the
+    /// measures round it once ([`crate::measure_flat`]). Never set for a corner between walls
+    /// only, which is refused.
+    pub rounded: bool,
 }
 
 impl Found {
@@ -111,9 +129,11 @@ struct Piece {
     of: usize,
 }
 
-/// One outline, checked: its wall and its corners anticlockwise.
+/// One outline, checked: its wall and its corners anticlockwise (a line's two ends).
 struct Ring {
     wall: Id,
+    /// Whether it is a line, whose two ends make both of its directions.
+    line: bool,
     corners: Vec<Pt>,
     /// The low and high corner of its box, in steps.
     low: [i64; 2],
@@ -121,6 +141,8 @@ struct Ring {
 }
 
 fn checked(bound: &Bound) -> Result<Ring, RoomError> {
+    let line = matches!(bound.outline, Outline::Line(_));
+    let ends;
     let corners = match &bound.outline {
         Outline::Curved => {
             return Err(RoomError::CurvedWall {
@@ -128,8 +150,12 @@ fn checked(bound: &Bound) -> Result<Ring, RoomError> {
             });
         }
         Outline::Polygon(corners) => corners,
+        Outline::Line(at) => {
+            ends = at.to_vec();
+            &ends
+        }
     };
-    if corners.len() < 3 {
+    if corners.len() < if line { 2 } else { 3 } || (line && corners.first() == corners.get(1)) {
         return Err(RoomError::NoOutline {
             wall: bound.wall.clone(),
         });
@@ -142,13 +168,15 @@ fn checked(bound: &Bound) -> Result<Ring, RoomError> {
         return Err(RoomError::TooBig);
     }
     let mut ring: Vec<Pt> = corners.iter().copied().map(Pt::grid).collect();
-    match sign(&twice_area(&ring)) {
-        Ordering::Greater => {}
-        Ordering::Less => ring.reverse(),
-        Ordering::Equal => {
-            return Err(RoomError::NoOutline {
-                wall: bound.wall.clone(),
-            });
+    if !line {
+        match sign(&twice_area(&ring)) {
+            Ordering::Greater => {}
+            Ordering::Less => ring.reverse(),
+            Ordering::Equal => {
+                return Err(RoomError::NoOutline {
+                    wall: bound.wall.clone(),
+                });
+            }
         }
     }
     let mut low = [i64::MAX; 2];
@@ -165,6 +193,7 @@ fn checked(bound: &Bound) -> Result<Ring, RoomError> {
     }
     Ok(Ring {
         wall: bound.wall.clone(),
+        line,
         corners: ring,
         low,
         high,
@@ -217,8 +246,28 @@ fn pieces(rings: &[Ring]) -> Vec<Piece> {
 fn keeps(rings: &[Ring], near: &[usize], i: usize, from: &Pt, to: &Pt) -> bool {
     let mid = from.mid(to);
     let along = to.less(from);
+    let mine = rings.get(i).is_some_and(|ring| ring.line);
     for &j in near {
         let Some(other) = rings.get(j) else { continue };
+        match (mine, other.line) {
+            // A wall's edge stands whatever lines run across or along it.
+            (false, true) => continue,
+            // A line is dropped inside a wall and along its face: the wall bounds there.
+            (true, false) => {
+                if side(&mid, &other.corners) != Side::Outside {
+                    return false;
+                }
+                continue;
+            }
+            // Two lines along each other: the earlier stands.
+            (true, true) => {
+                if matches!(side(&mid, &other.corners), Side::On(_)) && j < i {
+                    return false;
+                }
+                continue;
+            }
+            (false, false) => {}
+        }
         match side(&mid, &other.corners) {
             Side::Outside => {}
             Side::Inside => return false,
@@ -292,6 +341,42 @@ fn loops(pieces: &[Piece]) -> Result<Vec<Vec<usize>>, RoomError> {
     Ok(found)
 }
 
+/// A cycle with every line walked both ways cut out: where it holds a piece and, later, the piece
+/// back along the same way (a line with one end loose, or one that ties a loop to another), both
+/// go, and the walk between them is a loop of its own. Every loop returned is simple, and
+/// cycles of nothing but a line there and back are no loops at all.
+fn simple(pieces: &[Piece], cycle: Vec<usize>) -> Vec<Vec<usize>> {
+    let mut by_ends: BTreeMap<(&Pt, &Pt), usize> = BTreeMap::new();
+    for (at, &k) in cycle.iter().enumerate() {
+        if let Some(piece) = pieces.get(k) {
+            by_ends.insert((&piece.a, &piece.b), at);
+        }
+    }
+    for (at, &k) in cycle.iter().enumerate() {
+        let Some(piece) = pieces.get(k) else { continue };
+        let Some(&back) = by_ends.get(&(&piece.b, &piece.a)) else {
+            continue;
+        };
+        if back <= at {
+            continue;
+        }
+        let inside = cycle.get(at.saturating_add(1)..back).unwrap_or_default();
+        let mut outside = cycle
+            .get(back.saturating_add(1)..)
+            .unwrap_or_default()
+            .to_vec();
+        outside.extend(cycle.get(..at).unwrap_or_default());
+        let mut found = simple(pieces, inside.to_vec());
+        found.extend(simple(pieces, outside));
+        return found;
+    }
+    if cycle.is_empty() {
+        Vec::new()
+    } else {
+        vec![cycle]
+    }
+}
+
 /// A loop's corners, as points.
 fn ring_of(pieces: &[Piece], cycle: &[usize]) -> Vec<Pt> {
     cycle
@@ -359,15 +444,24 @@ fn turned(rings: &[Ring], pieces: &[Piece], cycle: &[usize]) -> Result<Vec<(Pt, 
     Ok(corners)
 }
 
-/// The loop's corners on the grid, or the refusal naming the walls at the first one off it.
-fn on_grid(corners: &[(Pt, Id)]) -> Result<Vec<Corner>, RoomError> {
+/// The loop's corners on the grid, or the refusal naming the walls at the first one off it. A
+/// corner off the grid where one of the two faces is a line in `lines` is rounded once to the
+/// nearest grid step instead (the second answer is whether any was), for a line may run at any
+/// angle; one between walls only is refused.
+fn on_grid(corners: &[(Pt, Id)], lines: &BTreeSet<Id>) -> Result<(Vec<Corner>, bool), RoomError> {
     let n = corners.len();
     let mut out = Vec::with_capacity(n);
+    let mut rounded = false;
     for (k, (at, wall)) in corners.iter().enumerate() {
-        let Some(at) = at.on_grid() else {
-            let before = corners
-                .get(k.checked_sub(1).unwrap_or(n.saturating_sub(1)))
-                .map(|c| c.1.clone());
+        let before = corners
+            .get(k.checked_sub(1).unwrap_or(n.saturating_sub(1)))
+            .map(|c| c.1.clone());
+        let at = if let Some(at) = at.on_grid() {
+            at
+        } else if lines.contains(wall) || before.as_ref().is_some_and(|b| lines.contains(b)) {
+            rounded = true;
+            at.nearest_grid().ok_or(RoomError::TooBig)?
+        } else {
             let mut walls: Vec<Id> = before.into_iter().chain([wall.clone()]).collect();
             walls.sort();
             walls.dedup();
@@ -378,7 +472,7 @@ fn on_grid(corners: &[(Pt, Id)]) -> Result<Vec<Corner>, RoomError> {
             wall: wall.clone(),
         });
     }
-    Ok(out)
+    Ok((out, rounded))
 }
 
 /// The room around the grid point `at` among the walls `bounds`, as the module header says:
@@ -387,7 +481,8 @@ fn on_grid(corners: &[(Pt, Id)]) -> Result<Vec<Corner>, RoomError> {
 /// # Errors
 /// [`RoomError::CurvedWall`] for a curved wall among them; [`RoomError::NoOutline`] for an
 /// outline of fewer than three corners or no area; [`RoomError::TooBig`] beyond the grid;
-/// [`RoomError::PointInWall`] for a point inside or on a wall's outline; [`RoomError::OffGrid`]
+/// [`RoomError::PointInWall`] for a point inside or on a wall's outline, [`RoomError::PointOnLine`]
+/// for one on a line; [`RoomError::OffGrid`]
 /// for a corner of the room off the grid; [`RoomError::Inconsistent`] only if the search's own
 /// loops do not close, which they always do.
 pub fn find(bounds: &[Bound], at: [i64; 2]) -> Result<Option<Found>, RoomError> {
@@ -398,13 +493,22 @@ pub fn find(bounds: &[Bound], at: [i64; 2]) -> Result<Option<Found>, RoomError> 
     let p = Pt::grid(at);
     for ring in &rings {
         if side(&p, &ring.corners) != Side::Outside {
-            return Err(RoomError::PointInWall {
-                wall: ring.wall.clone(),
+            return Err(if ring.line {
+                RoomError::PointOnLine {
+                    line: ring.wall.clone(),
+                }
+            } else {
+                RoomError::PointInWall {
+                    wall: ring.wall.clone(),
+                }
             });
         }
     }
     let pieces = pieces(&rings);
-    let cycles = loops(&pieces)?;
+    let cycles: Vec<Vec<usize>> = loops(&pieces)?
+        .into_iter()
+        .flat_map(|cycle| simple(&pieces, cycle))
+        .collect();
     let mut clockwise = Vec::new();
     let mut anticlockwise = Vec::new();
     for (k, cycle) in cycles.iter().enumerate() {
@@ -429,6 +533,12 @@ pub fn find(bounds: &[Bound], at: [i64; 2]) -> Result<Option<Found>, RoomError> 
     };
     let outer_cycle = cycles.get(room).ok_or(RoomError::Inconsistent)?;
     take(outer_cycle);
+    let lines: BTreeSet<Id> = rings
+        .iter()
+        .filter(|ring| ring.line)
+        .map(|ring| ring.wall.clone())
+        .collect();
+    let mut rounded = false;
     let mut holes = Vec::new();
     for (k, ring) in &anticlockwise {
         let (Some(a), Some(b)) = (ring.first(), ring.get(1).or_else(|| ring.first())) else {
@@ -437,15 +547,19 @@ pub fn find(bounds: &[Bound], at: [i64; 2]) -> Result<Option<Found>, RoomError> 
         if innermost(&a.mid(b), &clockwise) == Some(room) {
             let cycle = cycles.get(*k).ok_or(RoomError::Inconsistent)?;
             take(cycle);
-            holes.push(on_grid(&turned(&rings, &pieces, cycle)?)?);
+            let (hole, was) = on_grid(&turned(&rings, &pieces, cycle)?, &lines)?;
+            rounded |= was;
+            holes.push(hole);
         }
     }
     holes.sort_by(|a, b| a.first().map(|c| c.at).cmp(&b.first().map(|c| c.at)));
-    let outer = on_grid(&turned(&rings, &pieces, outer_cycle)?)?;
+    let (outer, was) = on_grid(&turned(&rings, &pieces, outer_cycle)?, &lines)?;
+    rounded |= was;
     Ok(Some(Found {
         outer,
         holes,
         walls,
+        rounded,
     }))
 }
 

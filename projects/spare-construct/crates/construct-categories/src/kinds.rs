@@ -6,7 +6,7 @@
 //! kinds; the table below lists them by name, and the job that adds a kind adds its line here.
 
 use crate::{
-    CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS,
+    AREAS, CategoryError, CategoryId, DOORS, FLOORS, GENERIC_MODELS, GRIDS, LEVELS, OPENINGS,
     REFERENCE_PLANES, ROOFS, ROOMS, SCHEDULES, SHEETS, VIEWPORTS, VIEWS, WALLS,
 };
 
@@ -15,6 +15,10 @@ use crate::{
 /// Workshop's parts and assemblies (feature map area CON-A27) are made things that can go into
 /// any building, so no category of building parts is theirs: they are generic models.
 const KINDS: &[(&str, CategoryId)] = &[
+    // Areas (job 14.6): an area, its boundary lines and the scheme it is measured in.
+    ("area", AREAS),
+    ("area.line", AREAS),
+    ("area.scheme", AREAS),
     ("block", GENERIC_MODELS),
     ("door.single", DOORS),
     // A placed family (job 6.4): its own category is its family's, which its record carries; by
@@ -31,6 +35,8 @@ const KINDS: &[(&str, CategoryId)] = &[
     ("shaft", OPENINGS),
     ("roof", ROOFS),
     ("room", ROOMS),
+    // A room separation line (job 6.3).
+    ("room.line", ROOMS),
     ("schedule", SCHEDULES),
     ("sheet", SHEETS),
     ("view", VIEWS),
