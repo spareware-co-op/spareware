@@ -1,0 +1,563 @@
+{
+  "format": 1,
+  "id": "library.planting.tree",
+  "name": "Tree",
+  "category": 2800,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.planting.tree.width",
+        "name": "Canopy width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:16000000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.planting.tree.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:25600000"
+    },
+    {
+      "key": "trunk",
+      "definition": {
+        "id": "library.planting.tree.trunk",
+        "name": "Trunk size",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:1280000"
+    },
+    {
+      "key": "crown_base",
+      "definition": {
+        "id": "library.planting.tree.crown_base",
+        "name": "Crown base",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "height / 3"
+    },
+    {
+      "key": "cut",
+      "definition": {
+        "id": "library.planting.tree.cut",
+        "name": "Canopy corner cut",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "formula": "3 * width / 10"
+    },
+    {
+      "key": "trunk_material",
+      "definition": {
+        "id": "library.planting.tree.trunk_material",
+        "name": "Trunk material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-douglas-fir"
+    },
+    {
+      "key": "crown_material",
+      "definition": {
+        "id": "library.planting.tree.crown_material",
+        "name": "Canopy material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-western-redcedar"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "trunk1",
+          "x": "length:q0:-640000",
+          "y": "length:q0:-640000"
+        },
+        {
+          "key": "trunk2",
+          "x": "length:q0:640000",
+          "y": "length:q0:-640000"
+        },
+        {
+          "key": "trunk3",
+          "x": "length:q0:640000",
+          "y": "length:q0:640000"
+        },
+        {
+          "key": "trunk4",
+          "x": "length:q0:-640000",
+          "y": "length:q0:640000"
+        },
+        {
+          "key": "crown1",
+          "x": "length:q0:8000000",
+          "y": "length:q0:-3200000"
+        },
+        {
+          "key": "crown2",
+          "x": "length:q0:8000000",
+          "y": "length:q0:3200000"
+        },
+        {
+          "key": "crown3",
+          "x": "length:q0:3200000",
+          "y": "length:q0:8000000"
+        },
+        {
+          "key": "crown4",
+          "x": "length:q0:-3200000",
+          "y": "length:q0:8000000"
+        },
+        {
+          "key": "crown5",
+          "x": "length:q0:-8000000",
+          "y": "length:q0:3200000"
+        },
+        {
+          "key": "crown6",
+          "x": "length:q0:-8000000",
+          "y": "length:q0:-3200000"
+        },
+        {
+          "key": "crown7",
+          "x": "length:q0:-3200000",
+          "y": "length:q0:-8000000"
+        },
+        {
+          "key": "crown8",
+          "x": "length:q0:3200000",
+          "y": "length:q0:-8000000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "trunk_s",
+          "start": "trunk1",
+          "end": "trunk2"
+        },
+        {
+          "key": "trunk_e",
+          "start": "trunk2",
+          "end": "trunk3"
+        },
+        {
+          "key": "trunk_n",
+          "start": "trunk3",
+          "end": "trunk4"
+        },
+        {
+          "key": "trunk_w",
+          "start": "trunk4",
+          "end": "trunk1"
+        },
+        {
+          "key": "crown_1",
+          "start": "crown1",
+          "end": "crown2"
+        },
+        {
+          "key": "crown_2",
+          "start": "crown2",
+          "end": "crown3"
+        },
+        {
+          "key": "crown_3",
+          "start": "crown3",
+          "end": "crown4"
+        },
+        {
+          "key": "crown_4",
+          "start": "crown4",
+          "end": "crown5"
+        },
+        {
+          "key": "crown_5",
+          "start": "crown5",
+          "end": "crown6"
+        },
+        {
+          "key": "crown_6",
+          "start": "crown6",
+          "end": "crown7"
+        },
+        {
+          "key": "crown_7",
+          "start": "crown7",
+          "end": "crown8"
+        },
+        {
+          "key": "crown_8",
+          "start": "crown8",
+          "end": "crown1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk1",
+          "line": "axis",
+          "length": "trunk / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk1",
+          "line": "base",
+          "length": "trunk / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk2",
+          "line": "axis",
+          "length": "trunk / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk2",
+          "line": "base",
+          "length": "trunk / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk3",
+          "line": "axis",
+          "length": "trunk / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk3",
+          "line": "base",
+          "length": "trunk / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk4",
+          "line": "axis",
+          "length": "trunk / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "trunk4",
+          "line": "base",
+          "length": "trunk / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown1",
+          "line": "base",
+          "length": "width / 2 - cut",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown2",
+          "line": "base",
+          "length": "width / 2 - cut",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown3",
+          "line": "axis",
+          "length": "width / 2 - cut",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown3",
+          "line": "base",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown4",
+          "line": "axis",
+          "length": "width / 2 - cut",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown4",
+          "line": "base",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown5",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown5",
+          "line": "base",
+          "length": "width / 2 - cut",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown6",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown6",
+          "line": "base",
+          "length": "width / 2 - cut",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown7",
+          "line": "axis",
+          "length": "width / 2 - cut",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown7",
+          "line": "base",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown8",
+          "line": "axis",
+          "length": "width / 2 - cut",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "crown8",
+          "line": "base",
+          "length": "width / 2",
+          "side": "right"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "trunk",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "trunk_s",
+        "trunk_e",
+        "trunk_n",
+        "trunk_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "crown_base",
+      "subcategory": 2800,
+      "material": {
+        "parameter": "trunk_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "crown",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "crown_1",
+        "crown_2",
+        "crown_3",
+        "crown_4",
+        "crown_5",
+        "crown_6",
+        "crown_7",
+        "crown_8"
+      ],
+      "holes": [],
+      "start": "crown_base",
+      "end": "height",
+      "subcategory": 2800,
+      "material": {
+        "parameter": "crown_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "crown_1",
+        "crown_2",
+        "crown_3",
+        "crown_4",
+        "crown_5",
+        "crown_6",
+        "crown_7",
+        "crown_8"
+      ],
+      "subcategory": 2800,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_trunk",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "trunk_s",
+        "trunk_e",
+        "trunk_n",
+        "trunk_w"
+      ],
+      "subcategory": 2800,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "height",
+      "trunk"
+    ],
+    "rows": [
+      {
+        "key": "small",
+        "name": "Small tree",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:12800000",
+          "length:q0:640000"
+        ]
+      },
+      {
+        "key": "medium",
+        "name": "Medium tree",
+        "values": [
+          "length:q0:16000000",
+          "length:q0:25600000",
+          "length:q0:1280000"
+        ]
+      },
+      {
+        "key": "large",
+        "name": "Large tree",
+        "values": [
+          "length:q0:32000000",
+          "length:q0:44800000",
+          "length:q0:2560000"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,737 @@
+{
+  "format": 1,
+  "id": "library.casework.base-cabinet",
+  "name": "Base cabinet",
+  "category": 1800,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.casework.base-cabinet.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.casework.base-cabinet.depth",
+        "name": "Depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.casework.base-cabinet.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:5760000"
+    },
+    {
+      "key": "plinth",
+      "definition": {
+        "id": "library.casework.base-cabinet.plinth",
+        "name": "Plinth height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:640000"
+    },
+    {
+      "key": "plinth_setback",
+      "definition": {
+        "id": "library.casework.base-cabinet.plinth_setback",
+        "name": "Plinth setback",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:384000"
+    },
+    {
+      "key": "top_thickness",
+      "definition": {
+        "id": "library.casework.base-cabinet.top_thickness",
+        "name": "Worktop thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:192000"
+    },
+    {
+      "key": "overhang",
+      "definition": {
+        "id": "library.casework.base-cabinet.overhang",
+        "name": "Worktop overhang",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:128000"
+    },
+    {
+      "key": "door_thickness",
+      "definition": {
+        "id": "library.casework.base-cabinet.door_thickness",
+        "name": "Door thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:115200"
+    },
+    {
+      "key": "gap",
+      "definition": {
+        "id": "library.casework.base-cabinet.gap",
+        "name": "Door gap",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:12800"
+    },
+    {
+      "key": "carcass_material",
+      "definition": {
+        "id": "library.casework.base-cabinet.carcass_material",
+        "name": "Carcass material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-loblolly-pine"
+    },
+    {
+      "key": "top_material",
+      "definition": {
+        "id": "library.casework.base-cabinet.top_material",
+        "name": "Worktop material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-white-oak"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "plinth1",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "plinth2",
+          "x": "length:q0:1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "plinth3",
+          "x": "length:q0:1920000",
+          "y": "length:q0:1408000"
+        },
+        {
+          "key": "plinth4",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:1408000"
+        },
+        {
+          "key": "carcass1",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "carcass2",
+          "x": "length:q0:1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "carcass3",
+          "x": "length:q0:1920000",
+          "y": "length:q0:1676800"
+        },
+        {
+          "key": "carcass4",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:1676800"
+        },
+        {
+          "key": "door1",
+          "x": "length:q0:-1907200",
+          "y": "length:q0:1676800"
+        },
+        {
+          "key": "door2",
+          "x": "length:q0:1907200",
+          "y": "length:q0:1676800"
+        },
+        {
+          "key": "door3",
+          "x": "length:q0:1907200",
+          "y": "length:q0:1792000"
+        },
+        {
+          "key": "door4",
+          "x": "length:q0:-1907200",
+          "y": "length:q0:1792000"
+        },
+        {
+          "key": "worktop1",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "worktop2",
+          "x": "length:q0:1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "worktop3",
+          "x": "length:q0:1920000",
+          "y": "length:q0:1920000"
+        },
+        {
+          "key": "worktop4",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:1920000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "plinth_s",
+          "start": "plinth1",
+          "end": "plinth2"
+        },
+        {
+          "key": "plinth_e",
+          "start": "plinth2",
+          "end": "plinth3"
+        },
+        {
+          "key": "plinth_n",
+          "start": "plinth3",
+          "end": "plinth4"
+        },
+        {
+          "key": "plinth_w",
+          "start": "plinth4",
+          "end": "plinth1"
+        },
+        {
+          "key": "carcass_s",
+          "start": "carcass1",
+          "end": "carcass2"
+        },
+        {
+          "key": "carcass_e",
+          "start": "carcass2",
+          "end": "carcass3"
+        },
+        {
+          "key": "carcass_n",
+          "start": "carcass3",
+          "end": "carcass4"
+        },
+        {
+          "key": "carcass_w",
+          "start": "carcass4",
+          "end": "carcass1"
+        },
+        {
+          "key": "door_s",
+          "start": "door1",
+          "end": "door2"
+        },
+        {
+          "key": "door_e",
+          "start": "door2",
+          "end": "door3"
+        },
+        {
+          "key": "door_n",
+          "start": "door3",
+          "end": "door4"
+        },
+        {
+          "key": "door_w",
+          "start": "door4",
+          "end": "door1"
+        },
+        {
+          "key": "worktop_s",
+          "start": "worktop1",
+          "end": "worktop2"
+        },
+        {
+          "key": "worktop_e",
+          "start": "worktop2",
+          "end": "worktop3"
+        },
+        {
+          "key": "worktop_n",
+          "start": "worktop3",
+          "end": "worktop4"
+        },
+        {
+          "key": "worktop_w",
+          "start": "worktop4",
+          "end": "worktop1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth3",
+          "line": "base",
+          "length": "depth / 2 - overhang - plinth_setback",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "plinth4",
+          "line": "base",
+          "length": "depth / 2 - overhang - plinth_setback",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass3",
+          "line": "base",
+          "length": "depth / 2 - overhang - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "carcass4",
+          "line": "base",
+          "length": "depth / 2 - overhang - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door1",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door1",
+          "line": "base",
+          "length": "depth / 2 - overhang - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door2",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door2",
+          "line": "base",
+          "length": "depth / 2 - overhang - door_thickness",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door3",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door3",
+          "line": "base",
+          "length": "depth / 2 - overhang",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door4",
+          "line": "axis",
+          "length": "width / 2 - gap",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "door4",
+          "line": "base",
+          "length": "depth / 2 - overhang",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "worktop4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "plinth",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "plinth_s",
+        "plinth_e",
+        "plinth_n",
+        "plinth_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "plinth",
+      "subcategory": 1800,
+      "material": {
+        "parameter": "carcass_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "carcass",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "carcass_s",
+        "carcass_e",
+        "carcass_n",
+        "carcass_w"
+      ],
+      "holes": [],
+      "start": "plinth",
+      "end": "height - top_thickness",
+      "subcategory": 1800,
+      "material": {
+        "parameter": "carcass_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "door",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "door_s",
+        "door_e",
+        "door_n",
+        "door_w"
+      ],
+      "holes": [],
+      "start": "plinth + gap",
+      "end": "height - top_thickness - gap",
+      "subcategory": 1800,
+      "material": {
+        "parameter": "carcass_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "worktop",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "worktop_s",
+        "worktop_e",
+        "worktop_n",
+        "worktop_w"
+      ],
+      "holes": [],
+      "start": "height - top_thickness",
+      "end": "height",
+      "subcategory": 1800,
+      "material": {
+        "parameter": "top_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "worktop_s",
+        "worktop_e",
+        "worktop_n",
+        "worktop_w"
+      ],
+      "subcategory": 1800,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_carcass",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "carcass_s",
+        "carcass_e",
+        "carcass_n",
+        "carcass_w",
+        "door_s",
+        "door_e",
+        "door_n",
+        "door_w"
+      ],
+      "subcategory": 1800,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width"
+    ],
+    "rows": [
+      {
+        "key": "b450",
+        "name": "450 wide",
+        "values": [
+          "length:q0:2880000"
+        ]
+      },
+      {
+        "key": "b600",
+        "name": "600 wide",
+        "values": [
+          "length:q0:3840000"
+        ]
+      },
+      {
+        "key": "b900",
+        "name": "900 wide",
+        "values": [
+          "length:q0:5760000"
+        ]
+      }
+    ]
+  }
+}

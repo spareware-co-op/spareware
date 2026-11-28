@@ -1,0 +1,290 @@
+{
+  "format": 1,
+  "id": "library.generic.generic-box",
+  "name": "Generic box",
+  "category": 2600,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.generic.generic-box.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.generic.generic-box.depth",
+        "name": "Depth",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.generic.generic-box.height",
+        "name": "Height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:3840000"
+    },
+    {
+      "key": "body_material",
+      "definition": {
+        "id": "library.generic.generic-box.body_material",
+        "name": "Material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:concrete-regular"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "body1",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "body2",
+          "x": "length:q0:1920000",
+          "y": "length:q0:-1920000"
+        },
+        {
+          "key": "body3",
+          "x": "length:q0:1920000",
+          "y": "length:q0:1920000"
+        },
+        {
+          "key": "body4",
+          "x": "length:q0:-1920000",
+          "y": "length:q0:1920000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "body_s",
+          "start": "body1",
+          "end": "body2"
+        },
+        {
+          "key": "body_e",
+          "start": "body2",
+          "end": "body3"
+        },
+        {
+          "key": "body_n",
+          "start": "body3",
+          "end": "body4"
+        },
+        {
+          "key": "body_w",
+          "start": "body4",
+          "end": "body1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "body4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "body",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "body_s",
+        "body_e",
+        "body_n",
+        "body_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "height",
+      "subcategory": 2600,
+      "material": {
+        "parameter": "body_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "body_s",
+        "body_e",
+        "body_n",
+        "body_w"
+      ],
+      "subcategory": 2600,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth",
+      "height"
+    ],
+    "rows": [
+      {
+        "key": "small",
+        "name": "Small",
+        "values": [
+          "length:q0:1920000",
+          "length:q0:1920000",
+          "length:q0:1920000"
+        ]
+      },
+      {
+        "key": "medium",
+        "name": "Medium",
+        "values": [
+          "length:q0:3840000",
+          "length:q0:3840000",
+          "length:q0:3840000"
+        ]
+      },
+      {
+        "key": "long",
+        "name": "Long",
+        "values": [
+          "length:q0:7680000",
+          "length:q0:3840000",
+          "length:q0:1920000"
+        ]
+      }
+    ]
+  }
+}

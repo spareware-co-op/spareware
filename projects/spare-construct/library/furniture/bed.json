@@ -1,0 +1,596 @@
+{
+  "format": 1,
+  "id": "library.furniture.bed",
+  "name": "Bed",
+  "category": 1700,
+  "parameters": [
+    {
+      "key": "width",
+      "definition": {
+        "id": "library.furniture.bed.width",
+        "name": "Width",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:9280000"
+    },
+    {
+      "key": "depth",
+      "definition": {
+        "id": "library.furniture.bed.depth",
+        "name": "Length",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:12800000"
+    },
+    {
+      "key": "height",
+      "definition": {
+        "id": "library.furniture.bed.height",
+        "name": "Headboard height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:6400000"
+    },
+    {
+      "key": "base_height",
+      "definition": {
+        "id": "library.furniture.bed.base_height",
+        "name": "Base height",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:1920000"
+    },
+    {
+      "key": "mattress_thickness",
+      "definition": {
+        "id": "library.furniture.bed.mattress_thickness",
+        "name": "Mattress thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:1408000"
+    },
+    {
+      "key": "mattress_margin",
+      "definition": {
+        "id": "library.furniture.bed.mattress_margin",
+        "name": "Mattress margin",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:192000"
+    },
+    {
+      "key": "headboard_thickness",
+      "definition": {
+        "id": "library.furniture.bed.headboard_thickness",
+        "name": "Headboard thickness",
+        "kind": "length",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "length:q0:384000"
+    },
+    {
+      "key": "frame_material",
+      "definition": {
+        "id": "library.furniture.bed.frame_material",
+        "name": "Frame material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:timber-loblolly-pine"
+    },
+    {
+      "key": "mattress_material",
+      "definition": {
+        "id": "library.furniture.bed.mattress_material",
+        "name": "Mattress material",
+        "kind": "material",
+        "holder": "type",
+        "choices": []
+      },
+      "default": "material:plaster-gypsum"
+    }
+  ],
+  "planes": [
+    {
+      "key": "floor",
+      "base": "xy",
+      "offset": "0 mm"
+    }
+  ],
+  "sketches": [
+    {
+      "key": "plan",
+      "plane": "floor",
+      "points": [
+        {
+          "key": "o",
+          "x": "length:q0:0",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "e",
+          "x": "length:q0:6400000",
+          "y": "length:q0:0"
+        },
+        {
+          "key": "t",
+          "x": "length:q0:0",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "base1",
+          "x": "length:q0:-4640000",
+          "y": "length:q0:-6400000"
+        },
+        {
+          "key": "base2",
+          "x": "length:q0:4640000",
+          "y": "length:q0:-6400000"
+        },
+        {
+          "key": "base3",
+          "x": "length:q0:4640000",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "base4",
+          "x": "length:q0:-4640000",
+          "y": "length:q0:6400000"
+        },
+        {
+          "key": "mattress1",
+          "x": "length:q0:-4448000",
+          "y": "length:q0:-6016000"
+        },
+        {
+          "key": "mattress2",
+          "x": "length:q0:4448000",
+          "y": "length:q0:-6016000"
+        },
+        {
+          "key": "mattress3",
+          "x": "length:q0:4448000",
+          "y": "length:q0:6208000"
+        },
+        {
+          "key": "mattress4",
+          "x": "length:q0:-4448000",
+          "y": "length:q0:6208000"
+        },
+        {
+          "key": "headboard1",
+          "x": "length:q0:-4640000",
+          "y": "length:q0:-6400000"
+        },
+        {
+          "key": "headboard2",
+          "x": "length:q0:4640000",
+          "y": "length:q0:-6400000"
+        },
+        {
+          "key": "headboard3",
+          "x": "length:q0:4640000",
+          "y": "length:q0:-6016000"
+        },
+        {
+          "key": "headboard4",
+          "x": "length:q0:-4640000",
+          "y": "length:q0:-6016000"
+        }
+      ],
+      "lines": [
+        {
+          "key": "base",
+          "start": "o",
+          "end": "e"
+        },
+        {
+          "key": "axis",
+          "start": "o",
+          "end": "t"
+        },
+        {
+          "key": "base_s",
+          "start": "base1",
+          "end": "base2"
+        },
+        {
+          "key": "base_e",
+          "start": "base2",
+          "end": "base3"
+        },
+        {
+          "key": "base_n",
+          "start": "base3",
+          "end": "base4"
+        },
+        {
+          "key": "base_w",
+          "start": "base4",
+          "end": "base1"
+        },
+        {
+          "key": "mattress_s",
+          "start": "mattress1",
+          "end": "mattress2"
+        },
+        {
+          "key": "mattress_e",
+          "start": "mattress2",
+          "end": "mattress3"
+        },
+        {
+          "key": "mattress_n",
+          "start": "mattress3",
+          "end": "mattress4"
+        },
+        {
+          "key": "mattress_w",
+          "start": "mattress4",
+          "end": "mattress1"
+        },
+        {
+          "key": "headboard_s",
+          "start": "headboard1",
+          "end": "headboard2"
+        },
+        {
+          "key": "headboard_e",
+          "start": "headboard2",
+          "end": "headboard3"
+        },
+        {
+          "key": "headboard_n",
+          "start": "headboard3",
+          "end": "headboard4"
+        },
+        {
+          "key": "headboard_w",
+          "start": "headboard4",
+          "end": "headboard1"
+        }
+      ],
+      "arcs": [],
+      "circles": [],
+      "constraints": [
+        {
+          "kind": "fixed",
+          "point": "o"
+        },
+        {
+          "kind": "fixed",
+          "point": "e"
+        },
+        {
+          "kind": "fixed",
+          "point": "t"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base3",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "base4",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress1",
+          "line": "axis",
+          "length": "width / 2 - mattress_margin",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress1",
+          "line": "base",
+          "length": "depth / 2 - headboard_thickness",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress2",
+          "line": "axis",
+          "length": "width / 2 - mattress_margin",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress2",
+          "line": "base",
+          "length": "depth / 2 - headboard_thickness",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress3",
+          "line": "axis",
+          "length": "width / 2 - mattress_margin",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress3",
+          "line": "base",
+          "length": "depth / 2 - mattress_margin",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress4",
+          "line": "axis",
+          "length": "width / 2 - mattress_margin",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "mattress4",
+          "line": "base",
+          "length": "depth / 2 - mattress_margin",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard1",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard1",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard2",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard2",
+          "line": "base",
+          "length": "depth / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard3",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard3",
+          "line": "base",
+          "length": "depth / 2 - headboard_thickness",
+          "side": "right"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard4",
+          "line": "axis",
+          "length": "width / 2",
+          "side": "left"
+        },
+        {
+          "kind": "point_line_distance",
+          "point": "headboard4",
+          "line": "base",
+          "length": "depth / 2 - headboard_thickness",
+          "side": "right"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "key": "base",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "base_s",
+        "base_e",
+        "base_n",
+        "base_w"
+      ],
+      "holes": [],
+      "start": "0 mm",
+      "end": "base_height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "mattress",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "mattress_s",
+        "mattress_e",
+        "mattress_n",
+        "mattress_w"
+      ],
+      "holes": [],
+      "start": "base_height",
+      "end": "base_height + mattress_thickness",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "mattress_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "headboard",
+      "op": "extrude",
+      "sketch": "plan",
+      "profile": [
+        "headboard_s",
+        "headboard_e",
+        "headboard_n",
+        "headboard_w"
+      ],
+      "holes": [],
+      "start": "base_height",
+      "end": "height",
+      "subcategory": 1700,
+      "material": {
+        "parameter": "frame_material"
+      },
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "symbols": [
+    {
+      "key": "plan_outline",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "base_s",
+        "base_e",
+        "base_n",
+        "base_w"
+      ],
+      "subcategory": 1700,
+      "visibility": {
+        "coarse": true,
+        "medium": true,
+        "fine": true
+      }
+    },
+    {
+      "key": "plan_mattress",
+      "view": "plan",
+      "sketch": "plan",
+      "edges": [
+        "mattress_s",
+        "mattress_e",
+        "mattress_n",
+        "mattress_w"
+      ],
+      "subcategory": 1700,
+      "visibility": {
+        "coarse": false,
+        "medium": true,
+        "fine": true
+      }
+    }
+  ],
+  "hosting": {
+    "host": "unhosted"
+  },
+  "types": [],
+  "type_table": {
+    "columns": [
+      "width",
+      "depth"
+    ],
+    "rows": [
+      {
+        "key": "single",
+        "name": "Single",
+        "values": [
+          "length:q0:6400000",
+          "length:q0:12800000"
+        ]
+      },
+      {
+        "key": "double",
+        "name": "Double",
+        "values": [
+          "length:q0:9280000",
+          "length:q0:12800000"
+        ]
+      },
+      {
+        "key": "queen",
+        "name": "Queen",
+        "values": [
+          "length:q0:10560000",
+          "length:q0:13440000"
+        ]
+      }
+    ]
+  }
+}

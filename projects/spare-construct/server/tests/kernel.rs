@@ -241,6 +241,11 @@ fn elements_at_any_angle_cut_their_wall_and_stand_in_it() {
 }
 
 #[test]
+fn the_starter_content_builds_and_hangs_without_cutting() {
+    kernel_suite::the_starter_content_builds_and_hangs_without_cutting(engine);
+}
+
+#[test]
 fn a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening() {
     kernel_suite::a_wall_moved_or_a_type_changed_moves_or_resizes_the_opening(engine);
 }

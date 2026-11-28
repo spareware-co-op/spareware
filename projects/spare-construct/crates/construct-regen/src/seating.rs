@@ -226,7 +226,8 @@ fn at_angle(
 
 /// Where a placed family sits on the side `role` of a layered wall `wall` at an angle, `along` its
 /// line from its start to its insertion point and `up` from its base, and the recipe its builder
-/// is handed: its origin on the wall's centre plane (to a whole step, as along an axis), its `+y`
+/// is handed: its origin on the wall's centre plane (to a whole step, as along an axis) or, for a
+/// family that hangs against the wall's face (`families::sits_on_face`), on that side's face; its `+y`
 /// out of that side and its `+x` a quarter turn clockwise from that, so it is turned, never
 /// mirrored: against the line when it faces the line's right, along it when it faces its left.
 /// Seated there ([`seated_in`]) in place of a turn.
@@ -242,10 +243,20 @@ fn family_at_angle(
     let up = whole_offset("up", up, refuse)?;
     whole_offset("along", along, refuse)?;
     let (exterior, interior) = wall.outer();
-    let centre = exterior
-        .checked_add(interior)
-        .map(|twice| twice.div_euclid(2))
-        .ok_or_else(too_big)?;
+    // A family that hangs against the wall's face (a wall cabinet, a basin) has its origin on that
+    // side's face and cuts nothing; any other is centred on the wall's centre plane.
+    let centre = if families::sits_on_face(&*families::baked(), recipe) {
+        if role == "interior" {
+            interior
+        } else {
+            exterior
+        }
+    } else {
+        exterior
+            .checked_add(interior)
+            .map(|twice| twice.div_euclid(2))
+            .ok_or_else(too_big)?
+    };
     // 1 when the family faces the line's right, -1 its left.
     let right_of_exterior: i64 = if exterior > interior { 1 } else { -1 };
     let right = if role == "interior" {
