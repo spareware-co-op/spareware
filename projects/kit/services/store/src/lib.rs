@@ -18,6 +18,15 @@
 //!   past a process or a machine that died, so a read in that time failed and the server passed
 //!   the failure on to a person: a page answered "Something went wrong.", and a live channel
 //!   closed (issue #762). A snapshot now waits until TiKV is past it: see [`READ_WAIT`].
+//! - Two writers of the same rows at once can cross. `tikv-client` prewrites a transaction in
+//!   16 KiB batches side by side, so one writer can lock a row of the other's while the other
+//!   locks the primary (the first key written) that both name, as two passes of one project's
+//!   regeneration do: a server's own and a page read's catching up. One then meets a lock whose
+//!   primary holds no lock of its writer, and `tikv-client` gives up on such a lock with
+//!   `TxnNotFound` after 1.5 s, before the lock's time to live has run out. That went on to a
+//!   person as "Something went wrong." when the computer was busy enough for the batches to
+//!   cross. A read that meets one now reads again ([`NO_PRIMARY_TRIES`]), and a commit that meets
+//!   one is rolled back and reported as a conflict, which every caller runs again.
 
 use futures::TryStreamExt;
 use kit_store::{FileStore, Key, Kv, Pair, Prefix, Reader, StoreError, Txn};
@@ -57,6 +66,18 @@ const READ_WAIT: RetryOptions = RetryOptions {
     lock_backoff: Backoff::no_jitter_backoff(2, 500, 67),
 };
 
+/// How many times in all a read is tried while it meets a lock whose primary holds no lock of
+/// its writer and no record of it (TiKV's `TxnNotFound`): a writer between the batches of its
+/// prewrite, behind another writer's batches (see the lessons above), or one that died there.
+///
+/// `tikv-client` asks after that primary for a fixed 1.51 s (its `OPTIMISTIC_BACKOFF`, ten waits
+/// from 2 ms to 0.5 s, whatever a transaction's options say) and then gives the read up, though
+/// the lock lives for 3 s, or up to 20 s for a large transaction (`DEFAULT_LOCK_TTL` and
+/// `MAX_TTL`), and is cleared by the first try after that. Each try waits at least those 1.51 s,
+/// so 20 tries wait over 30 s, past the longest lock with room to spare. Reading again is always
+/// safe: a read changes nothing.
+const NO_PRIMARY_TRIES: u32 = 20;
+
 /// A connection to TiKV. Cheap to clone.
 #[derive(Clone)]
 pub struct Tikv {
@@ -67,6 +88,16 @@ fn is_conflict(error: &Error) -> bool {
     match error {
         Error::KeyError(key_error) => key_error.conflict.is_some(),
         Error::MultipleKeyErrors(errors) => errors.iter().any(is_conflict),
+        _ => false,
+    }
+}
+
+/// A lock in the way named a primary that holds no lock of its writer and no record of it.
+fn names_a_missing_primary(error: &Error) -> bool {
+    match error {
+        Error::TxnNotFound(_) => true,
+        Error::KeyError(key_error) => key_error.txn_not_found.is_some(),
+        Error::MultipleKeyErrors(errors) => errors.iter().any(names_a_missing_primary),
         _ => false,
     }
 }
@@ -106,19 +137,26 @@ pub struct TikvTxn(Transaction);
 macro_rules! reader {
     ($name:ident) => {
         impl $name {
-            /// Every pair in a range, a page at a time.
+            /// Every pair in a range, a page at a time. A page that meets a lock with no primary
+            /// is read again, [`NO_PRIMARY_TRIES`] times in all for the whole range.
             async fn range(
                 &mut self,
                 mut from: Vec<u8>,
                 to: Vec<u8>,
             ) -> Result<Vec<Pair>, StoreError> {
                 let mut pairs = Vec::new();
+                let mut tries = 1;
                 loop {
-                    let rows = self
-                        .0
-                        .scan(from.clone()..to.clone(), PAGE)
-                        .await
-                        .map_err(classify)?;
+                    let rows = match self.0.scan(from.clone()..to.clone(), PAGE).await {
+                        Ok(rows) => rows,
+                        Err(error)
+                            if tries < NO_PRIMARY_TRIES && names_a_missing_primary(&error) =>
+                        {
+                            tries += 1;
+                            continue;
+                        }
+                        Err(error) => return Err(classify(error)),
+                    };
                     let rows: Vec<_> = rows.collect();
                     let last_page = rows.len() < PAGE as usize;
                     for pair in rows {
@@ -138,13 +176,22 @@ macro_rules! reader {
 
         impl Reader for $name {
             /// One key, read as a batch of one: `tikv-client`'s `get` keeps its own 1.5 s for a
-            /// region with no leader whatever the options say, and `batch_get` follows them.
+            /// region with no leader whatever the options say, and `batch_get` follows them. A
+            /// read that meets a lock with no primary is read again, [`NO_PRIMARY_TRIES`] times in
+            /// all.
             async fn get(&mut self, key: &Key) -> Result<Option<Vec<u8>>, StoreError> {
-                let mut found = self
-                    .0
-                    .batch_get([key.as_bytes().to_vec()])
-                    .await
-                    .map_err(classify)?;
+                let mut tries = 1;
+                let mut found = loop {
+                    match self.0.batch_get([key.as_bytes().to_vec()]).await {
+                        Ok(found) => break found,
+                        Err(error)
+                            if tries < NO_PRIMARY_TRIES && names_a_missing_primary(&error) =>
+                        {
+                            tries += 1;
+                        }
+                        Err(error) => return Err(classify(error)),
+                    }
+                };
                 Ok(found.next().map(|pair| pair.1))
             }
 
@@ -193,15 +240,26 @@ impl Txn for TikvTxn {
     ///
     /// If the rollback fails as well, the locks are left to run out as a dead writer's are, and
     /// the commit's own error is still the one to act on, so the rollback's is not returned.
+    ///
+    /// A commit whose prewrite stopped at a lock with no primary (see [`NO_PRIMARY_TRIES`]) is a
+    /// conflict: another writer holds that lock, this commit's primary was never committed, so
+    /// nothing of it landed, and run again it lands once that writer has finished or its lock has
+    /// run out. Two passes of one project's regeneration met this when their batches crossed (see the
+    /// lessons above): the one holding the primary both name failed with `TxnNotFound` as if the
+    /// store were down, and the page read that ran it failed.
     async fn commit(mut self) -> Result<(), StoreError> {
         let error = match self.0.commit().await {
             Ok(_) => return Ok(()),
-            Err(error) => classify(error),
+            Err(error) => error,
         };
-        if !matches!(error, StoreError::Undetermined(_)) {
-            let _ = self.0.rollback().await;
+        if matches!(error, Error::UndeterminedError(_)) {
+            return Err(classify(error));
         }
-        Err(error)
+        let _ = self.0.rollback().await;
+        if names_a_missing_primary(&error) {
+            return Err(StoreError::Conflict);
+        }
+        Err(classify(error))
     }
 
     async fn rollback(mut self) -> Result<(), StoreError> {
