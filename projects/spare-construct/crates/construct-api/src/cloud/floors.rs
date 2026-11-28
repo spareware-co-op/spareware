@@ -134,6 +134,13 @@ impl Tool for FloorTool {
     const NAME: &'static str = "floor";
     const COMMANDS: &'static [&'static str] = &COMMANDS;
     const GUARDS: &'static [&'static str] = &[ElementTool::NAME, ParamTool::NAME];
+    const FIELDS: &'static [construct_schedules::Quantity] = &[
+        construct_schedules::FLOOR_AREA,
+        construct_schedules::FLOOR_PERIMETER,
+        construct_schedules::FLOOR_THICKNESS,
+        construct_schedules::FLOOR_VOLUME,
+        construct_schedules::FLOOR_MASS,
+    ];
 
     async fn apply<T: Txn>(
         txn: &mut T,
