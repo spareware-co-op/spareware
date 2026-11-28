@@ -4077,9 +4077,48 @@ await shot(anna, 'anna-curtain-wall');
 // She picks it: the palette lists what the server works out of it, its grid lines and its panels.
 const cwPick = async (page, id) => {
   await page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
+  // Diagnostics only: the drawing's changes are counted from here, so that a pick that finds
+  // nothing can say how often the plan was drawn again between reading the box and the click.
+  await page.evaluate(() => {
+    window.__cwRedraws = 0;
+    window.__cwWatch?.disconnect();
+    window.__cwWatch = new MutationObserver((list) => {
+      window.__cwRedraws += list.length;
+    });
+    window.__cwWatch.observe(document.querySelector('#pv-canvas'), { childList: true, subtree: true });
+  });
   const at = await box(page, id);
-  await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
-  await page.waitForSelector('#pv-side [data-curtain-element]');
+  const [x, y] = [at.x + at.width / 2, at.y + at.height / 2];
+  const untilClick = await page.evaluate(() => window.__cwRedraws);
+  await page.mouse.click(x, y);
+  try {
+    await page.waitForSelector('#pv-side [data-curtain-element]');
+  } catch (error) {
+    const seen = await page.evaluate(
+      ([who, px, py, before]) => {
+        const hit = document.elementFromPoint(px, py);
+        return {
+          under: hit
+            ? {
+                tag: hit.tagName,
+                classes: hit.getAttribute('class') ?? '',
+                id: hit.closest('[data-id]')?.dataset.id ?? null,
+                text: (hit.textContent ?? '').slice(0, 60),
+              }
+            : null,
+          selected: [...document.querySelectorAll('g.element')].filter((g) => g.querySelector('.sel')).map((g) => g.dataset.id),
+          wantedDrawn: Boolean(document.querySelector(`g.element[data-id="${who}"]`)),
+          wantedHeld: window.spare.claims.get(who)?.person ?? null,
+          redrawsBeforeClick: before,
+          redrawsAfterClick: window.__cwRedraws - before,
+          side: document.querySelector('#pv-side')?.innerText.slice(0, 160),
+        };
+      },
+      [id, x, y, untilClick],
+    );
+    console.log(`      pick of ${id} at ${Math.round(x)},${Math.round(y)} found no curtain wall palette: ${JSON.stringify(seen)}`);
+    throw error;
+  }
 };
 const cwLetGo = (page) => page.locator('#pv-canvas').click({ position: { x: 5, y: 5 } });
 await cwPick(anna, cwId);
